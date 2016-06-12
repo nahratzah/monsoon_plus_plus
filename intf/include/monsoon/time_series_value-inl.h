@@ -7,22 +7,30 @@ namespace monsoon {
 
 
 inline time_series_value::time_series_value(time_series_value&& other) noexcept
-: name_(std::move(other.name_)),
+: tp_(std::move(other.tp_)),
+  name_(std::move(other.name_)),
   metrics_(std::move(other.metrics_))
 {}
 
 inline auto time_series_value::operator=(time_series_value&& other) noexcept
 ->  time_series_value& {
+  tp_ = std::move(other.tp_);
   name_ = std::move(other.name_);
   metrics_ = std::move(other.metrics_);
   return *this;
 }
 
 template<typename Iter>
-time_series_value::time_series_value(group_name name, Iter b, Iter e)
-: name_(std::move(name)),
+time_series_value::time_series_value(time_point tp, group_name name,
+                                     Iter b, Iter e)
+: tp_(tp),
+  name_(std::move(name)),
   metrics_(b, e)
 {}
+
+inline auto time_series_value::get_time() const noexcept -> const time_point& {
+  return tp_;
+}
 
 inline auto time_series_value::get_name() const noexcept -> const group_name& {
   return name_;
