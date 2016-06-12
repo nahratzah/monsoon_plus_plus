@@ -1,7 +1,6 @@
 #ifndef _ILIAS_OPTIONAL_H_
 #define _ILIAS_OPTIONAL_H_
 
-#include <cdecl.h>
 #include <type_traits>
 #include <stdexcept>
 #include <string>
@@ -11,20 +10,17 @@ namespace monsoon {
 
 
 class optional_error
-: public _namespace(std)::runtime_error
+: public std::runtime_error
 {
  public:
-  explicit optional_error(_namespace(std)::string_ref);
-  explicit optional_error(const _namespace(std)::string&);
+  explicit optional_error(const std::string&);
   explicit optional_error(const char*);
 
   ~optional_error() noexcept override;
 
   static void __throw()
       __attribute__((__noreturn__));
-  static void __throw(_namespace(std)::string_ref)
-      __attribute__((__noreturn__));
-  static void __throw(const _namespace(std)::string&)
+  static void __throw(const std::string&)
       __attribute__((__noreturn__));
   static void __throw(const char*)
       __attribute__((__noreturn__));
@@ -34,22 +30,25 @@ class optional_error
 template<typename T>
 class optional {
  private:
-  using storage_t = _namespace(std)::aligned_union_t<0, T>;
+  using storage_t = std::aligned_union_t<0, T>;
 
-  static_assert(!_namespace(std)::is_reference<T>::value,
+  static_assert(!std::is_reference<T>::value,
                 "Optional may not be a reference type.");
 
   static constexpr bool nothrow_copy_() {
-    return _namespace(std)::is_nothrow_copy_constructible<T>::value;
+    return std::is_nothrow_copy_constructible<T>::value;
   }
   static constexpr bool nothrow_move_() {
-    return _namespace(std)::is_nothrow_copy_constructible<T>::value;
+    return std::is_nothrow_copy_constructible<T>::value;
   }
   static constexpr bool nothrow_assign_() {
-    return _namespace(std)::is_nothrow_assignable<T, const T&>::value;
+    return std::is_nothrow_assignable<T, const T&>::value;
   }
   static constexpr bool nothrow_move_assign_() {
-    return _namespace(std)::is_nothrow_assignable<T, T&&>::value;
+    return std::is_nothrow_assignable<T, T&&>::value;
+  }
+  static constexpr bool nothrow_equality_() {
+    return noexcept(std::declval<T>() == std::declval<T>());
   }
 
  public:
@@ -92,10 +91,13 @@ class optional {
   value_type get(const value_type&);
   value_type get(value_type&&);
 
+  bool operator==(const optional&) const noexcept(nothrow_equality_());
+  bool operator!=(const optional&) const noexcept(nothrow_equality_());
+
  private:
   void ensure_present_() const;
 
-  _namespace(std)::tuple<bool, storage_t> data_;
+  std::tuple<bool, storage_t> data_;
 };
 
 template<typename T>
@@ -129,6 +131,9 @@ class optional<T&> {
   value_type& get() const;
   value_type& get(value_type&) const;
 
+  bool operator==(const optional&) const noexcept;
+  bool operator!=(const optional&) const noexcept;
+
  private:
   void ensure_present_() const;
 
@@ -138,18 +143,18 @@ class optional<T&> {
 
 template<typename T, typename Fn>
 auto map(const optional<T>&, Fn) ->
-    decltype(_namespace(std)::declval<Fn>()(
-                 _namespace(std)::declval<const optional<T>&>().get()));
+    decltype(std::declval<Fn>()(
+                 std::declval<const optional<T>&>().get()));
 
 template<typename T, typename Fn>
 auto map(optional<T>&, Fn) ->
-    decltype(_namespace(std)::declval<Fn>()(
-                 _namespace(std)::declval<optional<T>&>().get()));
+    decltype(std::declval<Fn>()(
+                 std::declval<optional<T>&>().get()));
 
 template<typename T, typename Fn>
 auto map(optional<T>&&, Fn) ->
-    decltype(_namespace(std)::declval<Fn>()(
-                 _namespace(std)::declval<optional<T>>().release()));
+    decltype(std::declval<Fn>()(
+                 std::declval<optional<T>>().release()));
 
 
 template<typename T, typename Fn>

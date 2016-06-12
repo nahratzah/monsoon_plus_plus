@@ -20,7 +20,7 @@ auto metric_name::operator<(const metric_name& other) const noexcept -> bool {
 namespace std {
 
 
-auto std::hash<monsoon::metric_name>::operator(const monsoon::metric_name& v)
+auto std::hash<monsoon::metric_name>::operator()(const monsoon::metric_name& v)
     const noexcept
 ->  size_t {
   auto s_hash = std::hash<std::string>();

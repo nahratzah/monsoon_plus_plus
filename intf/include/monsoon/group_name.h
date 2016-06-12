@@ -17,7 +17,7 @@ class group_name {
   group_name& operator=(const group_name&) = default;
   group_name& operator=(group_name&&) noexcept;
 
-  group_name(simple_group) noexcept;
+  group_name(simple_group);
   group_name(simple_group, tags) noexcept;
 
   const simple_group& get_path() const noexcept;

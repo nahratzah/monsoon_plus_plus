@@ -10,7 +10,7 @@ namespace monsoon {
 
 class metric_value {
  public:
-  using types = any2<bool, long, unsigned long, double, std::string>;
+  using types = any<bool, long, unsigned long, double, std::string>;
 
   constexpr metric_value() noexcept = default;
   metric_value(const metric_value&) = default;

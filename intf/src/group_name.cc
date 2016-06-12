@@ -14,7 +14,7 @@ auto group_name::operator==(const group_name& other) const noexcept -> bool {
 namespace std {
 
 
-auto std::hash<monsoon::simple_group>::operator(const monsoon::simple_group& v)
+auto std::hash<monsoon::group_name>::operator()(const monsoon::group_name& v)
     const noexcept
 ->  size_t {
   return std::hash<monsoon::simple_group>()(v.get_path()) ^

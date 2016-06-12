@@ -1,13 +1,12 @@
 #ifndef _ILIAS_ANY_H_
 #define _ILIAS_ANY_H_
 
-#include <cdecl.h>
+#include <monsoon/optional.h>
 #include <iosfwd>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include "optional.h"
 
 namespace monsoon {
 
@@ -18,7 +17,7 @@ template<typename...> class any;
 namespace impl {
 
 
-using namespace ::_namespace(std);
+using namespace ::std;
 
 template<typename T> using any_decorate =
     conditional_t<is_lvalue_reference<T>::value,
@@ -128,24 +127,21 @@ template<size_t, size_t> struct recursive_map;
 template<size_t Idx, size_t End, typename... T> struct copy_operation;
 
 
-} /* namespace ilias::impl */
+} /* namespace monsoon::impl */
 
 
 class any_error
-: public _namespace(std)::runtime_error
+: public std::runtime_error
 {
  public:
-  explicit any_error(_namespace(std)::string_ref);
-  explicit any_error(const _namespace(std)::string&);
+  explicit any_error(const std::string&);
   explicit any_error(const char*);
 
   ~any_error() noexcept override;
 
   static void __throw()
       __attribute__((__noreturn__));
-  static void __throw(_namespace(std)::string_ref)
-      __attribute__((__noreturn__));
-  static void __throw(const _namespace(std)::string&)
+  static void __throw(const std::string&)
       __attribute__((__noreturn__));
   static void __throw(const char*)
       __attribute__((__noreturn__));
@@ -169,37 +165,37 @@ auto get(any<T...>&&) ->
 template<typename Sel, typename... T>
 auto get(any<T...>&) ->
     decltype(get<impl::type_to_index<Sel, T...>::value>(
-                 _namespace(std)::declval<any<T...>&>()));
+                 std::declval<any<T...>&>()));
 
 template<typename Sel, typename... T>
 auto get(const any<T...>&) ->
     decltype(get<impl::type_to_index<Sel, T...>::value>(
-                 _namespace(std)::declval<const any<T...>&>()));
+                 std::declval<const any<T...>&>()));
 
 template<typename Sel, typename... T>
 auto get(any<T...>&&) ->
     decltype(get<impl::type_to_index<Sel, T...>::value>(
-                 _namespace(std)::declval<any<T...>>()));
+                 std::declval<any<T...>>()));
 
 
 template<typename... T>
 class any {
   template<size_t N, typename... U>
-  friend auto ::_namespace(ilias)::get(any<U...>&) ->
+  friend auto ::monsoon::get(any<U...>&) ->
       std::add_lvalue_reference_t<impl::select_n_t<N, U...>>;
   template<size_t N, typename... U>
-  friend auto ::_namespace(ilias)::get(const any<U...>&) ->
+  friend auto ::monsoon::get(const any<U...>&) ->
       std::add_lvalue_reference_t<std::add_const_t<
           impl::select_n_t<N, U...>>>;
   template<size_t N, typename... U>
-  friend auto ::_namespace(ilias)::get(any<U...>&&) ->
+  friend auto ::monsoon::get(any<U...>&&) ->
       std::add_rvalue_reference_t<impl::select_n_t<N, U...>>;
 
   template<size_t, size_t, typename...>
-  friend struct ::_namespace(ilias)::impl::copy_operation;
+  friend struct ::monsoon::impl::copy_operation;
 
  private:
-  using storage_t = _namespace(std)::aligned_union_t<
+  using storage_t = std::aligned_union_t<
       0, typename impl::any_decorate<T>...>;
 
   constexpr any() noexcept;
@@ -214,25 +210,25 @@ class any {
   any& operator=(any&&) noexcept(impl::is_nothrow_move_assignable_any<T...>());
 
   template<typename U,
-           size_t N = _namespace(std)::enable_if_t<
+           size_t N = std::enable_if_t<
                impl::any_constructor_resolution<U, T...>::found,
                impl::any_constructor_resolution<U, T...>>::idx>
       any(U&& v);
 
-  size_t selector() const noexcept { return _namespace(std)::get<0>(data_); }
+  size_t selector() const noexcept { return std::get<0>(data_); }
 
   template<size_t N> static auto create(impl::select_n_t<N, T...>) ->
-      _namespace(std)::enable_if_t<_namespace(std)::is_lvalue_reference<
+      std::enable_if_t<std::is_lvalue_reference<
                                        impl::select_n_t<N, T...>>::value,
                                    any>;
   template<size_t N> static auto create(impl::select_n_t<N, T...>) ->
-      _namespace(std)::enable_if_t<!_namespace(std)::is_lvalue_reference<
+      std::enable_if_t<!std::is_lvalue_reference<
                                         impl::select_n_t<N, T...>>::value,
                                    any>;
 
  private:
-  _namespace(std)::tuple<
-      _namespace(std)::size_t, storage_t> data_;
+  std::tuple<
+      std::size_t, storage_t> data_;
 };
 
 
@@ -257,51 +253,51 @@ bool visit(any<T...>&&, Fn);
 
 template<typename... T, typename... Fn>
 auto visit(any<T...>&, Fn&&...) ->
-    _namespace(std)::enable_if_t<sizeof...(T) == sizeof...(Fn), void>;
+    std::enable_if_t<sizeof...(T) == sizeof...(Fn), void>;
 
 template<typename... T, typename... Fn>
 auto visit(const any<T...>&, Fn&&...) ->
-    _namespace(std)::enable_if_t<sizeof...(T) == sizeof...(Fn), void>;
+    std::enable_if_t<sizeof...(T) == sizeof...(Fn), void>;
 
 template<typename... T, typename... Fn>
 auto visit(any<T...>&&, Fn&&...) ->
-    _namespace(std)::enable_if_t<sizeof...(T) == sizeof...(Fn), void>;
+    std::enable_if_t<sizeof...(T) == sizeof...(Fn), void>;
 
 
 template<size_t N, typename... T, typename Fn>
 auto map(const any<T...>& v, Fn fn) ->
     impl::replace_type<
         N,
-        decltype(_namespace(std)::declval<Fn>()(
-                     get<N>(_namespace(std)::declval<const any<T...>&>()))),
+        decltype(std::declval<Fn>()(
+                     get<N>(std::declval<const any<T...>&>()))),
         any<T...>>;
 
 template<size_t N, typename... T, typename Fn>
 auto map(any<T...>&& v, Fn fn) ->
     impl::replace_type<
         N,
-        decltype(_namespace(std)::declval<Fn>()(
-                     get<N>(_namespace(std)::declval<any<T...>>()))),
+        decltype(std::declval<Fn>()(
+                     get<N>(std::declval<any<T...>>()))),
         any<T...>>;
 
 
 template<typename... T, typename... Fn>
 auto map(any<T...>&, Fn&&...) ->
-    decltype(_namespace(std)::declval<impl::recursive_map<0, sizeof...(T)>>()(
-                 _namespace(std)::declval<any<T...>&>(),
-                 _namespace(std)::declval<Fn>()...));
+    decltype(std::declval<impl::recursive_map<0, sizeof...(T)>>()(
+                 std::declval<any<T...>&>(),
+                 std::declval<Fn>()...));
 
 template<typename... T, typename... Fn>
 auto map(const any<T...>&, Fn&&...) ->
-    decltype(_namespace(std)::declval<impl::recursive_map<0, sizeof...(T)>>()(
-                 _namespace(std)::declval<const any<T...>&>(),
-                 _namespace(std)::declval<Fn>()...));
+    decltype(std::declval<impl::recursive_map<0, sizeof...(T)>>()(
+                 std::declval<const any<T...>&>(),
+                 std::declval<Fn>()...));
 
 template<typename... T, typename... Fn>
 auto map(any<T...>&&, Fn&&...) ->
-    decltype(_namespace(std)::declval<impl::recursive_map<0, sizeof...(T)>>()(
-                 _namespace(std)::declval<any<T...>>(),
-                 _namespace(std)::declval<Fn>()...));
+    decltype(std::declval<impl::recursive_map<0, sizeof...(T)>>()(
+                 std::declval<any<T...>>(),
+                 std::declval<Fn>()...));
 
 
 } /* namespace monsoon */

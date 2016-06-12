@@ -7,16 +7,12 @@
 namespace monsoon {
 
 
-inline optional_error::optional_error(_namespace(std)::string_ref msg)
-: _namespace(std)::runtime_error(msg)
-{}
-
-inline optional_error::optional_error(const _namespace(std)::string& msg)
-: _namespace(std)::runtime_error(msg)
+inline optional_error::optional_error(const std::string& msg)
+: std::runtime_error(msg)
 {}
 
 inline optional_error::optional_error(const char* msg)
-: _namespace(std)::runtime_error(msg)
+: std::runtime_error(msg)
 {}
 
 
@@ -50,7 +46,7 @@ template<typename T>
 optional<T>::optional(value_type&& v) noexcept(nothrow_move_())
 : optional()
 {
-  using _namespace(std)::move;
+  using std::move;
 
   assign(move(v));
 }
@@ -82,7 +78,7 @@ auto optional<T>::operator=(optional&& o)
 
 template<typename T>
 auto optional<T>::is_present() const noexcept -> bool {
-  using _namespace(std)::get;
+  using std::get;
 
   return get<0>(data_);
 }
@@ -111,7 +107,7 @@ template<typename T>
 auto optional<T>::assign(const value_type& v)
     noexcept(nothrow_copy_() && nothrow_assign_()) ->
     void {
-  using _namespace(std)::get;
+  using std::get;
 
   storage_t& storage = get<1>(data_);
   void*const vptr = &storage;
@@ -128,8 +124,8 @@ template<typename T>
 auto optional<T>::assign(value_type&& v)
     noexcept(nothrow_move_() && nothrow_move_assign_()) ->
     void {
-  using _namespace(std)::get;
-  using _namespace(std)::move;
+  using std::get;
+  using std::move;
 
   storage_t& storage = get<1>(data_);
   void*const vptr = &storage;
@@ -144,8 +140,8 @@ auto optional<T>::assign(value_type&& v)
 
 template<typename T>
 auto optional<T>::release() -> value_type {
-  using _namespace(std)::get;
-  using _namespace(std)::move;
+  using std::get;
+  using std::move;
 
   ensure_present_();
 
@@ -172,7 +168,7 @@ auto optional<T>::release(value_type&& dfl) -> value_type {
 
 template<typename T>
 auto optional<T>::get() const -> const value_type& {
-  using _namespace(std)::get;
+  using std::get;
 
   ensure_present_();
 
@@ -183,7 +179,7 @@ auto optional<T>::get() const -> const value_type& {
 
 template<typename T>
 auto optional<T>::get() -> value_type& {
-  using _namespace(std)::get;
+  using std::get;
 
   ensure_present_();
 
@@ -206,8 +202,21 @@ auto optional<T>::get(value_type&& dfl) -> value_type {
 }
 
 template<typename T>
+auto optional<T>::operator==(const optional& o)
+    const noexcept(nothrow_equality_()) -> bool {
+  if (is_present() != o.is_present()) return false;
+  return !is_present() || get() == o.get();
+}
+
+template<typename T>
+auto optional<T>::operator!=(const optional& o)
+    const noexcept(nothrow_equality_()) -> bool {
+  return !(*this == o);
+}
+
+template<typename T>
 auto optional<T>::ensure_present_() const -> void {
-  if (_predict_false(!is_present()))
+  if (!is_present())
     optional_error::__throw();
 }
 
@@ -274,7 +283,7 @@ auto optional<T&>::assign(value_type& v) noexcept -> void {
 template<typename T>
 auto optional<T&>::release() -> value_type& {
   ensure_present_();
-  return *_namespace(std)::exchange(data_, nullptr);
+  return *std::exchange(data_, nullptr);
 }
 
 template<typename T>
@@ -296,19 +305,29 @@ auto optional<T&>::get(value_type& dfl) const -> value_type& {
 }
 
 template<typename T>
+auto optional<T&>::operator==(const optional& o) const noexcept -> bool {
+  return data_ == o.data_;
+}
+
+template<typename T>
+auto optional<T&>::operator!=(const optional& o) const noexcept -> bool {
+  return !(*this == o);
+}
+
+template<typename T>
 auto optional<T&>::ensure_present_() const -> void {
-  if (_predict_false(!is_present()))
+  if (!is_present())
     optional_error::__throw();
 }
 
 
 template<typename T, typename Fn>
 auto map(const optional<T>& o, Fn fn) ->
-    decltype(_namespace(std)::declval<Fn>()(
-                 _namespace(std)::declval<const optional<T>&>().get())) {
+    decltype(std::declval<Fn>()(
+                 std::declval<const optional<T>&>().get())) {
   using type =
-      decltype(_namespace(std)::declval<Fn>()(
-                   _namespace(std)::declval<const optional<T>&>().get()));
+      decltype(std::declval<Fn>()(
+                   std::declval<const optional<T>&>().get()));
 
   if (!o) return type();
   return fn(o.get());
@@ -316,11 +335,11 @@ auto map(const optional<T>& o, Fn fn) ->
 
 template<typename T, typename Fn>
 auto map(optional<T>& o, Fn fn) ->
-    decltype(_namespace(std)::declval<Fn>()(
-                 _namespace(std)::declval<optional<T>&>().get())) {
+    decltype(std::declval<Fn>()(
+                 std::declval<optional<T>&>().get())) {
   using type =
-      decltype(_namespace(std)::declval<Fn>()(
-                   _namespace(std)::declval<optional<T>&>().get()));
+      decltype(std::declval<Fn>()(
+                   std::declval<optional<T>&>().get()));
 
   if (!o) return type();
   return fn(o.get());
@@ -328,11 +347,11 @@ auto map(optional<T>& o, Fn fn) ->
 
 template<typename T, typename Fn>
 auto map(optional<T>&& o, Fn fn) ->
-    decltype(_namespace(std)::declval<Fn>()(
-                 _namespace(std)::declval<optional<T>>().release())) {
+    decltype(std::declval<Fn>()(
+                 std::declval<optional<T>>().release())) {
   using type =
-      decltype(_namespace(std)::declval<Fn>()(
-                   _namespace(std)::declval<optional<T>>().release()));
+      decltype(std::declval<Fn>()(
+                   std::declval<optional<T>>().release()));
 
   if (!o) return type();
   return fn(o.release());

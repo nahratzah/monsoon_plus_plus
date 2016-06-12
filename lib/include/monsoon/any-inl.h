@@ -2,6 +2,7 @@
 #define _ILIAS_ANY_INL_H_
 
 #include "any.h"
+#include <cassert>
 #include <memory>
 #include <string>
 
@@ -18,11 +19,11 @@ struct recursive_visit {
   template<typename Any, typename Fn0, typename... Fn>
   void operator()(Any&& a, Fn0&& fn0, Fn&&... fn) {
     if (Idx == a.selector()) {
-      _namespace(std)::forward<Fn0>(fn0)(
-          get<Idx>(_namespace(std)::forward<Any>(a)));
+      std::forward<Fn0>(fn0)(
+          get<Idx>(std::forward<Any>(a)));
     }
-    next()(_namespace(std)::forward<Any>(a),
-           _namespace(std)::forward<Fn>(fn)...);
+    next()(std::forward<Any>(a),
+           std::forward<Fn>(fn)...);
   }
 };
 /* Tail node specialization. */
@@ -43,7 +44,7 @@ struct recursive_map {
   auto operator()(Any&& a, Fn0&& fn0, Fn&&... fn) ->
       decltype(next()(map<Idx>(forward<Any>(a), forward<Fn0>(fn0)),
                       forward<Fn>(fn)...)) {
-    using _namespace(std)::forward;
+    using std::forward;
 
     return next()(map<Idx>(forward<Any>(a), forward<Fn0>(fn0)),
                   forward<Fn>(fn)...);
@@ -67,7 +68,7 @@ struct recursive_map_onto {
  public:
   template<typename Any, typename Fn0, typename... Fn>
   auto operator()(Any&& a, Fn0&& fn0, Fn&&... fn) -> Result {
-    using _namespace(std)::forward;
+    using std::forward;
 
     if (Idx == a.selector())
       return fn0(get<Idx>(forward<Any>(a)));
@@ -79,7 +80,7 @@ template<typename Result, size_t End>
 struct recursive_map_onto<Result, End, End> {
   template<typename Any>
   Result operator()(Any&&) {
-    assert_msg(false, "Should be unreachable.");
+    assert(false && "Should be unreachable.");
     throw logic_error("ilias::impl::recursive_map_onto: "
                       "base case should be unreachable.");
   }
@@ -104,7 +105,7 @@ template<typename... T, size_t Skip, size_t End>
 struct copy_skip<any<T...>, End, Skip, End> {
   template<typename InAny>
   any<T...> operator()(InAny&&) {
-    assert_msg(false, "Should be unreachable.");
+    assert(false && "Should be unreachable.");
     throw logic_error("ilias::impl::copy_skip: "
                       "base case should be unreachable.");
   }
@@ -344,8 +345,8 @@ any<T...>::any(const any& other)
     noexcept(impl::is_nothrow_copy_constructible_any<T...>()) {
   impl::copy_operation<0, sizeof...(T), T...> op;
 
-  _namespace(std)::get<0>(data_) = op(&_namespace(std)::get<1>(data_), other,
-                                      sizeof(_namespace(std)::get<1>(data_)));
+  std::get<0>(data_) = op(&std::get<1>(data_), other,
+                          sizeof(std::get<1>(data_)));
 }
 
 template<typename... T>
@@ -353,9 +354,9 @@ any<T...>::any(any&& other)
     noexcept(impl::is_nothrow_move_constructible_any<T...>()) {
   impl::copy_operation<0, sizeof...(T), T...> op;
 
-  _namespace(std)::get<0>(data_) = op(&_namespace(std)::get<1>(data_),
-                                      _namespace(std)::move(other),
-                                      sizeof(_namespace(std)::get<1>(data_)));
+  std::get<0>(data_) = op(&std::get<1>(data_),
+                          std::move(other),
+                          sizeof(std::get<1>(data_)));
 }
 
 template<typename... T>
@@ -363,12 +364,12 @@ auto any<T...>::operator=(const any& other)
     noexcept(impl::is_nothrow_copy_assignable_any<T...>()) -> any& {
   impl::copy_operation<0, sizeof...(T), T...> op;
 
-  impl::deleter<0, sizeof...(T), T...>()(_namespace(std)::get<0>(data_),
-                                         &_namespace(std)::get<1>(data_));
+  impl::deleter<0, sizeof...(T), T...>()(std::get<0>(data_),
+                                         &std::get<1>(data_));
   get<0>(data_) = sizeof...(T);
-  _namespace(std)::get<0>(data_) = op(&_namespace(std)::get<1>(data_),
-                                      other,
-                                      sizeof(_namespace(std)::get<1>(data_)));
+  std::get<0>(data_) = op(&std::get<1>(data_),
+                          other,
+                          sizeof(std::get<1>(data_)));
   return *this;
 }
 
@@ -377,19 +378,19 @@ auto any<T...>::operator=(any&& other)
     noexcept(impl::is_nothrow_move_assignable_any<T...>()) -> any& {
   impl::copy_operation<0, sizeof...(T), T...> op;
 
-  impl::deleter<0, sizeof...(T), T...>()(_namespace(std)::get<0>(data_),
-                                         &_namespace(std)::get<1>(data_));
+  impl::deleter<0, sizeof...(T), T...>()(std::get<0>(data_),
+                                         &std::get<1>(data_));
   get<0>(data_) = sizeof...(T);
-  _namespace(std)::get<0>(data_) = op(&_namespace(std)::get<1>(data_),
-                                      _namespace(std)::move(other),
-                                      sizeof(_namespace(std)::get<1>(data_)));
+  std::get<0>(data_) = op(&std::get<1>(data_),
+                          std::move(other),
+                          sizeof(std::get<1>(data_)));
   return *this;
 }
 
 template<typename... T>
 any<T...>::~any() noexcept {
-  impl::deleter<0, sizeof...(T), T...>()(_namespace(std)::get<0>(data_),
-                                         &_namespace(std)::get<1>(data_));
+  impl::deleter<0, sizeof...(T), T...>()(std::get<0>(data_),
+                                         &std::get<1>(data_));
 }
 
 template<typename... T>
@@ -398,54 +399,50 @@ any<T...>::any(U&& v) {
   using type = impl::any_decorate<impl::select_n_t<N, T...>>;
   using impl::any_decorate_reference;
   using impl::select_n_t;
-  using _namespace(std)::forward;
+  using std::forward;
 
-  void* vptr = &_namespace(std)::get<1>(data_);
+  void* vptr = &std::get<1>(data_);
   new (vptr) type(any_decorate_reference<select_n_t<N, T...>>(forward<U>(v)));
-  _namespace(std)::get<0>(data_) = N;
+  std::get<0>(data_) = N;
 }
 
 template<typename... T>
 template<size_t N>
 auto any<T...>::create(impl::select_n_t<N, T...> v) ->
-    _namespace(std)::enable_if_t<_namespace(std)::is_lvalue_reference<
+    std::enable_if_t<std::is_lvalue_reference<
                                      impl::select_n_t<N, T...>>::value,
                                  any> {
   using type = impl::any_decorate<impl::select_n_t<N, T...>>;
 
   any rv;
-  void* vptr = &_namespace(std)::get<1>(rv.data_);
+  void* vptr = &std::get<1>(rv.data_);
   new (vptr) type(&v);
-  _namespace(std)::get<0>(rv.data_) = N;
+  std::get<0>(rv.data_) = N;
   return rv;
 }
 
 template<typename... T>
 template<size_t N>
 auto any<T...>::create(impl::select_n_t<N, T...> v) ->
-    _namespace(std)::enable_if_t<!_namespace(std)::is_lvalue_reference<
+    std::enable_if_t<!std::is_lvalue_reference<
                                       impl::select_n_t<N, T...>>::value,
                                  any> {
   using type = impl::any_decorate<impl::select_n_t<N, T...>>;
 
   any rv;
-  void* vptr = &_namespace(std)::get<1>(rv.data_);
+  void* vptr = &std::get<1>(rv.data_);
   new (vptr) type(v);
-  _namespace(std)::get<0>(rv.data_) = N;
+  std::get<0>(rv.data_) = N;
   return rv;
 }
 
 
-inline any_error::any_error(_namespace(std)::string_ref msg)
-: _namespace(std)::runtime_error(msg)
-{}
-
-inline any_error::any_error(const _namespace(std)::string& msg)
-: _namespace(std)::runtime_error(msg)
+inline any_error::any_error(const std::string& msg)
+: std::runtime_error(msg)
 {}
 
 inline any_error::any_error(const char* msg)
-: _namespace(std)::runtime_error(msg)
+: std::runtime_error(msg)
 {}
 
 
@@ -455,8 +452,8 @@ auto get(any<T...>& v) ->
   using base_type = impl::select_n_t<N, T...>;
   using type = impl::any_decorate<base_type>;
 
-  if (_predict_false(N != v.selector())) any_error::__throw();
-  void* vptr = &_namespace(std)::get<1>(v.data_);
+  if (N != v.selector()) any_error::__throw();
+  void* vptr = &std::get<1>(v.data_);
   return impl::dereference_any_value<base_type>(static_cast<type*>(vptr));
 }
 
@@ -467,8 +464,8 @@ auto get(const any<T...>& v) ->
   using base_type = impl::select_n_t<N, T...>;
   using type = impl::any_decorate<base_type>;
 
-  if (_predict_false(N != v.selector())) any_error::__throw();
-  const void* vptr = &_namespace(std)::get<1>(v.data_);
+  if (N != v.selector()) any_error::__throw();
+  const void* vptr = &std::get<1>(v.data_);
   return impl::dereference_any_value<base_type>(
       static_cast<const type*>(vptr));
 }
@@ -479,8 +476,8 @@ auto get(any<T...>&& v) ->
   using base_type = impl::select_n_t<N, T...>;
   using type = impl::any_decorate<base_type>;
 
-  if (_predict_false(N != v.selector())) any_error::__throw();
-  void* vptr = &_namespace(std)::get<1>(v.data_);
+  if (N != v.selector()) any_error::__throw();
+  void* vptr = &std::get<1>(v.data_);
   return impl::dereference_any_rvalue<base_type>(static_cast<type*>(vptr));
 }
 
@@ -488,7 +485,7 @@ auto get(any<T...>&& v) ->
 template<typename Sel, typename... T>
 auto get(any<T...>& v) ->
     decltype(get<impl::type_to_index<Sel, T...>::value>(
-                 _namespace(std)::declval<any<T...>&>())) {
+                 std::declval<any<T...>&>())) {
   static_assert(impl::is_ambiguous_type<Sel, T...>(),
                 "Type selection is ambiguous.");
   return get<impl::type_to_index<Sel, T...>::value>(v);
@@ -497,7 +494,7 @@ auto get(any<T...>& v) ->
 template<typename Sel, typename... T>
 auto get(const any<T...>& v) ->
     decltype(get<impl::type_to_index<Sel, T...>::value>(
-                 _namespace(std)::declval<const any<T...>&>())) {
+                 std::declval<const any<T...>&>())) {
   static_assert(impl::is_ambiguous_type<Sel, T...>(),
                 "Type selection is ambiguous.");
   return get<impl::type_to_index<Sel, T...>::value>(v);
@@ -506,7 +503,7 @@ auto get(const any<T...>& v) ->
 template<typename Sel, typename... T>
 auto get(any<T...>&& v) ->
     decltype(get<impl::type_to_index<Sel, T...>::value>(
-                 _namespace(std)::declval<any<T...>>())) {
+                 std::declval<any<T...>>())) {
   static_assert(impl::is_ambiguous_type<Sel, T...>(),
                 "Type selection is ambiguous.");
   return get<impl::type_to_index<Sel, T...>::value>(v);
@@ -528,7 +525,7 @@ auto get_optional(any<T...>&& v) ->
   using type = optional<impl::select_n_t<N, T...>>;
 
   if (N != v.selector()) return type();
-  return get<N>(_namespace(std)::move(v));
+  return get<N>(std::move(v));
 }
 
 
@@ -556,23 +553,23 @@ auto visit(any<T...>&& v, Fn fn) -> bool {
 
 template<typename... T, typename... Fn>
 auto visit(any<T...>& v, Fn&&... fn) ->
-    _namespace(std)::enable_if_t<sizeof...(T) == sizeof...(Fn), void> {
+    std::enable_if_t<sizeof...(T) == sizeof...(Fn), void> {
   impl::recursive_visit<0, sizeof...(T)>()(
-      v, _namespace(std)::forward<Fn>(fn)...);
+      v, std::forward<Fn>(fn)...);
 }
 
 template<typename... T, typename... Fn>
 auto visit(const any<T...>& v, Fn&&... fn) ->
-    _namespace(std)::enable_if_t<sizeof...(T) == sizeof...(Fn), void> {
+    std::enable_if_t<sizeof...(T) == sizeof...(Fn), void> {
   impl::recursive_visit<0, sizeof...(T)>()(
-      v, _namespace(std)::forward<Fn>(fn)...);
+      v, std::forward<Fn>(fn)...);
 }
 
 template<typename... T, typename... Fn>
 auto visit(any<T...>&& v, Fn&&... fn) ->
-    _namespace(std)::enable_if_t<sizeof...(T) == sizeof...(Fn), void> {
+    std::enable_if_t<sizeof...(T) == sizeof...(Fn), void> {
   impl::recursive_visit<0, sizeof...(T)>()(
-      move(v), _namespace(std)::forward<Fn>(fn)...);
+      move(v), std::forward<Fn>(fn)...);
 }
 
 
@@ -580,13 +577,13 @@ template<size_t N, typename... T, typename Fn>
 auto map(const any<T...>& v, Fn fn) ->
     impl::replace_type<
         N,
-        decltype(_namespace(std)::declval<Fn>()(
-                     get<N>(_namespace(std)::declval<const any<T...>&>()))),
+        decltype(std::declval<Fn>()(
+                     get<N>(std::declval<const any<T...>&>()))),
         any<T...>> {
   using type = impl::replace_type<
       N,
-      decltype(_namespace(std)::declval<Fn>()(
-                   get<N>(_namespace(std)::declval<const any<T...>&>()))),
+      decltype(std::declval<Fn>()(
+                   get<N>(std::declval<const any<T...>&>()))),
       any<T...>>;
 
   if (N == v.selector()) return type::template create<N>(fn(get<N>(v)));
@@ -597,14 +594,14 @@ template<size_t N, typename... T, typename Fn>
 auto map(any<T...>&& v, Fn fn) ->
     impl::replace_type<
         N,
-        decltype(_namespace(std)::declval<Fn>()(get<N>(
-                     _namespace(std)::declval<any<T...>>()))),
+        decltype(std::declval<Fn>()(get<N>(
+                     std::declval<any<T...>>()))),
         any<T...>> {
-  using _namespace(std)::move;
+  using std::move;
   using type = impl::replace_type<
       N,
-      decltype(_namespace(std)::declval<Fn>()(get<N>(
-                   _namespace(std)::declval<const any<T...>&>()))),
+      decltype(std::declval<Fn>()(get<N>(
+                   std::declval<const any<T...>&>()))),
       any<T...>>;
 
   if (N == v.selector()) return type::template create<N>(fn(get<N>(move(v))));
@@ -614,53 +611,53 @@ auto map(any<T...>&& v, Fn fn) ->
 
 template<typename... T, typename... Fn>
 auto map(any<T...>& v, Fn&&... fn) ->
-    decltype(_namespace(std)::declval<impl::recursive_map<0, sizeof...(T)>>()(
-                 _namespace(std)::declval<any<T...>&>(),
-                 _namespace(std)::declval<Fn>()...))
+    decltype(std::declval<impl::recursive_map<0, sizeof...(T)>>()(
+                 std::declval<any<T...>&>(),
+                 std::declval<Fn>()...))
 {
   return impl::recursive_map<0, sizeof...(T)>()(
-             v, _namespace(std)::forward<Fn>(fn)...);
+             v, std::forward<Fn>(fn)...);
 }
 
 template<typename... T, typename... Fn>
 auto map(const any<T...>& v, Fn&&... fn) ->
-    decltype(_namespace(std)::declval<impl::recursive_map<0, sizeof...(T)>>()(
-                 _namespace(std)::declval<const any<T...>&>(),
-                 _namespace(std)::declval<Fn>()...))
+    decltype(std::declval<impl::recursive_map<0, sizeof...(T)>>()(
+                 std::declval<const any<T...>&>(),
+                 std::declval<Fn>()...))
 {
   return impl::recursive_map<0, sizeof...(T)>()(
-             v, _namespace(std)::forward<Fn>(fn)...);
+             v, std::forward<Fn>(fn)...);
 }
 
 template<typename... T, typename... Fn>
 auto map(any<T...>&& v, Fn&&... fn) ->
-    decltype(_namespace(std)::declval<impl::recursive_map<0, sizeof...(T)>>()(
-                 _namespace(std)::declval<any<T...>>(),
-                 _namespace(std)::declval<Fn>()...))
+    decltype(std::declval<impl::recursive_map<0, sizeof...(T)>>()(
+                 std::declval<any<T...>>(),
+                 std::declval<Fn>()...))
 {
-  using _namespace(std)::move;
+  using std::move;
   return impl::recursive_map<0, sizeof...(T)>()(
-             move(v), _namespace(std)::forward<Fn>(fn)...);
+             move(v), std::forward<Fn>(fn)...);
 }
 
 
 template<typename Result, typename... T, typename... Fn>
 auto map_onto(any<T...>& v, Fn&&... fn) -> Result {
   return impl::recursive_map_onto<Result, 0, sizeof...(T)>()(
-             v, _namespace(std)::forward<Fn>(fn)...);
+             v, std::forward<Fn>(fn)...);
 }
 
 template<typename Result, typename... T, typename... Fn>
 auto map_onto(const any<T...>& v, Fn&&... fn) -> Result {
   return impl::recursive_map_onto<Result, 0, sizeof...(T)>()(
-             v, _namespace(std)::forward<Fn>(fn)...);
+             v, std::forward<Fn>(fn)...);
 }
 
 template<typename Result, typename... T, typename... Fn>
 auto map_onto(any<T...>&& v, Fn&&... fn) -> Result {
-  using _namespace(std)::move;
+  using std::move;
   return impl::recursive_map_onto<Result, 0, sizeof...(T)>()(
-             move(v), _namespace(std)::forward<Fn>(fn)...);
+             move(v), std::forward<Fn>(fn)...);
 }
 
 
