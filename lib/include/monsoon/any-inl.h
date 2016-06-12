@@ -331,6 +331,20 @@ auto any_decorate_reference(U&& u) noexcept ->
   return static_cast<U&&>(u);
 }
 
+template<size_t N, typename... T>
+auto eq_<N, T...>::operator()(const any<T...>& x, const any<T...>& y)
+    const noexcept -> bool {
+  return ( x.selector() == N - 1u && y.selector() == N - 1u
+         ? get<N - 1u>(x) == get<N - 1u>(y)
+         : eq_<N - 1u, T...>()(x, y));
+}
+
+template<typename... T>
+auto eq_<0, T...>::operator()(const any<T...>& x, const any<T...>& y)
+    const noexcept -> bool {
+  return false;
+}
+
 
 } /* namespace ilias::impl */
 
@@ -434,6 +448,16 @@ auto any<T...>::create(impl::select_n_t<N, T...> v) ->
   new (vptr) type(v);
   std::get<0>(rv.data_) = N;
   return rv;
+}
+
+template<typename... T>
+auto any<T...>::operator==(const any& other) const noexcept -> bool {
+  return impl::eq_<sizeof...(T), T...>()(*this, other);
+}
+
+template<typename... T>
+auto any<T...>::operator!=(const any& other) const noexcept -> bool {
+  return !(*this == other);
 }
 
 

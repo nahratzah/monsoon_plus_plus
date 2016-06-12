@@ -126,6 +126,15 @@ template<size_t, size_t> struct recursive_map;
 
 template<size_t Idx, size_t End, typename... T> struct copy_operation;
 
+template<size_t N, typename... T>
+struct eq_ {
+  bool operator()(const any<T...>&, const any<T...>&) const noexcept;
+};
+template<typename... T>
+struct eq_<0, T...> {
+  bool operator()(const any<T...>&, const any<T...>&) const noexcept;
+};
+
 
 } /* namespace monsoon::impl */
 
@@ -225,6 +234,9 @@ class any {
       std::enable_if_t<!std::is_lvalue_reference<
                                         impl::select_n_t<N, T...>>::value,
                                    any>;
+
+  bool operator==(const any&) const noexcept;
+  bool operator!=(const any&) const noexcept;
 
  private:
   std::tuple<
