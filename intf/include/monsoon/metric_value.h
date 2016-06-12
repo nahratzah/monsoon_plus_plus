@@ -1,6 +1,7 @@
 #ifndef MONSOON_METRIC_VALUE_H
 #define MONSOON_METRIC_VALUE_H
 
+#include <functional>
 #include <string>
 #include <monsoon/optional.h>
 #include <monsoon/any.h>
@@ -35,6 +36,21 @@ class metric_value {
 
 
 } /* namespace monsoon */
+
+
+namespace std {
+
+
+template<>
+struct hash<monsoon::metric_value> {
+  using argument_type = const monsoon::metric_value&;
+  using result_type = size_t;
+
+  size_t operator()(const monsoon::metric_value&) const noexcept;
+};
+
+
+} /* namespace std */
 
 #include "metric_value-inl.h"
 

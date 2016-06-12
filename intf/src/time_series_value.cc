@@ -1,4 +1,5 @@
 #include <monsoon/time_series_value.h>
+#include <monsoon/hash_support.h>
 
 namespace monsoon {
 
@@ -8,7 +9,7 @@ auto time_series_value::operator[](const metric_name& m) const noexcept
   auto pos = metrics_.find(m);
   return ( pos == metrics_.end()
          ? optional<const metric_value&>()
-         : *pos);
+         : pos->second);
 }
 
 auto time_series_value::operator==(const time_series_value& other)
@@ -26,13 +27,14 @@ auto time_series_value::operator==(const time_series_value& other)
 namespace std {
 
 
-auto std::hash<monsoon::time_series_value>::operator(
+auto std::hash<monsoon::time_series_value>::operator()(
     const monsoon::time_series_value& v)
     const noexcept
 ->  size_t {
-  return std::hash<monsoon::time_series_value::time_point>()(v.get_time()) ^
+  const auto tp_val = v.get_time().time_since_epoch().count();
+  return std::hash<remove_const_t<decltype(tp_val)>>()(tp_val) ^
          std::hash<monsoon::group_name>()(v.get_name()) ^
-         std::hash<monsoon::time_series_value::metric_map>()(v.get_metrics());
+         monsoon::map_to_hash(v.get_metrics());
 }
 
 
