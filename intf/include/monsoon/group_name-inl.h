@@ -17,6 +17,15 @@ inline auto group_name::operator=(group_name&& other) noexcept -> group_name& {
   return *this;
 }
 
+inline group_name::group_name(simple_group p)
+: group_name(std::move(p), tags())
+{}
+
+inline group_name::group_name(simple_group p, tags t) noexcept
+: path_(std::move(p)),
+  tags_(std::move(t))
+{}
+
 inline auto group_name::get_path() const noexcept -> const simple_group& {
   return path_;
 }
