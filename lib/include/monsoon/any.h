@@ -312,6 +312,16 @@ auto map(any<T...>&&, Fn&&...) ->
                  std::declval<Fn>()...));
 
 
+template<typename Result, typename... T, typename... Fn>
+auto map_onto(any<T...>&, Fn&&...) -> Result;
+
+template<typename Result, typename... T, typename... Fn>
+auto map_onto(const any<T...>&, Fn&&...) -> Result;
+
+template<typename Result, typename... T, typename... Fn>
+auto map_onto(any<T...>&&, Fn&&...) -> Result;
+
+
 } /* namespace monsoon */
 
 #include "any-inl.h"
