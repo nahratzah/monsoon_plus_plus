@@ -22,7 +22,7 @@ auto simple_group::operator<(const simple_group& other) const noexcept
 namespace std {
 
 
-auto std::hash<monsoon::simple_group>::operator(const monsoon::simple_group& v)
+auto std::hash<monsoon::simple_group>::operator()(const monsoon::simple_group& v)
     const noexcept
 ->  size_t {
   auto s_hash = std::hash<std::string>();

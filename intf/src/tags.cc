@@ -8,7 +8,7 @@ auto tags::operator[](const std::string& key) const noexcept
   auto pos = map_.find(key);
   return ( pos == map_.end()
          ? optional<const metric_value&>()
-         : *pos);
+         : pos->second);
 }
 
 auto tags::operator==(const tags& other) const noexcept -> bool {
