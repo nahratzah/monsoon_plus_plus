@@ -3,6 +3,7 @@ project (monsoon_engine)
 include_directories (include)
 include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_engine SHARED
+  src/context.cc
   src/expression.cc
 )
 target_link_libraries (monsoon_engine ${extra_libs})
