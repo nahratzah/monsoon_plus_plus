@@ -18,9 +18,10 @@ class binop
 {
  public:
   binop() = delete;
-  binop(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  binop(std::string, std::unique_ptr<expression>, std::unique_ptr<expression>);
   ~binop() noexcept override;
 
+  std::string config_string() const override;
   std::unordered_map<tags, metric_value> evaluate(const context&) const final;
 
  protected:
@@ -28,6 +29,7 @@ class binop
       const = 0;
 
  private:
+  std::string symbol_;
   std::unique_ptr<expression> x_, y_;
 };
 

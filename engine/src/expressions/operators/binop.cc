@@ -7,8 +7,10 @@ namespace expressions {
 namespace operators {
 
 
-binop::binop(std::unique_ptr<expression> x, std::unique_ptr<expression> y)
-: x_(std::move(x)),
+binop::binop(std::string symbol,
+             std::unique_ptr<expression> x, std::unique_ptr<expression> y)
+: symbol_(std::move(symbol)),
+  x_(std::move(x)),
   y_(std::move(y))
 {
   if (x_ == nullptr || y_ == nullptr)
@@ -16,6 +18,10 @@ binop::binop(std::unique_ptr<expression> x, std::unique_ptr<expression> y)
 }
 
 binop::~binop() noexcept {}
+
+auto binop::config_string() const -> std::string {
+  return x_->config_string() + symbol_ + y_->config_string();
+}
 
 auto binop::evaluate(const context& ctx) const
 ->  std::unordered_map<tags, metric_value> {
