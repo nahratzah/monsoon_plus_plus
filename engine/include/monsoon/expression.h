@@ -4,7 +4,9 @@
 #include <monsoon/context.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
+#include <memory>
 #include <unordered_map>
+#include <string>
 
 namespace monsoon {
 
