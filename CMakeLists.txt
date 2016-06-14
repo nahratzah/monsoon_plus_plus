@@ -74,3 +74,4 @@ endif()
 # Add module directories.
 add_subdirectory (lib)
 add_subdirectory (intf)
+add_subdirectory (engine)

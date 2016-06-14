@@ -13,5 +13,6 @@ add_library (monsoon_intf SHARED
 )
 target_link_libraries (monsoon_intf ${extra_libs})
 target_link_libraries (monsoon_intf monsoon_lib)
+target_include_directories (monsoon_intf PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES> include)
 set_property (TARGET monsoon_intf PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_intf PROPERTY SOVERSION "0.0")

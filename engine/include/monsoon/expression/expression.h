@@ -1,0 +1,27 @@
+#ifndef MONSOON_EXPRESSION_EXPRESSION_H
+#define MONSOON_EXPRESSION_EXPRESSION_H
+
+#include <monsoon/metric_value.h>
+#include <monsoon/tags.h>
+#include <unordered_map>
+
+namespace monsoon {
+namespace expression {
+
+
+class expression {
+ public:
+  expression() noexcept = default;
+  virtual ~expression() noexcept;
+
+  virtual std::unordered_map<tags, metric_value> evaluate() const = 0;
+
+ protected:
+  expression(const expression&) noexcept = default;
+  expression(expression&&) noexcept;
+};
+
+
+}} /* namespace monsoon::expression */
+
+#endif /* MONSOON_EXPRESSION_EXPRESSION_H */
