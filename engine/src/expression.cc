@@ -1,10 +1,9 @@
-#include <monsoon/expression/expression.h>
+#include <monsoon/expression.h>
 
 namespace monsoon {
-namespace expression {
 
 
 expression::~expression() noexcept {}
 
 
-}} /* namespace monsoon::expression */
+} /* namespace monsoon */

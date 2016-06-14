@@ -1,5 +1,5 @@
-#ifndef MONSOON_EXPRESSION_EXPRESSION_H
-#define MONSOON_EXPRESSION_EXPRESSION_H
+#ifndef MONSOON_EXPRESSION_H
+#define MONSOON_EXPRESSION_H
 
 #include <monsoon/context.h>
 #include <monsoon/metric_value.h>
@@ -7,7 +7,6 @@
 #include <unordered_map>
 
 namespace monsoon {
-namespace expression {
 
 
 class expression {
@@ -25,6 +24,6 @@ class expression {
 };
 
 
-}} /* namespace monsoon::expression */
+} /* namespace monsoon */
 
-#endif /* MONSOON_EXPRESSION_EXPRESSION_H */
+#endif /* MONSOON_EXPRESSION_H */
