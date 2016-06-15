@@ -81,6 +81,28 @@ auto operator!(const metric_value& x) noexcept -> metric_value {
   return map(x.as_bool(), [](bool b) { return metric_value(!b); });
 }
 
+auto operator&&(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  return map(x.as_bool(),
+      [&y](bool x_bool) {
+        return map(y.as_bool(),
+            [&x_bool](bool y_bool) {
+              return metric_value(x_bool && y_bool);
+            });
+      });
+}
+
+auto operator||(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  return map(x.as_bool(),
+      [&y](bool x_bool) {
+        return map(y.as_bool(),
+            [&x_bool](bool y_bool) {
+              return metric_value(x_bool || y_bool);
+            });
+      });
+}
+
 auto operator-(const metric_value& x) noexcept -> metric_value {
   const auto x_num = x.as_number();
   if (!x_num.is_present()) return metric_value();
