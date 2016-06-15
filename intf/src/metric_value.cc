@@ -32,6 +32,28 @@ auto metric_value::as_number() const noexcept
       });
 }
 
+auto metric_value::as_string() const -> optional<std::string> {
+  return map(get(),
+      [](const types& v) {
+        return map_onto<optional<std::string>>(v,
+            [](bool b) {
+              return std::string(b ? "true" : "false");
+            },
+            [](long v) {
+              return std::to_string(v);
+            },
+            [](unsigned long v) {
+              return std::to_string(v);
+            },
+            [](double v) {
+              return std::to_string(v);
+            },
+            [](const std::string& v) {
+              return v;
+            });
+      });
+}
+
 
 auto operator-(const metric_value& x) noexcept -> metric_value {
   const auto x_num = x.as_number();

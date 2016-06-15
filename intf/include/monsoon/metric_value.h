@@ -31,6 +31,7 @@ class metric_value {
   const optional<types>& get() const noexcept;
 
   optional<any<long, unsigned long, double>> as_number() const noexcept;
+  optional<std::string> as_string() const;
 
  private:
   optional<types> value_;
