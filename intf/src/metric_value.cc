@@ -9,6 +9,28 @@ auto metric_value::operator==(const metric_value& other) const noexcept
   return value_ == other.value_;
 }
 
+auto metric_value::as_bool() const noexcept -> optional<bool> {
+  return map(get(),
+      [](const types& v) {
+        return map_onto<optional<bool>>(v,
+            [](bool b) {
+              return b;
+            },
+            [](long b) {
+              return b != 0;
+            },
+            [](unsigned long b) {
+              return b != 0;
+            },
+            [](double b) {
+              return b != 0.0l && b != -0.0l;
+            },
+            [](const std::string& b) {
+              return optional<bool>();
+            });
+      });
+}
+
 auto metric_value::as_number() const noexcept
 ->  optional<any<long, unsigned long, double>> {
   return map(get(),
@@ -54,6 +76,10 @@ auto metric_value::as_string() const -> optional<std::string> {
       });
 }
 
+
+auto operator!(const metric_value& x) noexcept -> metric_value {
+  return map(x.as_bool(), [](bool b) { return metric_value(!b); });
+}
 
 auto operator-(const metric_value& x) noexcept -> metric_value {
   const auto x_num = x.as_number();

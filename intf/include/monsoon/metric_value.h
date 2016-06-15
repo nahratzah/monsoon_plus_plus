@@ -30,6 +30,7 @@ class metric_value {
 
   const optional<types>& get() const noexcept;
 
+  optional<bool> as_bool() const noexcept;
   optional<any<long, unsigned long, double>> as_number() const noexcept;
   optional<std::string> as_string() const;
 
@@ -37,6 +38,7 @@ class metric_value {
   optional<types> value_;
 };
 
+metric_value operator!(const metric_value&) noexcept;
 metric_value operator-(const metric_value&) noexcept;
 metric_value operator+(const metric_value&, const metric_value&) noexcept;
 metric_value operator-(const metric_value&, const metric_value&) noexcept;
