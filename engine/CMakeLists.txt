@@ -5,6 +5,7 @@ include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES
 add_library (monsoon_engine SHARED
   src/context.cc
   src/expression.cc
+  src/expressions/operators/unop.cc
   src/expressions/operators/binop.cc
   src/expressions/operators/plus.cc
   src/expressions/operators/minus.cc
