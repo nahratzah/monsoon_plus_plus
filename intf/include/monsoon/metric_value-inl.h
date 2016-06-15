@@ -21,7 +21,7 @@ inline metric_value::metric_value(bool v) noexcept
 {}
 
 inline metric_value::metric_value(long v) noexcept
-: value_(types::create<1>(v))
+: value_(v >= 0 ? types::create<2>(v) : types::create<1>(v))
 {}
 
 inline metric_value::metric_value(unsigned long v) noexcept
