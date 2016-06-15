@@ -7,54 +7,15 @@ namespace operators {
 
 
 plus::plus(std::unique_ptr<expression> x, std::unique_ptr<expression> y)
-: numeric_binop(" + ", std::move(x), std::move(y))
+: binop(" + ", std::move(x), std::move(y))
 {}
 
 plus::~plus() noexcept {}
 
-auto plus::evaluate(long x, long y) const
+auto plus::evaluate(const metric_value& x, const metric_value& y)
+  const noexcept
 ->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(long x, unsigned long y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(long x, double y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(unsigned long x, long y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(unsigned long x, unsigned long y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(unsigned long x, double y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(double x, long y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(double x, unsigned long y) const
-->  metric_value {
-  return metric_value(x + y);
-}
-
-auto plus::evaluate(double x, double y) const
-->  metric_value {
-  return metric_value(x + y);
+  return x + y;
 }
 
 

@@ -46,6 +46,97 @@ inline auto metric_value::get() const noexcept -> const optional<types>& {
 }
 
 
+inline auto operator+(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val + y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val + y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val + y_val);
+            });
+      });
+}
+
+inline auto operator-(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val - y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val - y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val - y_val);
+            });
+      });
+}
+
+
 } /* namespace monsoon */
 
 #endif /* MONSOON_METRIC_VALUE_INL_H */

@@ -6,8 +6,8 @@ add_library (monsoon_engine SHARED
   src/context.cc
   src/expression.cc
   src/expressions/operators/binop.cc
-  src/expressions/operators/numeric_binop.cc
   src/expressions/operators/plus.cc
+  src/expressions/operators/minus.cc
 )
 target_link_libraries (monsoon_engine ${extra_libs})
 target_link_libraries (monsoon_engine monsoon_intf)

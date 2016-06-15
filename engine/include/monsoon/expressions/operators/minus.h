@@ -1,5 +1,5 @@
-#ifndef MONSOON_EXPRESSIONS_OPERATORS_PLUS_H
-#define MONSOON_EXPRESSIONS_OPERATORS_PLUS_H
+#ifndef MONSOON_EXPRESSIONS_OPERATORS_MINUS_H
+#define MONSOON_EXPRESSIONS_OPERATORS_MINUS_H
 
 #include <monsoon/expression.h>
 #include <monsoon/expressions/operators/binop.h>
@@ -9,12 +9,12 @@ namespace expressions {
 namespace operators {
 
 
-class plus final
+class minus final
 : public binop
 {
  public:
-  plus(std::unique_ptr<expression>, std::unique_ptr<expression>);
-  ~plus() noexcept override;
+  minus(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  ~minus() noexcept override;
 
  protected:
   metric_value evaluate(const metric_value&, const metric_value&)
@@ -24,4 +24,4 @@ class plus final
 
 }}} /* namespace monsoon::expressions::operators */
 
-#endif /* MONSOON_EXPRESSIONS_OPERATORS_PLUS_H */
+#endif /* MONSOON_EXPRESSIONS_OPERATORS_MINUS_H */

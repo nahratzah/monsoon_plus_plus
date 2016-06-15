@@ -36,6 +36,8 @@ class metric_value {
   optional<types> value_;
 };
 
+metric_value operator+(const metric_value&, const metric_value&) noexcept;
+
 
 } /* namespace monsoon */
 
