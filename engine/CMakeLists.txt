@@ -11,6 +11,8 @@ add_library (monsoon_engine SHARED
   src/expressions/operators/multiply.cc
   src/expressions/operators/divide.cc
   src/expressions/operators/modulo.cc
+  src/expressions/operators/logical_and.cc
+  src/expressions/operators/logical_or.cc
 )
 target_link_libraries (monsoon_engine ${extra_libs})
 target_link_libraries (monsoon_engine monsoon_intf)
