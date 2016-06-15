@@ -33,6 +33,23 @@ auto metric_value::as_number() const noexcept
 }
 
 
+auto operator-(const metric_value& x) noexcept -> metric_value {
+  const auto x_num = x.as_number();
+  if (!x_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [](long x_val) {
+        return metric_value(-x_val);
+      },
+      [](unsigned long x_val) {
+        long rv = x_val;
+        return metric_value(-rv);
+      },
+      [](double x_val) {
+        return metric_value(-x_val);
+      });
+}
+
 auto operator+(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
   const auto x_num = x.as_number();
