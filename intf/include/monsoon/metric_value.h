@@ -37,6 +37,10 @@ class metric_value {
 };
 
 metric_value operator+(const metric_value&, const metric_value&) noexcept;
+metric_value operator-(const metric_value&, const metric_value&) noexcept;
+metric_value operator*(const metric_value&, const metric_value&) noexcept;
+metric_value operator/(const metric_value&, const metric_value&) noexcept;
+metric_value operator%(const metric_value&, const metric_value&) noexcept;
 
 
 } /* namespace monsoon */

@@ -1,4 +1,5 @@
 #include <monsoon/metric_value.h>
+#include <cmath>
 
 namespace monsoon {
 
@@ -27,6 +28,250 @@ auto metric_value::as_number() const noexcept
             },
             [](const std::string& v) {
               return optional<any<long, unsigned long, double>>();
+            });
+      });
+}
+
+
+auto operator+(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val + y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val + y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val + y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val + y_val);
+            });
+      });
+}
+
+auto operator-(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val - y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val - y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val - y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val - y_val);
+            });
+      });
+}
+
+auto operator*(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val * y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val * y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val * y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val * y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val * y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val * y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val * y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val * y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val * y_val);
+            });
+      });
+}
+
+auto operator/(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val / y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val / y_val);
+            },
+            [&x_val](double y_val) {
+              if (y_val == 0.0l || y_val == -0.0l) return metric_value();
+              return metric_value(x_val / y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val / y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val / y_val);
+            },
+            [&x_val](double y_val) {
+              if (y_val == 0.0l || y_val == -0.0l) return metric_value();
+              return metric_value(x_val / y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val / y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val / y_val);
+            },
+            [&x_val](double y_val) {
+              if (y_val == 0.0l || y_val == -0.0l) return metric_value();
+              return metric_value(x_val / y_val);
+            });
+      });
+}
+
+auto operator%(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val % y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val % y_val);
+            },
+            [&x_val](double y_val) {
+              if (y_val == 0.0l || y_val == -0.0l) return metric_value();
+              return metric_value(std::remainder(x_val, y_val));
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val % y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(x_val % y_val);
+            },
+            [&x_val](double y_val) {
+              if (y_val == 0.0l || y_val == -0.0l) return metric_value();
+              return metric_value(std::remainder(x_val, y_val));
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(std::remainder(x_val, y_val));
+            },
+            [&x_val](unsigned long y_val) {
+              if (y_val == 0) return metric_value();
+              return metric_value(std::remainder(x_val, y_val));
+            },
+            [&x_val](double y_val) {
+              if (y_val == 0.0l || y_val == -0.0l) return metric_value();
+              return metric_value(std::remainder(x_val, y_val));
             });
       });
 }
