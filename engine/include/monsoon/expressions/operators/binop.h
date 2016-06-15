@@ -18,7 +18,7 @@ class binop
 {
  public:
   binop() = delete;
-  binop(std::string, std::unique_ptr<expression>, std::unique_ptr<expression>);
+  binop(const char*, std::unique_ptr<expression>, std::unique_ptr<expression>);
   ~binop() noexcept override;
 
   std::string config_string() const override;

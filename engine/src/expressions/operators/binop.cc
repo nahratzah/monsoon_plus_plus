@@ -7,9 +7,9 @@ namespace expressions {
 namespace operators {
 
 
-binop::binop(std::string symbol,
+binop::binop(const char* symbol,
              std::unique_ptr<expression> x, std::unique_ptr<expression> y)
-: symbol_(std::move(symbol)),
+: symbol_(symbol),
   x_(std::move(x)),
   y_(std::move(y))
 {
