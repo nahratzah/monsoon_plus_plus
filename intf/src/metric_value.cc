@@ -103,6 +103,10 @@ auto operator-(const metric_value& x, const metric_value& y) noexcept
               return metric_value(x_val - y_val);
             },
             [&x_val](unsigned long y_val) {
+              if (y_val > x_val) {
+                long rv = y_val - x_val;
+                return metric_value(-rv);
+              }
               return metric_value(x_val - y_val);
             },
             [&x_val](double y_val) {
