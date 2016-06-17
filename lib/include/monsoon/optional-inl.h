@@ -196,6 +196,23 @@ auto optional<T>::get(const value_type& dfl) -> value_type {
 
 template<typename T>
 auto optional<T>::get(value_type&& dfl) -> value_type {
+  using std::move;
+
+  if (is_present()) return get();
+  value_type rv = move(dfl);
+  return rv;
+}
+
+template<typename T>
+auto optional<T>::get(const value_type& dfl) const -> value_type {
+  if (is_present()) return get();
+  return dfl;
+}
+
+template<typename T>
+auto optional<T>::get(value_type&& dfl) const -> value_type {
+  using std::move;
+
   if (is_present()) return get();
   value_type rv = move(dfl);
   return rv;

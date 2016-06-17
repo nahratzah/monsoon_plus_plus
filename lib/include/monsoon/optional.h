@@ -90,6 +90,8 @@ class optional {
   value_type& get();
   value_type get(const value_type&);
   value_type get(value_type&&);
+  value_type get(const value_type&) const;
+  value_type get(value_type&&) const;
 
   bool operator==(const optional&) const noexcept(nothrow_equality_());
   bool operator!=(const optional&) const noexcept(nothrow_equality_());
