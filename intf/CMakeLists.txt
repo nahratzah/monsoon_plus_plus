@@ -11,6 +11,7 @@ add_library (monsoon_intf SHARED
   src/tags.cc
   src/time_series_value.cc
   src/push_processor.cc
+  src/alert.cc
 )
 target_link_libraries (monsoon_intf ${extra_libs})
 target_link_libraries (monsoon_intf monsoon_lib)
