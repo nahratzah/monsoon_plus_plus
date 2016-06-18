@@ -5,6 +5,7 @@
 #include <cmath>
 #include <functional>
 #include <map>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -134,6 +135,8 @@ struct hash<monsoon::histogram> {
 
   size_t operator()(const monsoon::histogram&) const noexcept;
 };
+
+std::string to_string(const monsoon::histogram&);
 
 
 } /* namespace std */

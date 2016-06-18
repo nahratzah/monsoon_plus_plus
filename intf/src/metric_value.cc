@@ -529,5 +529,29 @@ auto std::hash<monsoon::metric_value>::operator()(
                                    std::hash<monsoon::histogram>());
 }
 
+auto to_string(const monsoon::metric_value& v) -> std::string {
+  if (!v.get().is_present()) return "(none)";
+
+  return monsoon::map_onto<std::string>(*v.get(),
+      [](bool b) {
+        return (b ? "true" : "false");
+      },
+      [](long v) {
+        return to_string(v);
+      },
+      [](unsigned long v) {
+        return to_string(v);
+      },
+      [](double v) {
+        return to_string(v);
+      },
+      [](const string& v) {
+        return v;
+      },
+      [](const monsoon::histogram& v) {
+        return to_string(v);
+      });
+}
+
 
 } /* namespace std */

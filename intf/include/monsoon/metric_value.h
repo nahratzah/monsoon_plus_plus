@@ -67,6 +67,8 @@ struct hash<monsoon::metric_value> {
   size_t operator()(const monsoon::metric_value&) const noexcept;
 };
 
+std::string to_string(const monsoon::metric_value&);
+
 
 } /* namespace std */
 
