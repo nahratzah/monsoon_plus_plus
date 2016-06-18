@@ -16,7 +16,7 @@ if (APPLE)
 endif ()
 
 # Set up the compiler.
-if (CMAKE_COMPILER_IS_GNUCC)
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility-inlines-hidden -fvisibility=hidden")
   set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3")
   set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
@@ -25,7 +25,7 @@ if (CMAKE_COMPILER_IS_GNUCC)
   # Linux glibc is a pain without this.
   # This is the shotgun approach: enable every standard and make functions thread-safe.
   add_definitions (-D_REENTRANT -D_GNU_SOURCE)
-elseif (WIN32)
+elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi")
   set (CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} /DEBUG")
   set (CMAKE_SHARED_LINKER_FLAGS_DEBUG "${CMAKE_SHARED_LINKER_FLAGS} /DEBUG")
