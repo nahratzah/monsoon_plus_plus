@@ -5,13 +5,14 @@
 #include <string>
 #include <monsoon/optional.h>
 #include <monsoon/any.h>
+#include <monsoon/histogram.h>
 
 namespace monsoon {
 
 
 class metric_value {
  public:
-  using types = any<bool, long, unsigned long, double, std::string>;
+  using types = any<bool, long, unsigned long, double, std::string, histogram>;
 
   constexpr metric_value() noexcept = default;
   metric_value(const metric_value&) = default;
@@ -24,6 +25,7 @@ class metric_value {
   explicit metric_value(unsigned long) noexcept;
   explicit metric_value(double) noexcept;
   explicit metric_value(std::string) noexcept;
+  explicit metric_value(histogram) noexcept;
 
   bool operator==(const metric_value&) const noexcept;
   bool operator!=(const metric_value&) const noexcept;
@@ -32,6 +34,8 @@ class metric_value {
 
   optional<bool> as_bool() const noexcept;
   optional<any<long, unsigned long, double>> as_number() const noexcept;
+  optional<any<long, unsigned long, double, histogram>>
+      as_number_or_histogram() const noexcept;
   optional<std::string> as_string() const;
 
  private:
