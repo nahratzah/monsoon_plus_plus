@@ -6,27 +6,6 @@
 namespace monsoon {
 
 
-inline alert::alert(alert&& a) noexcept
-: name_(std::move(a.name_)),
-  value_(std::move(a.value_)),
-  message_(std::move(a.message_)),
-  state_(std::move(a.state_)),
-  since_(std::move(a.since_)),
-  trigger_duration_(std::move(a.trigger_duration_)),
-  attributes_(std::move(a.attributes_))
-{}
-
-inline auto alert::operator=(alert&& a) noexcept -> alert& {
-  name_ = std::move(a.name_);
-  value_ = std::move(a.value_);
-  message_ = std::move(a.message_);
-  state_ = std::move(a.state_);
-  since_ = std::move(a.since_);
-  trigger_duration_ = std::move(a.trigger_duration_);
-  attributes_ = std::move(a.attributes_);
-  return *this;
-}
-
 inline auto alert::get_name() const noexcept -> const group_name& {
   return name_;
 }

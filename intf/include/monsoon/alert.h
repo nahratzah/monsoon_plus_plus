@@ -25,11 +25,12 @@ class alert {
       std::unordered_map<std::string,
                          any<metric_value, std::vector<metric_value>>>;
 
-  alert() = default;
-  alert(const alert&) = default;
+  alert();
+  alert(const alert&);
   alert(alert&&) noexcept;
-  alert& operator=(const alert&) = default;
+  alert& operator=(const alert&);
   alert& operator=(alert&&) noexcept;
+  ~alert() noexcept;
 
   const group_name& get_name() const noexcept;
   bool value_is_ok() const noexcept;
