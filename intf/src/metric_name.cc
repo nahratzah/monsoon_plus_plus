@@ -1,5 +1,9 @@
 #include <monsoon/metric_name.h>
+#include <monsoon/config_support.h>
 #include <algorithm>
+#include <utility>
+#include <ostream>
+#include <sstream>
 
 namespace monsoon {
 
@@ -11,6 +15,22 @@ auto metric_name::operator==(const metric_name& other) const noexcept -> bool {
 auto metric_name::operator<(const metric_name& other) const noexcept -> bool {
   return std::lexicographical_compare(path_.begin(), path_.end(),
                                       other.path_.begin(), other.path_.end());
+}
+
+auto metric_name::config_string() const -> std::string {
+  return (std::ostringstream() << *this).str();
+}
+
+
+auto operator<<(std::ostream& out, const metric_name& n) -> std::ostream& {
+  bool first = true;
+
+  for (const std::string& s : n.get_path()) {
+    if (!std::exchange(first, false))
+      out << ".";
+    out << maybe_quote_identifier(s);
+  }
+  return out;
 }
 
 

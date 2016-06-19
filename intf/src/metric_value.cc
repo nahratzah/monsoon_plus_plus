@@ -1,6 +1,7 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/config_support.h>
 #include <cmath>
+#include <ostream>
 
 namespace monsoon {
 
@@ -506,6 +507,30 @@ auto operator%(const metric_value& x, const metric_value& y) noexcept
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(std::remainder(x_val, y_val));
             });
+      });
+}
+
+auto operator<<(std::ostream& out, const metric_value& v) -> std::ostream& {
+  if (!v.get().is_present()) return out << "(none)";
+
+  return monsoon::map_onto<std::ostream&>(*v.get(),
+      [&out](bool b) -> std::ostream& {
+        return out << (b ? "true" : "false");
+      },
+      [&out](long v) -> std::ostream& {
+        return out << v;
+      },
+      [&out](unsigned long v) -> std::ostream& {
+        return out << v;
+      },
+      [&out](double v) -> std::ostream& {
+        return out << v;
+      },
+      [&out](const std::string& v) -> std::ostream& {
+        return out << monsoon::quoted_string(v);
+      },
+      [&out](const histogram& v) -> std::ostream& {
+        return out << v;
       });
 }
 

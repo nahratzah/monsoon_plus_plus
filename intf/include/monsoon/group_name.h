@@ -5,6 +5,7 @@
 #include <monsoon/tags.h>
 #include <cstddef>
 #include <functional>
+#include <iosfwd>
 
 namespace monsoon {
 
@@ -26,10 +27,14 @@ class group_name {
   bool operator==(const group_name&) const noexcept;
   bool operator!=(const group_name&) const noexcept;
 
+  std::string config_string() const;
+
  private:
   simple_group path_;
   tags tags_;
 };
+
+std::ostream& operator<<(std::ostream&, const group_name&);
 
 
 } /* namespace monsoon */

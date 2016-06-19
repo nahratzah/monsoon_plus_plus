@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -33,9 +34,13 @@ class metric_name {
   bool operator<=(const metric_name&) const noexcept;
   bool operator>=(const metric_name&) const noexcept;
 
+  std::string config_string() const;
+
  private:
   path_type path_;
 };
+
+std::ostream& operator<<(std::ostream&, const metric_name&);
 
 
 } /* namespace monsoon */

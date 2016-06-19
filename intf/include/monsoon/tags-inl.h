@@ -20,6 +20,10 @@ tags::tags(Iter b, Iter e)
 : map_(b, e)
 {}
 
+inline auto tags::empty() const noexcept -> bool {
+  return map_.empty();
+}
+
 inline auto tags::get_map() const noexcept -> const map_type& {
   return map_;
 }

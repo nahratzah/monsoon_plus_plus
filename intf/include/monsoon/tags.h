@@ -5,6 +5,7 @@
 #include <monsoon/optional.h>
 #include <cstddef>
 #include <functional>
+#include <iosfwd>
 #include <string>
 #include <unordered_map>
 
@@ -23,15 +24,20 @@ class tags {
 
   template<typename Iter> tags(Iter, Iter);
 
+  bool empty() const noexcept;
   const map_type& get_map() const noexcept;
   optional<const metric_value&> operator[](const std::string&) const noexcept;
 
   bool operator==(const tags&) const noexcept;
   bool operator!=(const tags&) const noexcept;
 
+  std::string tag_string() const;
+
  private:
   map_type map_;
 };
+
+std::ostream& operator<<(std::ostream&, const tags&);
 
 
 } /* namespace monsoon */

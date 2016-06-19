@@ -4,6 +4,7 @@
 #include <monsoon/optional.h>
 #include <cmath>
 #include <functional>
+#include <iosfwd>
 #include <map>
 #include <string>
 #include <tuple>
@@ -112,6 +113,8 @@ class histogram {
 
   elems_vector elems_;
 };
+
+std::ostream& operator<<(std::ostream&, const histogram&);
 
 
 } /* namespace monsoon */

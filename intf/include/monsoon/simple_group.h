@@ -2,6 +2,7 @@
 #define MONSOON_SIMPLE_GROUP_H
 
 #include <initializer_list>
+#include <iosfwd>
 #include <string>
 #include <vector>
 
@@ -31,9 +32,13 @@ class simple_group {
   bool operator<=(const simple_group&) const noexcept;
   bool operator>=(const simple_group&) const noexcept;
 
+  std::string config_string() const;
+
  private:
   path_type path_;
 };
+
+std::ostream& operator<<(std::ostream&, const simple_group&);
 
 
 } /* namespace monsoon */

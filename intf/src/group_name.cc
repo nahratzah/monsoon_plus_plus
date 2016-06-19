@@ -1,10 +1,23 @@
 #include <monsoon/group_name.h>
+#include <monsoon/config_support.h>
+#include <utility>
+#include <ostream>
+#include <sstream>
 
 namespace monsoon {
 
 
 auto group_name::operator==(const group_name& other) const noexcept -> bool {
   return path_ == other.path_ && tags_ == other.tags_;
+}
+
+auto group_name::config_string() const -> std::string {
+  return (std::ostringstream() << *this).str();
+}
+
+
+auto operator<<(std::ostream& out, const group_name& n) -> std::ostream& {
+  return out << n.get_path() << n.get_tags();
 }
 
 

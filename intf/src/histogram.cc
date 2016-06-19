@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iterator>
+#include <ostream>
 #include <sstream>
 
 namespace monsoon {
@@ -269,6 +270,25 @@ auto operator/=(histogram& h, std::double_t v) -> histogram& {
   return h;
 }
 
+auto operator<<(std::ostream& out, const histogram& h) -> std::ostream& {
+  if (h.empty()) return out << "[]";
+
+  out << "[ ";
+  bool first = true;
+  for (const auto& e : h.data()) {
+    if (!std::exchange(first, false))
+      out << ", ";
+
+    out << std::get<0>(e).low()
+        << ".."
+        << std::get<0>(e).high()
+        << "="
+        << std::get<1>(e);
+  }
+  out << " ]";
+  return out;
+}
+
 
 } /* namespace monsoon */
 
@@ -289,24 +309,7 @@ auto hash<monsoon::histogram>::operator()(const monsoon::histogram& h)
 }
 
 auto to_string(const monsoon::histogram& h) -> std::string {
-  if (h.empty()) return "[]";
-
-  std::ostringstream oss;
-  oss << "[ ";
-  bool first = true;
-  for (const auto& e : h.data()) {
-    if (!std::exchange(first, false))
-      oss << ", ";
-
-    oss << std::get<0>(e).low()
-        << ".."
-        << std::get<0>(e).high()
-        << "="
-        << std::get<1>(e);
-  }
-  oss << " ]";
-
-  return oss.str();
+  return (std::ostringstream() << h).str();
 }
 
 

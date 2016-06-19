@@ -6,6 +6,7 @@
 #include <monsoon/optional.h>
 #include <monsoon/any.h>
 #include <monsoon/histogram.h>
+#include <iosfwd>
 
 namespace monsoon {
 
@@ -51,6 +52,8 @@ metric_value operator-(const metric_value&, const metric_value&) noexcept;
 metric_value operator*(const metric_value&, const metric_value&) noexcept;
 metric_value operator/(const metric_value&, const metric_value&) noexcept;
 metric_value operator%(const metric_value&, const metric_value&) noexcept;
+
+std::ostream& operator<<(std::ostream&, const metric_value&);
 
 
 } /* namespace monsoon */
