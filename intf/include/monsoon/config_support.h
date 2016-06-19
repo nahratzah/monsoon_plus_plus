@@ -7,6 +7,7 @@ namespace monsoon {
 
 
 std::string quoted_string(const std::string&);
+std::string maybe_quote_identifier(const std::string&);
 
 
 } /* namespace monsoon */
