@@ -25,7 +25,7 @@ class binop
   ~binop() noexcept override;
 
   void do_ostream(std::ostream&) const override;
-  std::unordered_map<tags, metric_value> evaluate(const context&) const final;
+  expr_result evaluate(const context&) const final;
 
  protected:
   virtual metric_value evaluate(const metric_value&, const metric_value&)

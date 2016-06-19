@@ -22,9 +22,9 @@ class without_clause
   template<typename Iter> without_clause(Iter, Iter, bool = false);
   ~without_clause() noexcept override;
 
-  std::unordered_map<tags, metric_value> apply(
-      std::unordered_map<tags, metric_value>,
-      std::unordered_map<tags, metric_value>,
+  expr_result apply(
+      expr_result,
+      expr_result,
       std::function<metric_value(metric_value, metric_value)>) const override;
   void do_ostream(std::ostream&) const override;
 

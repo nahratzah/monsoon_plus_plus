@@ -29,8 +29,7 @@ auto binop::do_ostream(std::ostream& out) const -> void {
   out << y_->config_string();
 }
 
-auto binop::evaluate(const context& ctx) const
-->  std::unordered_map<tags, metric_value> {
+auto binop::evaluate(const context& ctx) const -> expr_result {
   return matcher_->apply(x_->evaluate(ctx), y_->evaluate(ctx),
                          [this](metric_value x, metric_value y) {
                            return this->evaluate(x, y);

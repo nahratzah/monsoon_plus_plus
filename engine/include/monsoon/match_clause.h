@@ -3,10 +3,10 @@
 
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
+#include <monsoon/expr_result.h>
 #include <functional>
 #include <iosfwd>
 #include <string>
-#include <unordered_map>
 
 namespace monsoon {
 
@@ -16,9 +16,9 @@ class match_clause {
   match_clause(bool = false) noexcept;
   virtual ~match_clause() noexcept;
 
-  virtual std::unordered_map<tags, metric_value> apply(
-      std::unordered_map<tags, metric_value>,
-      std::unordered_map<tags, metric_value>,
+  virtual expr_result apply(
+      expr_result,
+      expr_result,
       std::function<metric_value(metric_value, metric_value)>) const = 0;
   virtual void do_ostream(std::ostream&) const = 0;
   std::string config_string() const;

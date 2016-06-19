@@ -14,9 +14,9 @@ class default_match_clause
   default_match_clause() noexcept;
   ~default_match_clause() noexcept;
 
-  std::unordered_map<tags, metric_value> apply(
-      std::unordered_map<tags, metric_value>,
-      std::unordered_map<tags, metric_value>,
+  expr_result apply(
+      expr_result,
+      expr_result,
       std::function<metric_value(metric_value, metric_value)>) const override;
   void do_ostream(std::ostream&) const override;
 };

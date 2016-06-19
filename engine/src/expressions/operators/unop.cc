@@ -22,12 +22,11 @@ auto unop::do_ostream(std::ostream& out) const -> void {
   out << symbol_ << x_->config_string();
 }
 
-auto unop::evaluate(const context& ctx) const
-->  std::unordered_map<tags, metric_value> {
-  std::unordered_map<tags, metric_value> result = x_->evaluate(ctx);
-
-  for (auto& x_pair : result)
-    x_pair.second = evaluate(x_pair.second);
+auto unop::evaluate(const context& ctx) const -> expr_result {
+  expr_result result = x_->evaluate(ctx);
+  result.transform_values([this](metric_value&& v) {
+                            return this->evaluate(std::move(v));
+                          });
   return result;
 }
 
