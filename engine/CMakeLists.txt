@@ -4,6 +4,7 @@ include_directories (include)
 include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_engine SHARED
   src/context.cc
+  src/mutable_context.cc
   src/expression.cc
   src/expressions/operators/unop.cc
   src/expressions/operators/negate.cc
@@ -26,6 +27,7 @@ add_library (monsoon_engine SHARED
   src/match_clauses/default_match_clause.cc
   src/match_clauses/by_clause.cc
   src/match_clauses/without_clause.cc
+  src/rule.cc
 )
 target_link_libraries (monsoon_engine ${extra_libs})
 target_link_libraries (monsoon_engine monsoon_intf)
