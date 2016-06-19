@@ -5,6 +5,7 @@
 #include <monsoon/expression.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
+#include <iosfwd>
 #include <memory>
 #include <unordered_map>
 
@@ -21,7 +22,7 @@ class binop
   binop(const char*, std::unique_ptr<expression>, std::unique_ptr<expression>);
   ~binop() noexcept override;
 
-  std::string config_string() const override;
+  void do_ostream(std::ostream&) const override;
   std::unordered_map<tags, metric_value> evaluate(const context&) const final;
 
  protected:

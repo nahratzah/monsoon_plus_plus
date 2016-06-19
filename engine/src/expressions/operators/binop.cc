@@ -1,4 +1,5 @@
 #include <monsoon/expressions/operators/binop.h>
+#include <ostream>
 #include <stdexcept>
 #include <utility>
 
@@ -19,8 +20,8 @@ binop::binop(const char* symbol,
 
 binop::~binop() noexcept {}
 
-auto binop::config_string() const -> std::string {
-  return x_->config_string() + symbol_ + y_->config_string();
+auto binop::do_ostream(std::ostream& out) const -> void {
+  out << x_->config_string() << symbol_ << y_->config_string();
 }
 
 auto binop::evaluate(const context& ctx) const

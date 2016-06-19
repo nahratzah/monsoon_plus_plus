@@ -1,4 +1,5 @@
 #include <monsoon/expressions/operators/unop.h>
+#include <ostream>
 #include <stdexcept>
 #include <utility>
 
@@ -17,8 +18,8 @@ unop::unop(const char* symbol, std::unique_ptr<expression> x)
 
 unop::~unop() noexcept {}
 
-auto unop::config_string() const -> std::string {
-  return symbol_ + x_->config_string();
+auto unop::do_ostream(std::ostream& out) const -> void {
+  out << symbol_ << x_->config_string();
 }
 
 auto unop::evaluate(const context& ctx) const
