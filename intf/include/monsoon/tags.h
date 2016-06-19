@@ -36,6 +36,7 @@ class tags {
   bool operator>=(const tags&) const noexcept;
 
   std::string tag_string() const;
+  template<typename Iter> bool has_keys(Iter, Iter) const;
 
  private:
   map_type map_;
