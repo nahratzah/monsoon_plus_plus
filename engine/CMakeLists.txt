@@ -16,6 +16,12 @@ add_library (monsoon_engine SHARED
   src/expressions/operators/modulo.cc
   src/expressions/operators/logical_and.cc
   src/expressions/operators/logical_or.cc
+  src/expressions/operators/equality.cc
+  src/expressions/operators/inequality.cc
+  src/expressions/operators/cmp_lt.cc
+  src/expressions/operators/cmp_gt.cc
+  src/expressions/operators/cmp_le.cc
+  src/expressions/operators/cmp_ge.cc
   src/match_clause.cc
   src/match_clauses/default_match_clause.cc
   src/match_clauses/by_clause.cc

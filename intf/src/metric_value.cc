@@ -563,6 +563,206 @@ auto operator<<(std::ostream& out, const metric_value& v) -> std::ostream& {
       });
 }
 
+auto equal(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  if (!x.get().is_present() || !y.get().is_present()) return metric_value();
+
+  return map_onto<metric_value>(*x.get(),
+      [&y](bool x_val) {
+        return map_onto<metric_value>(*y.get(),
+            [&x_val](bool y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](long y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](unsigned y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](const std::string& y_val) {
+              return metric_value();
+            },
+            [&x_val](const histogram& y_val) {
+              return metric_value();
+            });
+      },
+      [&y](long x_val) {
+        return map_onto<metric_value>(*y.get(),
+            [&x_val](bool y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](long y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](unsigned y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](const std::string& y_val) {
+              return metric_value();
+            },
+            [&x_val](const histogram& y_val) {
+              return metric_value();
+            });
+      },
+      [&y](unsigned long x_val) {
+        return map_onto<metric_value>(*y.get(),
+            [&x_val](bool y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](long y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](unsigned y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](const std::string& y_val) {
+              return metric_value();
+            },
+            [&x_val](const histogram& y_val) {
+              return metric_value();
+            });
+      },
+      [&y](double x_val) {
+        return map_onto<metric_value>(*y.get(),
+            [&x_val](bool y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](long y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](unsigned y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](const std::string& y_val) {
+              return metric_value();
+            },
+            [&x_val](const histogram& y_val) {
+              return metric_value();
+            });
+      },
+      [&y](const std::string& x_val) {
+        return map_onto<metric_value>(*y.get(),
+            [&x_val](bool y_val) {
+              return metric_value();
+            },
+            [&x_val](long y_val) {
+              return metric_value();
+            },
+            [&x_val](unsigned y_val) {
+              return metric_value();
+            },
+            [&x_val](double y_val) {
+              return metric_value();
+            },
+            [&x_val](const std::string& y_val) {
+              return metric_value(x_val == y_val);
+            },
+            [&x_val](const histogram& y_val) {
+              return metric_value();
+            });
+      },
+      [&y](const histogram& x_val) {
+        return map_onto<metric_value>(*y.get(),
+            [&x_val](bool y_val) {
+              return metric_value();
+            },
+            [&x_val](long y_val) {
+              return metric_value();
+            },
+            [&x_val](unsigned y_val) {
+              return metric_value();
+            },
+            [&x_val](double y_val) {
+              return metric_value();
+            },
+            [&x_val](const std::string& y_val) {
+              return metric_value();
+            },
+            [&x_val](const histogram& y_val) {
+              return metric_value(x_val == y_val);
+            });
+      });
+}
+
+auto unequal(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  return !equal(x, y);
+}
+
+auto less(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  const auto x_num = x.as_number();
+  const auto y_num = y.as_number();
+  if (!x_num.is_present() || !y_num.is_present()) return metric_value();
+
+  return map_onto<metric_value>(x_num.get(),
+      [&y_num](long x_val) {
+        assert(x_val < 0);
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val < y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(false);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val < y_val);
+            });
+      },
+      [&y_num](unsigned long x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              assert(y_val < 0);
+              return metric_value(false);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val < y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val < y_val);
+            });
+      },
+      [&y_num](double x_val) {
+        return map_onto<metric_value>(y_num.get(),
+            [&x_val](long y_val) {
+              return metric_value(x_val < y_val);
+            },
+            [&x_val](unsigned long y_val) {
+              return metric_value(x_val < y_val);
+            },
+            [&x_val](double y_val) {
+              return metric_value(x_val < y_val);
+            });
+      });
+}
+
+auto greater(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  return less(y, x);
+}
+
+auto less_equal(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  return !less(y, x);
+}
+
+auto greater_equal(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  return !less(x, y);
+}
+
 
 } /* namespace monsoon */
 

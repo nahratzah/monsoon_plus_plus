@@ -57,6 +57,13 @@ metric_value operator%(const metric_value&, const metric_value&) noexcept;
 
 std::ostream& operator<<(std::ostream&, const metric_value&);
 
+metric_value equal(const metric_value&, const metric_value&) noexcept;
+metric_value unequal(const metric_value&, const metric_value&) noexcept;
+metric_value less(const metric_value&, const metric_value&) noexcept;
+metric_value greater(const metric_value&, const metric_value&) noexcept;
+metric_value less_equal(const metric_value&, const metric_value&) noexcept;
+metric_value greater_equal(const metric_value&, const metric_value&) noexcept;
+
 
 } /* namespace monsoon */
 
