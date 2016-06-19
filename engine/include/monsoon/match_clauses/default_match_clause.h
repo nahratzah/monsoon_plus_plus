@@ -17,11 +17,13 @@ class default_match_clause
   std::unordered_map<tags, metric_value> apply(
       std::unordered_map<tags, metric_value>,
       std::unordered_map<tags, metric_value>,
-      std::function<metric_value(metric_value, metric_value)>) override;
+      std::function<metric_value(metric_value, metric_value)>) const override;
   void do_ostream(std::ostream&) const override;
 };
 
 
 }} /* namespace monsoon::match_clauses */
+
+#include "default_match_clause-inl.h"
 
 #endif /* MONSOON_MATCH_CLAUSES_DEFAULT_MATCH_CLAUSE_H */

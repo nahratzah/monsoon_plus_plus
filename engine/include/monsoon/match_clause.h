@@ -19,7 +19,7 @@ class match_clause {
   virtual std::unordered_map<tags, metric_value> apply(
       std::unordered_map<tags, metric_value>,
       std::unordered_map<tags, metric_value>,
-      std::function<metric_value(metric_value, metric_value)>) = 0;
+      std::function<metric_value(metric_value, metric_value)>) const = 0;
   virtual void do_ostream(std::ostream&) const = 0;
   std::string config_string() const;
 
@@ -31,5 +31,7 @@ std::ostream& operator<<(std::ostream&, const match_clause&);
 
 
 } /* namespace monsoon */
+
+#include "match_clause.h"
 
 #endif /* MONSOON_MATCH_CLAUSE_H */

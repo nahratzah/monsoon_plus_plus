@@ -18,6 +18,8 @@ add_library (monsoon_engine SHARED
   src/expressions/operators/logical_or.cc
   src/match_clause.cc
   src/match_clauses/default_match_clause.cc
+  src/match_clauses/by_clause.cc
+  src/match_clauses/without_clause.cc
 )
 target_link_libraries (monsoon_engine ${extra_libs})
 target_link_libraries (monsoon_engine monsoon_intf)

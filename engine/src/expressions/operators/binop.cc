@@ -16,7 +16,7 @@ binop::binop(const char* symbol,
   y_(std::move(y)),
   matcher_(std::move(matcher))
 {
-  if (x_ == nullptr || y_ == nullptr)
+  if (x_ == nullptr || y_ == nullptr || matcher_ == nullptr)
     throw std::invalid_argument("nullptr child expression");
 }
 

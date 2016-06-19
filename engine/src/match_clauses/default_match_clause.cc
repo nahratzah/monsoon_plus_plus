@@ -9,7 +9,7 @@ default_match_clause::~default_match_clause() noexcept {}
 auto default_match_clause::apply(
     std::unordered_map<tags, metric_value> x,
     std::unordered_map<tags, metric_value> y,
-    std::function<metric_value(metric_value, metric_value)> fn)
+    std::function<metric_value(metric_value, metric_value)> fn) const
 ->  std::unordered_map<tags, metric_value> {
   std::unordered_map<tags, metric_value> result;
 
