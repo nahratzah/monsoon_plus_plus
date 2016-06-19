@@ -1,4 +1,5 @@
 #include <monsoon/metric_value.h>
+#include <monsoon/config_support.h>
 #include <cmath>
 
 namespace monsoon {
@@ -546,7 +547,7 @@ auto to_string(const monsoon::metric_value& v) -> std::string {
         return to_string(v);
       },
       [](const string& v) {
-        return v;
+        return monsoon::quoted_string(v);
       },
       [](const monsoon::histogram& v) {
         return to_string(v);
