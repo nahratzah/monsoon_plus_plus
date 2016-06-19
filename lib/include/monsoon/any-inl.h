@@ -436,8 +436,8 @@ auto any<T...>::create(impl::select_n_t<N, T...> v) ->
 }
 
 template<typename... T>
-template<size_t N>
-auto any<T...>::create(impl::select_n_t<N, T...> v) ->
+template<size_t N, typename... Args>
+auto any<T...>::create(Args... args) ->
     std::enable_if_t<!std::is_lvalue_reference<
                                       impl::select_n_t<N, T...>>::value,
                                  any> {
@@ -445,7 +445,7 @@ auto any<T...>::create(impl::select_n_t<N, T...> v) ->
 
   any rv;
   void* vptr = &std::get<1>(rv.data_);
-  new (vptr) type(v);
+  new (vptr) type(std::forward<Args>(args)...);
   std::get<0>(rv.data_) = N;
   return rv;
 }
