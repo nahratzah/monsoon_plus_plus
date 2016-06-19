@@ -21,6 +21,16 @@ auto tags::operator==(const tags& other) const noexcept -> bool {
   return map_ == other.map_;
 }
 
+auto tags::operator<(const tags& other) const noexcept -> bool {
+  return std::lexicographical_compare(
+      map_.begin(), map_.end(),
+      other.map_.begin(), other.map_.end(),
+      [](map_type::const_reference x, map_type::const_reference y) {
+        if (std::get<0>(x) != std::get<0>(y)) return std::get<0>(x) < std::get<0>(y);
+        return metric_value::before(std::get<1>(x), std::get<1>(y));
+      });
+}
+
 auto tags::tag_string() const -> std::string {
   return (std::ostringstream() << *this).str();
 }
@@ -29,18 +39,9 @@ auto tags::tag_string() const -> std::string {
 auto operator<<(std::ostream& out, const tags& tv) -> std::ostream& {
   if (tv.empty()) return out << "{}";
 
-  // We emit tags in sorted order.
-  std::vector<std::tuple<std::string, metric_value>> t(tv.get_map().begin(),
-                                                       tv.get_map().end());
-  std::sort(t.begin(), t.end(),
-            [](const std::tuple<std::string, metric_value>& x,
-               const std::tuple<std::string, metric_value>& y) {
-              return std::get<0>(x) < std::get<0>(y);
-            });
-
   bool first = true;
   out << "{";
-  for (const auto& s : t) {
+  for (const auto& s : tv.get_map()) {
     if (!std::exchange(first, false))
       out << ", ";
     out << maybe_quote_identifier(std::get<0>(s)) << "=" << std::get<1>(s);

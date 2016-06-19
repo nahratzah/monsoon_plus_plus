@@ -7,14 +7,14 @@
 #include <functional>
 #include <iosfwd>
 #include <string>
-#include <unordered_map>
+#include <map>
 
 namespace monsoon {
 
 
 class tags {
  public:
-  using map_type = std::unordered_map<std::string, metric_value>;
+  using map_type = std::map<std::string, metric_value>;
 
   tags() = default;
   tags(const tags&) = default;
@@ -30,6 +30,10 @@ class tags {
 
   bool operator==(const tags&) const noexcept;
   bool operator!=(const tags&) const noexcept;
+  bool operator<(const tags&) const noexcept;
+  bool operator>(const tags&) const noexcept;
+  bool operator<=(const tags&) const noexcept;
+  bool operator>=(const tags&) const noexcept;
 
   std::string tag_string() const;
 

@@ -39,6 +39,8 @@ class metric_value {
       as_number_or_histogram() const noexcept;
   optional<std::string> as_string() const;
 
+  static bool before(const metric_value&, const metric_value&) noexcept;
+
  private:
   optional<types> value_;
 };

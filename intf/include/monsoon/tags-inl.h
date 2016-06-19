@@ -32,6 +32,18 @@ inline auto tags::operator!=(const tags& other) const noexcept -> bool {
   return !(*this == other);
 }
 
+inline auto tags::operator>(const tags& other) const noexcept -> bool {
+  return other < *this;
+}
+
+inline auto tags::operator<=(const tags& other) const noexcept -> bool {
+  return !(other < *this);
+}
+
+inline auto tags::operator>=(const tags& other) const noexcept -> bool {
+  return !(*this < other);
+}
+
 
 } /* namespace monsoon */
 

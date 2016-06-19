@@ -117,6 +117,35 @@ auto metric_value::as_string() const -> optional<std::string> {
       });
 }
 
+auto metric_value::before(const metric_value& x, const metric_value& y)
+    noexcept
+->  bool {
+  if (!x.get().is_present() || !y.get().is_present())
+    return x.get().is_present() < y.get().is_present();
+  if (x.get()->selector() != y.get()->selector())
+    return x.get()->selector() < y.get()->selector();
+
+  return map_onto<bool>(*x.get(),
+      [&y](bool xval) {
+        return xval < monsoon::get<0>(*y.get());
+      },
+      [&y](long xval) {
+        return xval < monsoon::get<1>(*y.get());
+      },
+      [&y](unsigned long xval) {
+        return xval < monsoon::get<2>(*y.get());
+      },
+      [&y](double xval) {
+        return xval < monsoon::get<3>(*y.get());
+      },
+      [&y](const std::string& xval) {
+        return xval < monsoon::get<4>(*y.get());
+      },
+      [&y](const histogram& xval) {
+        return histogram::before(xval, monsoon::get<5>(*y.get()));
+      });
+}
+
 
 auto operator!(const metric_value& x) noexcept -> metric_value {
   return map(x.as_bool(), [](bool b) { return metric_value(!b); });
