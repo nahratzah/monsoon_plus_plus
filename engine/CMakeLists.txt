@@ -23,6 +23,7 @@ add_library (monsoon_engine SHARED
   src/expressions/operators/cmp_gt.cc
   src/expressions/operators/cmp_le.cc
   src/expressions/operators/cmp_ge.cc
+  src/expressions/constants/constant.cc
   src/match_clause.cc
   src/match_clauses/default_match_clause.cc
   src/match_clauses/by_clause.cc
