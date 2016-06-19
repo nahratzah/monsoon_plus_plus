@@ -13,7 +13,8 @@ class divide final
 : public binop
 {
  public:
-  divide(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  divide(std::unique_ptr<expression>, std::unique_ptr<expression>,
+         std::unique_ptr<match_clause>);
   ~divide() noexcept override;
 
  protected:

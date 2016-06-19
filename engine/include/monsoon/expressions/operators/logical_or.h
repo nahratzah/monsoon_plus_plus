@@ -13,7 +13,8 @@ class logical_or final
 : public binop
 {
  public:
-  logical_or(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  logical_or(std::unique_ptr<expression>, std::unique_ptr<expression>,
+             std::unique_ptr<match_clause>);
   ~logical_or() noexcept override;
 
  protected:

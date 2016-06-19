@@ -13,7 +13,8 @@ class multiply final
 : public binop
 {
  public:
-  multiply(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  multiply(std::unique_ptr<expression>, std::unique_ptr<expression>,
+           std::unique_ptr<match_clause>);
   ~multiply() noexcept override;
 
  protected:

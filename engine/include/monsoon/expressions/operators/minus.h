@@ -13,7 +13,8 @@ class minus final
 : public binop
 {
  public:
-  minus(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  minus(std::unique_ptr<expression>, std::unique_ptr<expression>,
+        std::unique_ptr<match_clause>);
   ~minus() noexcept override;
 
  protected:

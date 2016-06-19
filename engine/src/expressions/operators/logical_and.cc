@@ -7,8 +7,9 @@ namespace operators {
 
 
 logical_and::logical_and(std::unique_ptr<expression> x,
-                         std::unique_ptr<expression> y)
-: binop(" && ", std::move(x), std::move(y))
+                         std::unique_ptr<expression> y,
+                         std::unique_ptr<match_clause> matcher)
+: binop("&&", std::move(x), std::move(y), std::move(matcher))
 {}
 
 logical_and::~logical_and() noexcept {}

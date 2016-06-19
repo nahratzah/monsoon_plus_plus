@@ -6,8 +6,9 @@ namespace expressions {
 namespace operators {
 
 
-divide::divide(std::unique_ptr<expression> x, std::unique_ptr<expression> y)
-: binop(" / ", std::move(x), std::move(y))
+divide::divide(std::unique_ptr<expression> x, std::unique_ptr<expression> y,
+               std::unique_ptr<match_clause> matcher)
+: binop("/", std::move(x), std::move(y), std::move(matcher))
 {}
 
 divide::~divide() noexcept {}

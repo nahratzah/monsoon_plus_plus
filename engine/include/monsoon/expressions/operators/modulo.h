@@ -13,7 +13,8 @@ class modulo final
 : public binop
 {
  public:
-  modulo(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  modulo(std::unique_ptr<expression>, std::unique_ptr<expression>,
+         std::unique_ptr<match_clause>);
   ~modulo() noexcept override;
 
  protected:

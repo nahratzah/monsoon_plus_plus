@@ -13,7 +13,8 @@ class logical_and final
 : public binop
 {
  public:
-  logical_and(std::unique_ptr<expression>, std::unique_ptr<expression>);
+  logical_and(std::unique_ptr<expression>, std::unique_ptr<expression>,
+              std::unique_ptr<match_clause>);
   ~logical_and() noexcept override;
 
  protected:

@@ -5,6 +5,7 @@
 #include <monsoon/expression.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
+#include <monsoon/match_clause.h>
 #include <iosfwd>
 #include <memory>
 #include <unordered_map>
@@ -19,7 +20,8 @@ class binop
 {
  public:
   binop() = delete;
-  binop(const char*, std::unique_ptr<expression>, std::unique_ptr<expression>);
+  binop(const char*, std::unique_ptr<expression>, std::unique_ptr<expression>,
+        std::unique_ptr<match_clause>);
   ~binop() noexcept override;
 
   void do_ostream(std::ostream&) const override;
@@ -32,6 +34,7 @@ class binop
  private:
   std::string symbol_;
   std::unique_ptr<expression> x_, y_;
+  std::unique_ptr<match_clause> matcher_;
 };
 
 

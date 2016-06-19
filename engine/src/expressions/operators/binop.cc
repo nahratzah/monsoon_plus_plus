@@ -9,10 +9,12 @@ namespace operators {
 
 
 binop::binop(const char* symbol,
-             std::unique_ptr<expression> x, std::unique_ptr<expression> y)
+             std::unique_ptr<expression> x, std::unique_ptr<expression> y,
+             std::unique_ptr<match_clause> matcher)
 : symbol_(symbol),
   x_(std::move(x)),
-  y_(std::move(y))
+  y_(std::move(y)),
+  matcher_(std::move(matcher))
 {
   if (x_ == nullptr || y_ == nullptr)
     throw std::invalid_argument("nullptr child expression");
@@ -21,23 +23,18 @@ binop::binop(const char* symbol,
 binop::~binop() noexcept {}
 
 auto binop::do_ostream(std::ostream& out) const -> void {
-  out << x_->config_string() << symbol_ << y_->config_string();
+  out << x_->config_string() << ' ' << symbol_ << ' ';
+  if (!matcher_->empty_config_string)
+    out << *matcher_ << ' ';
+  out << y_->config_string();
 }
 
 auto binop::evaluate(const context& ctx) const
 ->  std::unordered_map<tags, metric_value> {
-  std::unordered_map<tags, metric_value> result;
-  const auto x_result = x_->evaluate(ctx);
-  const auto y_result = y_->evaluate(ctx);
-
-  for (const auto& y_pair : y_result) {
-    const tags& key = y_pair.first;
-    auto x_pair = x_result.find(key);
-    if (x_pair == x_result.end()) continue;
-
-    result.emplace(key, evaluate(x_pair->second, y_pair.second));
-  }
-  return result;
+  return matcher_->apply(x_->evaluate(ctx), y_->evaluate(ctx),
+                         [this](metric_value x, metric_value y) {
+                           return this->evaluate(x, y);
+                         });
 }
 
 
