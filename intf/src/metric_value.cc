@@ -18,13 +18,13 @@ auto metric_value::as_bool() const noexcept -> optional<bool> {
             [](bool b) {
               return b;
             },
-            [](long v) {
+            [](signed_type v) {
               return v != 0;
             },
-            [](unsigned long v) {
+            [](unsigned_type v) {
               return v != 0;
             },
-            [](double v) {
+            [](fp_type v) {
               return v != 0.0l && v != -0.0l;
             },
             [](const std::string& s) {
@@ -37,8 +37,8 @@ auto metric_value::as_bool() const noexcept -> optional<bool> {
 }
 
 auto metric_value::as_number() const noexcept
-->  optional<any<long, unsigned long, double>> {
-  using result_types = any<long, unsigned long, double>;
+->  optional<any<signed_type, unsigned_type, fp_type>> {
+  using result_types = any<signed_type, unsigned_type, fp_type>;
 
   return map(get(),
       [](const types& v) {
@@ -46,13 +46,13 @@ auto metric_value::as_number() const noexcept
             [](bool b) {
               return result_types::create<1>(b ? 1l : 0l);
             },
-            [](long v) {
+            [](signed_type v) {
               return result_types::create<0>(v);
             },
-            [](unsigned long v) {
+            [](unsigned_type v) {
               return result_types::create<1>(v);
             },
-            [](double v) {
+            [](fp_type v) {
               return result_types::create<2>(v);
             },
             [](const std::string& v) {
@@ -65,8 +65,8 @@ auto metric_value::as_number() const noexcept
 }
 
 auto metric_value::as_number_or_histogram() const noexcept
-->  optional<any<long, unsigned long, double, histogram>> {
-  using result_types = any<long, unsigned long, double, histogram>;
+->  optional<any<signed_type, unsigned_type, fp_type, histogram>> {
+  using result_types = any<signed_type, unsigned_type, fp_type, histogram>;
 
   return map(get(),
       [](const types& v) {
@@ -74,13 +74,13 @@ auto metric_value::as_number_or_histogram() const noexcept
             [](bool b) {
               return result_types::create<1>(b ? 1l : 0l);
             },
-            [](long v) {
+            [](signed_type v) {
               return result_types::create<0>(v);
             },
-            [](unsigned long v) {
+            [](unsigned_type v) {
               return result_types::create<1>(v);
             },
-            [](double v) {
+            [](fp_type v) {
               return result_types::create<2>(v);
             },
             [](const std::string& v) {
@@ -99,13 +99,13 @@ auto metric_value::as_string() const -> optional<std::string> {
             [](bool b) {
               return std::string(b ? "true" : "false");
             },
-            [](long v) {
+            [](signed_type v) {
               return std::to_string(v);
             },
-            [](unsigned long v) {
+            [](unsigned_type v) {
               return std::to_string(v);
             },
-            [](double v) {
+            [](fp_type v) {
               return std::to_string(v);
             },
             [](const std::string& v) {
@@ -129,13 +129,13 @@ auto metric_value::before(const metric_value& x, const metric_value& y)
       [&y](bool xval) {
         return xval < monsoon::get<0>(*y.get());
       },
-      [&y](long xval) {
+      [&y](signed_type xval) {
         return xval < monsoon::get<1>(*y.get());
       },
-      [&y](unsigned long xval) {
+      [&y](unsigned_type xval) {
         return xval < monsoon::get<2>(*y.get());
       },
-      [&y](double xval) {
+      [&y](fp_type xval) {
         return xval < monsoon::get<3>(*y.get());
       },
       [&y](const std::string& xval) {
@@ -174,18 +174,22 @@ auto operator||(const metric_value& x, const metric_value& y) noexcept
 }
 
 auto operator-(const metric_value& x) noexcept -> metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   auto x_num = x.as_number_or_histogram();
   if (!x_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.release(),
-      [](long x_val) {
+      [](signed_type x_val) {
         return metric_value(-x_val);
       },
-      [](unsigned long x_val) {
-        long rv = x_val;
+      [](unsigned_type x_val) {
+        signed_type rv = x_val;
         return metric_value(-rv);
       },
-      [](double x_val) {
+      [](fp_type x_val) {
         return metric_value(-x_val);
       },
       [](histogram&& x_val) {
@@ -195,50 +199,54 @@ auto operator-(const metric_value& x) noexcept -> metric_value {
 
 auto operator+(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   auto x_num = x.as_number_or_histogram();
   auto y_num = y.as_number_or_histogram();
   if (!x_num.is_present() || !y_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.release(),
-      [&y_num](long x_val) {
+      [&y_num](signed_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val + y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val + y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val + y_val);
             },
             [&x_val](histogram&& y_val) {
               return metric_value();
             });
       },
-      [&y_num](unsigned long x_val) {
+      [&y_num](unsigned_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val + y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val + y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val + y_val);
             },
             [&x_val](histogram&& y_val) {
               return metric_value();
             });
       },
-      [&y_num](double x_val) {
+      [&y_num](fp_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val + y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val + y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val + y_val);
             },
             [&x_val](histogram&& y_val) {
@@ -247,13 +255,13 @@ auto operator+(const metric_value& x, const metric_value& y) noexcept
       },
       [&y_num](histogram&& x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value();
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value();
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value();
             },
             [&x_val](histogram&& y_val) {
@@ -264,54 +272,58 @@ auto operator+(const metric_value& x, const metric_value& y) noexcept
 
 auto operator-(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   auto x_num = x.as_number_or_histogram();
   auto y_num = y.as_number_or_histogram();
   if (!x_num.is_present() || !y_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.release(),
-      [&y_num](long x_val) {
+      [&y_num](signed_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val - y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val - y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val - y_val);
             },
             [&x_val](histogram&& y_val) {
               return metric_value();
             });
       },
-      [&y_num](unsigned long x_val) {
+      [&y_num](unsigned_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val - y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val > x_val) {
-                long rv = y_val - x_val;
+                signed_type rv = y_val - x_val;
                 return metric_value(-rv);
               }
               return metric_value(x_val - y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val - y_val);
             },
             [&x_val](histogram&& y_val) {
               return metric_value();
             });
       },
-      [&y_num](double x_val) {
+      [&y_num](fp_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val - y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val - y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val - y_val);
             },
             [&x_val](histogram&& y_val) {
@@ -320,13 +332,13 @@ auto operator-(const metric_value& x, const metric_value& y) noexcept
       },
       [&y_num](histogram&& x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value();
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value();
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value();
             },
             [&x_val](histogram&& y_val) {
@@ -337,50 +349,54 @@ auto operator-(const metric_value& x, const metric_value& y) noexcept
 
 auto operator*(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   auto x_num = x.as_number_or_histogram();
   auto y_num = y.as_number_or_histogram();
   if (!x_num.is_present() || !y_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.release(),
-      [&y_num](long x_val) {
+      [&y_num](signed_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val * y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val * y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val * y_val);
             },
             [&x_val](histogram&& y_val) {
               return metric_value(x_val * std::move(y_val));
             });
       },
-      [&y_num](unsigned long x_val) {
+      [&y_num](unsigned_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val * y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val * y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val * y_val);
             },
             [&x_val](histogram&& y_val) {
               return metric_value(x_val * std::move(y_val));
             });
       },
-      [&y_num](double x_val) {
+      [&y_num](fp_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val * y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val * y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val * y_val);
             },
             [&x_val](histogram&& y_val) {
@@ -389,13 +405,13 @@ auto operator*(const metric_value& x, const metric_value& y) noexcept
       },
       [&y_num](histogram&& x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(std::move(x_val) * y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(std::move(x_val) * y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(std::move(x_val) * y_val);
             },
             [&x_val](histogram&& y_val) {
@@ -406,22 +422,26 @@ auto operator*(const metric_value& x, const metric_value& y) noexcept
 
 auto operator/(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   auto x_num = x.as_number_or_histogram();
   auto y_num = y.as_number_or_histogram();
   if (!x_num.is_present() || !y_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.release(),
-      [&y_num](long x_val) {
+      [&y_num](signed_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val / y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val / y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(x_val / y_val);
             },
@@ -429,17 +449,17 @@ auto operator/(const metric_value& x, const metric_value& y) noexcept
               return metric_value();
             });
       },
-      [&y_num](unsigned long x_val) {
+      [&y_num](unsigned_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val / y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val / y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(x_val / y_val);
             },
@@ -447,17 +467,17 @@ auto operator/(const metric_value& x, const metric_value& y) noexcept
               return metric_value();
             });
       },
-      [&y_num](double x_val) {
+      [&y_num](fp_type x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val / y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val / y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(x_val / y_val);
             },
@@ -467,15 +487,15 @@ auto operator/(const metric_value& x, const metric_value& y) noexcept
       },
       [&y_num](histogram&& x_val) {
         return map_onto<metric_value>(y_num.release(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(std::move(x_val) / y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(std::move(x_val) / y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(std::move(x_val) / y_val);
             },
@@ -487,52 +507,56 @@ auto operator/(const metric_value& x, const metric_value& y) noexcept
 
 auto operator%(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   const auto x_num = x.as_number();
   const auto y_num = y.as_number();
   if (!x_num.is_present() || !y_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.get(),
-      [&y_num](long x_val) {
+      [&y_num](signed_type x_val) {
         return map_onto<metric_value>(y_num.get(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val % y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val % y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(std::remainder(x_val, y_val));
             });
       },
-      [&y_num](unsigned long x_val) {
+      [&y_num](unsigned_type x_val) {
         return map_onto<metric_value>(y_num.get(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val % y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(x_val % y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(std::remainder(x_val, y_val));
             });
       },
-      [&y_num](double x_val) {
+      [&y_num](fp_type x_val) {
         return map_onto<metric_value>(y_num.get(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(std::remainder(x_val, y_val));
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               if (y_val == 0) return metric_value();
               return metric_value(std::remainder(x_val, y_val));
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               if (y_val == 0.0l || y_val == -0.0l) return metric_value();
               return metric_value(std::remainder(x_val, y_val));
             });
@@ -540,19 +564,23 @@ auto operator%(const metric_value& x, const metric_value& y) noexcept
 }
 
 auto operator<<(std::ostream& out, const metric_value& v) -> std::ostream& {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   if (!v.get().is_present()) return out << "(none)";
 
   return monsoon::map_onto<std::ostream&>(*v.get(),
       [&out](bool b) -> std::ostream& {
         return out << (b ? "true" : "false");
       },
-      [&out](long v) -> std::ostream& {
+      [&out](signed_type v) -> std::ostream& {
         return out << v;
       },
-      [&out](unsigned long v) -> std::ostream& {
+      [&out](unsigned_type v) -> std::ostream& {
         return out << v;
       },
-      [&out](double v) -> std::ostream& {
+      [&out](fp_type v) -> std::ostream& {
         return out << v;
       },
       [&out](const std::string& v) -> std::ostream& {
@@ -565,6 +593,10 @@ auto operator<<(std::ostream& out, const metric_value& v) -> std::ostream& {
 
 auto equal(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   if (!x.get().is_present() || !y.get().is_present()) return metric_value();
 
   return map_onto<metric_value>(*x.get(),
@@ -573,13 +605,13 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](bool y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](unsigned y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](const std::string& y_val) {
@@ -589,18 +621,18 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
               return metric_value();
             });
       },
-      [&y](long x_val) {
+      [&y](signed_type x_val) {
         return map_onto<metric_value>(*y.get(),
             [&x_val](bool y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](unsigned y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](const std::string& y_val) {
@@ -610,18 +642,18 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
               return metric_value();
             });
       },
-      [&y](unsigned long x_val) {
+      [&y](unsigned_type x_val) {
         return map_onto<metric_value>(*y.get(),
             [&x_val](bool y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](unsigned y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](const std::string& y_val) {
@@ -631,18 +663,18 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
               return metric_value();
             });
       },
-      [&y](double x_val) {
+      [&y](fp_type x_val) {
         return map_onto<metric_value>(*y.get(),
             [&x_val](bool y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](unsigned y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](const std::string& y_val) {
@@ -657,13 +689,13 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](bool y_val) {
               return metric_value();
             },
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value();
             },
             [&x_val](unsigned y_val) {
               return metric_value();
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value();
             },
             [&x_val](const std::string& y_val) {
@@ -678,13 +710,13 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](bool y_val) {
               return metric_value();
             },
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value();
             },
             [&x_val](unsigned y_val) {
               return metric_value();
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value();
             },
             [&x_val](const std::string& y_val) {
@@ -703,46 +735,50 @@ auto unequal(const metric_value& x, const metric_value& y) noexcept
 
 auto less(const metric_value& x, const metric_value& y) noexcept
 ->  metric_value {
+  using unsigned_type = metric_value::unsigned_type;
+  using signed_type = metric_value::signed_type;
+  using fp_type = metric_value::fp_type;
+
   const auto x_num = x.as_number();
   const auto y_num = y.as_number();
   if (!x_num.is_present() || !y_num.is_present()) return metric_value();
 
   return map_onto<metric_value>(x_num.get(),
-      [&y_num](long x_val) {
+      [&y_num](signed_type x_val) {
         assert(x_val < 0);
         return map_onto<metric_value>(y_num.get(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val < y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(false);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val < y_val);
             });
       },
-      [&y_num](unsigned long x_val) {
+      [&y_num](unsigned_type x_val) {
         return map_onto<metric_value>(y_num.get(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               assert(y_val < 0);
               return metric_value(false);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val < y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val < y_val);
             });
       },
-      [&y_num](double x_val) {
+      [&y_num](fp_type x_val) {
         return map_onto<metric_value>(y_num.get(),
-            [&x_val](long y_val) {
+            [&x_val](signed_type y_val) {
               return metric_value(x_val < y_val);
             },
-            [&x_val](unsigned long y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val < y_val);
             },
-            [&x_val](double y_val) {
+            [&x_val](fp_type y_val) {
               return metric_value(x_val < y_val);
             });
       });
@@ -773,31 +809,39 @@ namespace std {
 auto std::hash<monsoon::metric_value>::operator()(
     const monsoon::metric_value& v) const noexcept
 ->  size_t {
+  using unsigned_type = monsoon::metric_value::unsigned_type;
+  using signed_type = monsoon::metric_value::signed_type;
+  using fp_type = monsoon::metric_value::fp_type;
+
   if (!v.get().is_present()) return 0u;
 
   return monsoon::map_onto<size_t>(*v.get(),
                                    std::hash<bool>(),
-                                   std::hash<long>(),
-                                   std::hash<unsigned long>(),
-                                   std::hash<double>(),
+                                   std::hash<signed_type>(),
+                                   std::hash<unsigned_type>(),
+                                   std::hash<fp_type>(),
                                    std::hash<std::string>(),
                                    std::hash<monsoon::histogram>());
 }
 
 auto to_string(const monsoon::metric_value& v) -> std::string {
+  using unsigned_type = monsoon::metric_value::unsigned_type;
+  using signed_type = monsoon::metric_value::signed_type;
+  using fp_type = monsoon::metric_value::fp_type;
+
   if (!v.get().is_present()) return "(none)";
 
   return monsoon::map_onto<std::string>(*v.get(),
       [](bool b) {
         return (b ? "true" : "false");
       },
-      [](long v) {
+      [](signed_type v) {
         return to_string(v);
       },
-      [](unsigned long v) {
+      [](unsigned_type v) {
         return to_string(v);
       },
-      [](double v) {
+      [](fp_type v) {
         return to_string(v);
       },
       [](const string& v) {

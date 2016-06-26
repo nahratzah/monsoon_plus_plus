@@ -16,9 +16,9 @@ class constant final
 {
  public:
   explicit constant(bool) noexcept;
-  explicit constant(long) noexcept;
-  explicit constant(unsigned long) noexcept;
-  explicit constant(double) noexcept;
+  explicit constant(metric_value::signed_type) noexcept;
+  explicit constant(metric_value::unsigned_type) noexcept;
+  explicit constant(metric_value::fp_type) noexcept;
   explicit constant(std::string) noexcept;
   explicit constant(histogram) noexcept;
   constant(metric_value);

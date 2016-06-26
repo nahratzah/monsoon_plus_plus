@@ -1,6 +1,7 @@
 #ifndef MONSOON_METRIC_VALUE_H
 #define MONSOON_METRIC_VALUE_H
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <monsoon/optional.h>
@@ -13,7 +14,11 @@ namespace monsoon {
 
 class metric_value {
  public:
-  using types = any<bool, long, unsigned long, double, std::string, histogram>;
+  using unsigned_type = std::uint64_t;
+  using signed_type = std::int64_t;
+  using fp_type = std::double_t;
+  using types =
+      any<bool, signed_type, unsigned_type, fp_type, std::string, histogram>;
 
   constexpr metric_value() noexcept = default;
   metric_value(const metric_value&) = default;
@@ -22,9 +27,9 @@ class metric_value {
   metric_value& operator=(metric_value&&) noexcept;
 
   explicit metric_value(bool) noexcept;
-  explicit metric_value(long) noexcept;
-  explicit metric_value(unsigned long) noexcept;
-  explicit metric_value(double) noexcept;
+  explicit metric_value(signed_type) noexcept;
+  explicit metric_value(unsigned_type) noexcept;
+  explicit metric_value(fp_type) noexcept;
   explicit metric_value(std::string) noexcept;
   explicit metric_value(histogram) noexcept;
 
@@ -34,8 +39,9 @@ class metric_value {
   const optional<types>& get() const noexcept;
 
   optional<bool> as_bool() const noexcept;
-  optional<any<long, unsigned long, double>> as_number() const noexcept;
-  optional<any<long, unsigned long, double, histogram>>
+  optional<any<signed_type, unsigned_type, fp_type>> as_number()
+      const noexcept;
+  optional<any<signed_type, unsigned_type, fp_type, histogram>>
       as_number_or_histogram() const noexcept;
   optional<std::string> as_string() const;
 

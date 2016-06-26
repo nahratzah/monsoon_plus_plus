@@ -10,15 +10,15 @@ inline constant::constant(bool v) noexcept
 : constant(metric_value(v))
 {}
 
-inline constant::constant(long v) noexcept
+inline constant::constant(metric_value::signed_type v) noexcept
 : constant(metric_value(v))
 {}
 
-inline constant::constant(unsigned long v) noexcept
+inline constant::constant(metric_value::unsigned_type v) noexcept
 : constant(metric_value(v))
 {}
 
-inline constant::constant(double v) noexcept
+inline constant::constant(metric_value::fp_type v) noexcept
 : constant(metric_value(v))
 {}
 

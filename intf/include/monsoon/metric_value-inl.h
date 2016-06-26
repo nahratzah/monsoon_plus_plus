@@ -20,15 +20,15 @@ inline metric_value::metric_value(bool v) noexcept
 : value_(types::create<0>(v))
 {}
 
-inline metric_value::metric_value(long v) noexcept
+inline metric_value::metric_value(signed_type v) noexcept
 : value_(v >= 0 ? types::create<2>(v) : types::create<1>(v))
 {}
 
-inline metric_value::metric_value(unsigned long v) noexcept
+inline metric_value::metric_value(unsigned_type v) noexcept
 : value_(types::create<2>(v))
 {}
 
-inline metric_value::metric_value(double v) noexcept
+inline metric_value::metric_value(fp_type v) noexcept
 : value_(types::create<3>(v))
 {}
 
