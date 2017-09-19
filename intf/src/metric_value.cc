@@ -608,7 +608,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](unsigned y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](fp_type y_val) {
@@ -629,8 +629,9 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](unsigned y_val) {
-              return metric_value(x_val == y_val);
+            [&x_val](unsigned_type y_val) {
+              return metric_value(x_val >= 0 &&
+                  static_cast<unsigned_type>(x_val) == y_val);
             },
             [&x_val](fp_type y_val) {
               return metric_value(x_val == y_val);
@@ -648,9 +649,10 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
               return metric_value(x_val == y_val);
             },
             [&x_val](signed_type y_val) {
-              return metric_value(x_val == y_val);
+              return metric_value(y_val >= 0 &&
+                  x_val == static_cast<unsigned_type>(y_val));
             },
-            [&x_val](unsigned y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](fp_type y_val) {
@@ -671,7 +673,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](signed_type y_val) {
               return metric_value(x_val == y_val);
             },
-            [&x_val](unsigned y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value(x_val == y_val);
             },
             [&x_val](fp_type y_val) {
@@ -692,7 +694,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](signed_type y_val) {
               return metric_value();
             },
-            [&x_val](unsigned y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value();
             },
             [&x_val](fp_type y_val) {
@@ -713,7 +715,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
             [&x_val](signed_type y_val) {
               return metric_value();
             },
-            [&x_val](unsigned y_val) {
+            [&x_val](unsigned_type y_val) {
               return metric_value();
             },
             [&x_val](fp_type y_val) {

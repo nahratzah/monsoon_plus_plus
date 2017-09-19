@@ -14,6 +14,7 @@ class mutable_context
   mutable_context() noexcept = default;
   ~mutable_context() noexcept override;
 
+  using context::current;
   virtual time_series& current() noexcept = 0;
 
  protected:

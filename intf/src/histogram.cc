@@ -176,7 +176,7 @@ auto operator+(histogram&& x, histogram&& y) -> histogram {
 
 auto operator+(const histogram& x, const histogram& y) -> histogram {
   histogram copy = x;
-  return std::move(x) + y;
+  return std::move(copy) + y;
 }
 
 auto operator-(histogram&& x, histogram&& y) -> histogram {
