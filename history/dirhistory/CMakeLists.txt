@@ -9,12 +9,14 @@ endif ()
 
 include_directories (include)
 include_directories ($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
+include_directories ($<TARGET_PROPERTY:monsoon_misc,INTERFACE_INCLUDE_DIRECTORIES>)
 include_directories ($<TARGET_PROPERTY:monsoon_history,INTERFACE_INCLUDE_DIRECTORIES>)
 if (NOT STD_FILESYSTEM)
   include_directories (${Boost_INCLUDE_DIR})
 endif ()
 add_library (monsoon_dirhistory SHARED
   src/dirhistory.cc
+  src/tsdata_mime.cc
 )
 target_link_libraries (monsoon_dirhistory ${extra_libs})
 target_link_libraries (monsoon_dirhistory monsoon_intf monsoon_history)
