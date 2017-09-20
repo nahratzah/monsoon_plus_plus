@@ -1,6 +1,7 @@
 #ifndef TSDATA_MIME_H
 #define TSDATA_MIME_H
 
+#include <monsoon/history/dir/dirhistory_export_.h>
 #include <cstdint>
 #include <monsoon/optional.h>
 #include <monsoon/xdr/xdr.h>
@@ -9,7 +10,7 @@ namespace monsoon {
 namespace history {
 
 
-class tsfile_mimeheader {
+class monsoon_dirhistory_local_ tsfile_mimeheader {
  public:
   static constexpr std::size_t XDR_ENCODED_LEN = 16;
   static constexpr std::array<std::uint8_t, 12> MAGIC = {{
@@ -31,7 +32,7 @@ class tsfile_mimeheader {
   std::uint16_t major_version, minor_version;
 };
 
-class tsfile_badmagic
+class monsoon_dirhistory_local_ tsfile_badmagic
 : public monsoon::xdr::xdr_exception
 {
  public:

@@ -1,6 +1,7 @@
 #ifndef MONSOON_HISTORY_DIR_DIRHISTORY_H
 #define MONSOON_HISTORY_DIR_DIRHISTORY_H
 
+#include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/history/collect_history.h>
 // XXX: create compiler cfg file...
 // #include <filesystem>
@@ -14,7 +15,7 @@ namespace dirhistory {
 namespace filesystem = ::boost::filesystem;
 
 
-class dirhistory
+class monsoon_dirhistory_export_ dirhistory
 : public collect_history
 {
  private:
