@@ -93,6 +93,13 @@ class optional {
   value_type get(const value_type&) const;
   value_type get(value_type&&) const;
 
+  template<typename Exc, typename... Args>
+      value_type release_or_throw(Args&&...);
+  template<typename Exc, typename... Args>
+      const value_type& get_or_throw(Args&&...) const;
+  template<typename Exc, typename... Args>
+      value_type& get_or_throw(Args&&...);
+
   bool operator==(const optional&) const noexcept(nothrow_equality_());
   bool operator!=(const optional&) const noexcept(nothrow_equality_());
 
@@ -132,6 +139,11 @@ class optional<T&> {
   value_type& release(value_type&);
   value_type& get() const;
   value_type& get(value_type&) const;
+
+  template<typename Exc, typename... Args>
+      value_type& release_or_throw(Args&&...);
+  template<typename Exc, typename... Args>
+      value_type& get_or_throw(Args&&...) const;
 
   bool operator==(const optional&) const noexcept;
   bool operator!=(const optional&) const noexcept;

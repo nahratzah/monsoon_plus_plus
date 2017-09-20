@@ -2,6 +2,7 @@
 #define TSDATA_MIME_H
 
 #include <cstdint>
+#include <monsoon/optional.h>
 #include <monsoon/xdr/xdr.h>
 
 namespace monsoon {
@@ -10,7 +11,12 @@ namespace history {
 
 class tsfile_mimeheader {
  public:
-  static const std::array<std::uint8_t, 12> MAGIC;
+  static constexpr std::size_t XDR_ENCODED_LEN = 16;
+  static constexpr std::array<std::uint8_t, 12> MAGIC = {{
+    17u, 19u, 23u, 29u,
+    'M', 'O', 'N', '-',
+    's', 'o', 'o', 'n'
+  }};
 
   tsfile_mimeheader() noexcept = default;
   tsfile_mimeheader(const tsfile_mimeheader&) noexcept = default;
@@ -19,6 +25,7 @@ class tsfile_mimeheader {
 
   tsfile_mimeheader(monsoon::xdr::xdr_istream&);
 
+  static auto read(monsoon::xdr::xdr_istream&) -> optional<tsfile_mimeheader>;
   void write(monsoon::xdr::xdr_ostream&) const;
 
   std::uint16_t major_version, minor_version;
@@ -33,5 +40,7 @@ class tsfile_badmagic
 
 
 }} /* namespace monsoon::history */
+
+#include "tsdata_mime-inl.h"
 
 #endif /* TSDATA_MIME_H */

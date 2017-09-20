@@ -219,6 +219,27 @@ auto optional<T>::get(value_type&& dfl) const -> value_type {
 }
 
 template<typename T>
+template<typename Exc, typename... Args>
+auto optional<T>::release_or_throw(Args&&... args) -> value_type {
+  if (!*this) throw Exc(std::forward<Args>(args)...);
+  return release();
+}
+
+template<typename T>
+template<typename Exc, typename... Args>
+auto optional<T>::get_or_throw(Args&&... args) const -> const value_type& {
+  if (!*this) throw Exc(std::forward<Args>(args)...);
+  return get();
+}
+
+template<typename T>
+template<typename Exc, typename... Args>
+auto optional<T>::get_or_throw(Args&&... args) -> value_type& {
+  if (!*this) throw Exc(std::forward<Args>(args)...);
+  return get();
+}
+
+template<typename T>
 auto optional<T>::operator==(const optional& o)
     const noexcept(nothrow_equality_()) -> bool {
   if (is_present() != o.is_present()) return false;
@@ -319,6 +340,20 @@ template<typename T>
 auto optional<T&>::get(value_type& dfl) const -> value_type& {
   if (is_present()) return get();
   return dfl;
+}
+
+template<typename T>
+template<typename Exc, typename... Args>
+auto optional<T&>::release_or_throw(Args&&... args) -> value_type& {
+  if (!*this) throw Exc(std::forward<Args>(args)...);
+  return release();
+}
+
+template<typename T>
+template<typename Exc, typename... Args>
+auto optional<T&>::get_or_throw(Args&&... args) const -> value_type& {
+  if (!*this) throw Exc(std::forward<Args>(args)...);
+  return get();
 }
 
 template<typename T>

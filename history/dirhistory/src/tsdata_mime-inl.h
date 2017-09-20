@@ -11,13 +11,19 @@ inline tsfile_mimeheader::tsfile_mimeheader(std::uint16_t majver,
   minor_version(minver)
 {}
 
-inline tsfile_mimeheader::tsfile_mimeheader(monsoon::xdr::xdr_istream& in) {
-  if (in.template get_bytes<MAGIC.size()>() != MAGIC)
-    throw tsfile_badmagic();
+inline tsfile_mimeheader::tsfile_mimeheader(monsoon::xdr::xdr_istream& in)
+: tsfile_mimeheader(read(in).template release_or_throw<tsfile_badmagic>())
+{}
+
+inline auto tsfile_mimeheader::read(monsoon::xdr::xdr_istream& in)
+-> optional<tsfile_mimeheader> {
+  if (in.template get_array<MAGIC.size()>() != MAGIC)
+    return {};
 
   std::uint32_t version = in.get_uint32();
-  major_version = static_cast<std::uint16_t>(version >> 16);
-  minor_version = static_cast<std::uint16_t>(version & 0xffu);
+  return tsfile_mimeheader(
+      static_cast<std::uint16_t>(version >> 16),
+      static_cast<std::uint16_t>(version & 0xffu));
 }
 
 inline void tsfile_mimeheader::write(monsoon::xdr::xdr_ostream& out) const {
@@ -25,7 +31,7 @@ inline void tsfile_mimeheader::write(monsoon::xdr::xdr_ostream& out) const {
       (static_cast<std::uint32_t>(major_version) << 16) |
       static_cast<std::uint32_t>(minor_version);
 
-  out.put_bytes(MAGIC);
+  out.put_array(MAGIC);
   out.put_uint32(version);
 }
 
