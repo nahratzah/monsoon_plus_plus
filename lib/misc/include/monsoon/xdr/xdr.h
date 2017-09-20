@@ -2,10 +2,13 @@
 #define MONSOON_XDR_XDR_H
 
 #include <cstdint>
+#include <iterator>
+#include <memory>
 #include <string>
 #if __has_include(<string_view>)
 # include <string_view>
 #endif
+#include <type_traits>
 #include <vector>
 
 namespace monsoon {
@@ -32,11 +35,20 @@ class xdr_istream {
       -> std::basic_string<char, std::char_traits<char>, Alloc>;
 
   template<typename Alloc = std::allocator<std::uint8_t>>
-      auto get_opaque(std::size_t, const Alloc& = Alloc())
+      auto get_opaque_n(std::size_t, const Alloc& = Alloc())
       -> std::vector<std::uint8_t, Alloc>;
   template<typename Alloc = std::allocator<std::uint8_t>>
       auto get_opaque(const Alloc& = Alloc())
       -> std::vector<std::uint8_t, Alloc>;
+
+  template<typename C, typename SerFn>
+      auto get_collection_n(std::size_t, SerFn, C&& = C()) -> C&&;
+  template<typename C, typename SerFn>
+      auto get_collection_n(std::size_t, SerFn, C&) -> C&;
+  template<typename C, typename SerFn>
+      auto get_collection(SerFn, C&& = C()) -> C&&;
+  template<typename C, typename SerFn>
+      auto get_collection(SerFn, C&) -> C&;
 
  private:
   virtual void get_raw_bytes(void*, std::size_t) = 0;
@@ -65,9 +77,26 @@ class xdr_ostream {
       const std::basic_string<char, std::char_traits<char>, Alloc>&);
 
   template<typename Alloc = std::allocator<uint8_t>>
-      void put_opaque(std::size_t, const std::vector<std::uint8_t, Alloc>&);
+      void put_opaque_n(std::size_t, const std::vector<std::uint8_t, Alloc>&);
   template<typename Alloc = std::allocator<uint8_t>>
       void put_opaque(const std::vector<std::uint8_t, Alloc>&);
+
+  template<typename SerFn, typename Iter>
+      auto put_collection_n(std::size_t, SerFn, Iter) -> Iter;
+  template<typename SerFn, typename Iter>
+      auto put_collection(SerFn, Iter, Iter)
+      -> std::enable_if_t<
+          std::is_base_of<
+            std::forward_iterator_tag,
+            typename std::iterator_traits<Iter>::iterator_category>::value,
+          void>;
+  template<typename SerFn, typename Iter>
+      auto put_collection(SerFn, Iter, Iter)
+      -> std::enable_if_t<
+          !std::is_base_of<
+            std::forward_iterator_tag,
+            typename std::iterator_traits<Iter>::iterator_category>::value,
+          void>;
 
  private:
   virtual void put_raw_bytes(const void*, std::size_t) = 0;
@@ -78,6 +107,34 @@ class xdr_exception
 {
  public:
   ~xdr_exception() override;
+};
+
+
+template<typename Alloc = std::allocator<std::uint8_t>>
+class xdr_bytevector_ostream
+: public xdr_ostream
+{
+ public:
+  using vector_type = std::vector<std::uint8_t, Alloc>;
+  using size_type = typename vector_type::size_type;
+
+  xdr_bytevector_ostream() noexcept = default;
+  xdr_bytevector_ostream(const xdr_bytevector_ostream&) = delete;
+  xdr_bytevector_ostream(xdr_bytevector_ostream&&) noexcept;
+  xdr_bytevector_ostream(const Alloc&);
+  ~xdr_bytevector_ostream() noexcept override = default;
+
+  std::uint8_t* data() noexcept;
+  const std::uint8_t* data() const noexcept;
+  size_type size() const noexcept;
+
+  vector_type& get_vector() noexcept;
+  const vector_type& get_vector() const noexcept;
+
+ private:
+  void put_raw_bytes(const void*, std::size_t) override;
+
+  vector_type v_;
 };
 
 

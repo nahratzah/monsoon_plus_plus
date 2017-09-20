@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <utility>
 #include <boost/endian/conversion.hpp>
 
 namespace monsoon {
@@ -116,7 +117,7 @@ inline auto xdr_istream::get_string(const Alloc& alloc)
 }
 
 template<typename Alloc>
-inline auto xdr_istream::get_opaque(std::size_t len, const Alloc& alloc)
+inline auto xdr_istream::get_opaque_n(std::size_t len, const Alloc& alloc)
 -> std::vector<std::uint8_t, Alloc> {
   std::vector<std::uint8_t, Alloc> result =
       std::basic_string<std::uint8_t, Alloc>(alloc);
@@ -139,6 +140,32 @@ template<typename Alloc>
 inline auto xdr_istream::get_opaque(const Alloc& alloc)
 -> std::vector<std::uint8_t, Alloc> {
   return get_bytes(get_uint32(), alloc);
+}
+
+template<typename C, typename SerFn>
+inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C&& c)
+-> C&& {
+  std::generate_n(std::inserter(c, c.end()), len,
+      [this, &fn]() { return fn(*this); });
+  return std::forward<C>(c);
+}
+
+template<typename C, typename SerFn>
+inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C& c)
+-> C& {
+  std::generate_n(std::inserter(c, c.end()), len,
+      [this, &fn]() { return fn(*this); });
+  return c;
+}
+
+template<typename C, typename SerFn>
+inline auto xdr_istream::get_collection(SerFn fn, C&& c) -> C&& {
+  return get_collection_n(get_uint32(), std::move(fn), std::forward<C>(c));
+}
+
+template<typename C, typename SerFn>
+inline auto xdr_istream::get_collection(SerFn fn, C& c) -> C& {
+  return get_collection_n(get_uint32(), std::move(fn), std::forward<C>(c));
 }
 
 
@@ -229,7 +256,7 @@ inline void xdr_ostream::put_string(
 }
 
 template<typename Alloc>
-inline void xdr_ostream::put_opaque(std::size_t len,
+inline void xdr_ostream::put_opaque_n(std::size_t len,
     const std::vector<std::uint8_t, Alloc>& v) {
   if (v.size() != len)
     throw xdr_exception();
@@ -254,6 +281,92 @@ inline void xdr_ostream::put_opaque(
 
   put_int32(len);
   put_bytes(len, v);
+}
+
+template<typename SerFn, typename Iter>
+inline auto xdr_ostream::put_collection_n(std::size_t len, SerFn fn, Iter iter)
+-> Iter {
+  for (std::size_t i = 0; i < len; ++i, ++iter)
+    fn(*this, *iter);
+  return iter;
+}
+
+template<typename SerFn, typename Iter>
+inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
+-> std::enable_if_t<
+    std::is_base_of<
+      std::forward_iterator_tag,
+      typename std::iterator_traits<Iter>::iterator_category>::value,
+    void> {
+  const auto len = std::distance(begin, end);
+  if (len < 0 || len > 0xffffffffu)
+    throw xdr_exception();
+  put_uint32(static_cast<std::uint32_t>(len));
+  std::for_each(begin, end, [this, &fn](const auto& arg) { fn(*this, arg); });
+}
+
+template<typename SerFn, typename Iter>
+inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
+-> std::enable_if_t<
+    !std::is_base_of<
+      std::forward_iterator_tag,
+      typename std::iterator_traits<Iter>::iterator_category>::value,
+    void> {
+  std::uint32_t len = 0;
+  xdr_bytevector_ostream<> buffer;
+  std::for_each(begin, end,
+      [&](const auto& v) {
+        if (len == 0xffffffffu)
+          throw xdr_exception();
+        fn(buffer, v);
+        ++len;
+      });
+
+  put_uint32(static_cast<std::uint32_t>(len));
+  put_raw_bytes(buffer.data(), buffer.size());
+}
+
+
+template<typename Alloc>
+inline xdr_bytevector_ostream<Alloc>::xdr_bytevector_ostream(
+    xdr_bytevector_ostream&& o) noexcept
+: xdr_ostream(std::move(o)),
+  v_(std::move(o.v_))
+{}
+
+template<typename Alloc>
+inline xdr_bytevector_ostream<Alloc>::xdr_bytevector_ostream(
+    const Alloc& alloc)
+: v_(alloc)
+{}
+
+template<typename Alloc>
+inline auto xdr_bytevector_ostream<Alloc>::data() noexcept
+-> std::uint8_t* {
+  return v_.data();
+}
+
+template<typename Alloc>
+inline auto xdr_bytevector_ostream<Alloc>::data() const noexcept
+-> const std::uint8_t* {
+  return v_.data();
+}
+
+template<typename Alloc>
+inline auto xdr_bytevector_ostream<Alloc>::size() const noexcept -> size_type {
+  return v_.size();
+}
+
+template<typename Alloc>
+inline auto xdr_bytevector_ostream<Alloc>::get_vector() noexcept
+-> vector_type& {
+  return v_;
+}
+
+template<typename Alloc>
+inline auto xdr_bytevector_ostream<Alloc>::get_vector() const noexcept
+-> const vector_type& {
+  return v_;
 }
 
 
