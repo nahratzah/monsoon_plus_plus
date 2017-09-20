@@ -1,6 +1,7 @@
 #ifndef MONSOON_XDR_XDR_H
 #define MONSOON_XDR_XDR_H
 
+#include <array>
 #include <cstdint>
 #include <iterator>
 #include <memory>
@@ -40,6 +41,18 @@ class xdr_istream {
   template<typename Alloc = std::allocator<std::uint8_t>>
       auto get_opaque(const Alloc& = Alloc())
       -> std::vector<std::uint8_t, Alloc>;
+
+  template<std::size_t Len>
+     auto get_array(std::array<std::uint8_t, Len>&)
+     -> std::enable_if_t<Len % 4u == 0u, std::array<std::uint8_t, Len>&>;
+  template<std::size_t Len>
+     auto get_array(std::array<std::uint8_t, Len>&)
+     -> std::enable_if_t<Len % 4u != 0u, std::array<std::uint8_t, Len>&>;
+  template<std::size_t Len>
+     auto get_array(std::array<std::uint8_t, Len>&&)
+     -> std::array<std::uint8_t, Len>&&;
+  template<std::size_t Len>
+     auto get_array() -> std::array<std::uint8_t, Len>;
 
   template<typename C, typename SerFn>
       auto get_collection_n(std::size_t, SerFn, C&& = C()) -> C&&;
@@ -81,6 +94,9 @@ class xdr_ostream {
   template<typename Alloc = std::allocator<uint8_t>>
       void put_opaque(const std::vector<std::uint8_t, Alloc>&);
 
+  template<std::size_t Len>
+      void put_array(const std::array<std::uint8_t, Len>&);
+
   template<typename SerFn, typename Iter>
       auto put_collection_n(std::size_t, SerFn, Iter) -> Iter;
   template<typename SerFn, typename Iter>
@@ -100,6 +116,7 @@ class xdr_ostream {
 
  private:
   virtual void put_raw_bytes(const void*, std::size_t) = 0;
+  void put_padding(std::size_t);
 };
 
 class xdr_exception
@@ -128,8 +145,8 @@ class xdr_bytevector_ostream
   const std::uint8_t* data() const noexcept;
   size_type size() const noexcept;
 
-  vector_type& get_vector() noexcept;
-  const vector_type& get_vector() const noexcept;
+  vector_type& as_vector() noexcept;
+  const vector_type& as_vector() const noexcept;
 
  private:
   void put_raw_bytes(const void*, std::size_t) override;

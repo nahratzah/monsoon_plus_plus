@@ -142,6 +142,38 @@ inline auto xdr_istream::get_opaque(const Alloc& alloc)
   return get_bytes(get_uint32(), alloc);
 }
 
+template<std::size_t Len>
+inline auto xdr_istream::get_array(std::array<std::uint8_t, Len>& arr)
+-> std::enable_if_t<Len % 4u == 0u, std::array<std::uint8_t, Len>&> {
+  get_raw_bytes(arr.data(), arr.size());
+  return arr;
+}
+
+template<std::size_t Len>
+inline auto xdr_istream::get_array(std::array<std::uint8_t, Len>& arr)
+-> std::enable_if_t<Len % 4u != 0u, std::array<std::uint8_t, Len>&> {
+  get_raw_bytes(arr.data(), arr.size());
+
+  std::array<std::uint8_t, 4u - Len % 4u> padding;
+  get_raw_bytes(padding.data(), padding.size());
+  if (std::any_of(padding.begin(), padding.end(),
+          [](std::uint8_t c) { return c != 0u; }))
+    throw xdr_exception();
+  return arr;
+}
+
+template<std::size_t Len>
+inline auto xdr_istream::get_array(std::array<std::uint8_t, Len>&& arr)
+-> std::array<std::uint8_t, Len>&& {
+  get_array(arr);
+  return std::move(arr);
+}
+
+template<std::size_t Len>
+inline auto xdr_istream::get_array() -> std::array<std::uint8_t, Len> {
+  return get_array(std::array<std::uint8_t, Len>());
+}
+
 template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C&& c)
 -> C&& {
@@ -226,14 +258,7 @@ inline void xdr_ostream::put_string(std::string_view s) {
 
   put_uint32(static_cast<uint32_t>(s.length()));
   put_raw_bytes(s.data(), s.length());
-
-  if (s.length() % 4 != 0u) {
-    std::size_t padlen = 4 - s.size() % 4;
-    std::array<std::uint8_t, 4> bytebuf;
-    std::fill(bytebuf.begin(), bytebuf.end(),
-        static_cast<std::uint8_t>(0u));
-    put_raw_bytes(bytebuf.begin(), padlen);
-  }
+  if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4u);
 }
 #endif
 
@@ -245,14 +270,7 @@ inline void xdr_ostream::put_string(
 
   put_uint32(static_cast<uint32_t>(s.length()));
   put_raw_bytes(s.data(), s.length());
-
-  if (s.length() % 4u != 0u) {
-    std::size_t padlen = 4 - s.size() % 4;
-    std::array<std::uint8_t, 4> bytebuf;
-    std::fill(bytebuf.begin(), bytebuf.end(),
-        static_cast<std::uint8_t>(0u));
-    put_raw_bytes(bytebuf.begin(), padlen);
-  }
+  if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4);
 }
 
 template<typename Alloc>
@@ -262,14 +280,7 @@ inline void xdr_ostream::put_opaque_n(std::size_t len,
     throw xdr_exception();
 
   put_raw_bytes(v.data(), len);
-
-  if (v.size() % 4u != 0u) {
-    std::size_t padlen = 4 - v.size() % 4;
-    std::array<std::uint8_t, 4> bytebuf;
-    std::fill(bytebuf.begin(), bytebuf.end(),
-        static_cast<std::uint8_t>(0u));
-    put_raw_bytes(bytebuf.begin(), padlen);
-  }
+  if (v.size() % 4u != 0u) put_padding(4u - v.size() % 4);
 }
 
 template<typename Alloc>
@@ -280,7 +291,13 @@ inline void xdr_ostream::put_opaque(
   const std::uint32_t len = v.size();
 
   put_int32(len);
-  put_bytes(len, v);
+  put_opaque_n(len, v);
+}
+
+template<std::size_t Len>
+inline void put_array(const std::array<std::uint8_t, Len> arr) {
+  put_raw_bytes(arr.data(), arr.size());
+  if (arr.size() % 4u != 0u) put_padding(4u - arr.size() % 4);
 }
 
 template<typename SerFn, typename Iter>
@@ -326,6 +343,13 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
   put_raw_bytes(buffer.data(), buffer.size());
 }
 
+inline void xdr_ostream::put_padding(std::size_t n) {
+  assert(n < 4);
+  std::array<std::uint8_t, 4> pad;
+  std::fill(pad.begin(), pad.end(), static_cast<std::uint8_t>(0u));
+  put_raw_bytes(pad.data(), n);
+}
+
 
 template<typename Alloc>
 inline xdr_bytevector_ostream<Alloc>::xdr_bytevector_ostream(
@@ -358,13 +382,13 @@ inline auto xdr_bytevector_ostream<Alloc>::size() const noexcept -> size_type {
 }
 
 template<typename Alloc>
-inline auto xdr_bytevector_ostream<Alloc>::get_vector() noexcept
+inline auto xdr_bytevector_ostream<Alloc>::as_vector() noexcept
 -> vector_type& {
   return v_;
 }
 
 template<typename Alloc>
-inline auto xdr_bytevector_ostream<Alloc>::get_vector() const noexcept
+inline auto xdr_bytevector_ostream<Alloc>::as_vector() const noexcept
 -> const vector_type& {
   return v_;
 }
