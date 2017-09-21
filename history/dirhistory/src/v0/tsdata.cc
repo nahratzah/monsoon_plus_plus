@@ -1,5 +1,6 @@
 #include "tsdata.h"
 #include <monsoon/gzip_stream.h>
+#include <monsoon/positional_stream.h>
 
 namespace monsoon {
 namespace history {
@@ -10,6 +11,12 @@ tsdata_v0::tsdata_v0(fd&& file)
 : file_(std::move(file)),
   gzipped_(is_gzip_file(file_))
 {
+  if (gzipped_) {
+    auto r = gzip_decompress_reader<positional_reader>(positional_reader(file_));
+  } else {
+    auto r = positional_reader(file_);
+  }
+
   ... // Set up xdr stream reader, gzipped iff gzipped_ is true, read mimeheader and timestamps
 }
 
