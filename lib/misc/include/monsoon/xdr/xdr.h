@@ -30,6 +30,8 @@ class xdr_istream {
   std::uint32_t get_uint32();
   std::int64_t get_int64();
   std::uint64_t get_uint64();
+  float get_flt32();
+  double get_flt64();
 
   template<typename Alloc = std::allocator<char>>
       auto get_string(const Alloc& = Alloc())
@@ -62,6 +64,10 @@ class xdr_istream {
       auto get_collection(SerFn, C&& = C()) -> C&&;
   template<typename C, typename SerFn>
       auto get_collection(SerFn, C&) -> C&;
+  template<typename SerFn, typename Acceptor>
+      void accept_collection_n(std::size_t, SerFn, Acceptor);
+  template<typename SerFn, typename Acceptor>
+      void accept_collection(SerFn, Acceptor);
 
  private:
   virtual void get_raw_bytes(void*, std::size_t) = 0;
@@ -81,6 +87,8 @@ class xdr_ostream {
   void put_uint32(std::uint32_t);
   void put_int64(std::int64_t);
   void put_uint64(std::uint64_t);
+  void put_flt32(float);
+  void put_flt64(double);
 
 #if __has_include(<string_view>)
   void put_string(std::string_view);

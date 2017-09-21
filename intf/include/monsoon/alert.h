@@ -4,7 +4,7 @@
 #include <monsoon/optional.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_value.h>
-#include <monsoon/time_series_value.h>
+#include <monsoon/time_point.h>
 #include <functional>
 #include <string>
 #include <unordered_map>
@@ -38,8 +38,8 @@ class alert {
   bool value_is_unknown() const noexcept;
   const std::string& get_message() const noexcept;
   alert_state get_state() const noexcept;
-  const time_series_value::time_point& get_since() const noexcept;
-  const time_series_value::time_point::duration& get_duration() const noexcept;
+  const time_point& get_since() const noexcept;
+  const time_point::duration& get_duration() const noexcept;
   const attributes_map& get_attributes() const noexcept;
 
   alert& extend_with(alert&&) noexcept;
@@ -49,8 +49,8 @@ class alert {
   optional<bool> value_;
   std::string message_;
   alert_state state_;
-  time_series_value::time_point since_;
-  time_series_value::time_point::duration trigger_duration_;
+  time_point since_;
+  time_point::duration trigger_duration_;
   attributes_map attributes_;
 };
 

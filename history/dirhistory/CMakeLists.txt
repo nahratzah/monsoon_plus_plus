@@ -17,6 +17,7 @@ endif ()
 add_library (monsoon_dirhistory SHARED
   src/dirhistory.cc
   src/tsdata_mime.cc
+  src/v0/tsdata.cc
 )
 target_link_libraries (monsoon_dirhistory ${extra_libs})
 target_link_libraries (monsoon_dirhistory monsoon_intf monsoon_history)

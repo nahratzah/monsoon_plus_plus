@@ -12,6 +12,7 @@ namespace monsoon {
 class simple_group {
  public:
   using path_type = std::vector<std::string>;
+  using iterator = path_type::const_iterator;
 
   simple_group() = default;
   simple_group(const simple_group&) = default;
@@ -24,6 +25,8 @@ class simple_group {
   template<typename Iter> simple_group(Iter, Iter);
 
   const path_type& get_path() const noexcept;
+  iterator begin() const noexcept;
+  iterator end() const noexcept;
 
   bool operator==(const simple_group&) const noexcept;
   bool operator!=(const simple_group&) const noexcept;

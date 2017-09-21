@@ -31,12 +31,12 @@ inline auto alert::get_state() const noexcept -> alert_state {
 }
 
 inline auto alert::get_since() const noexcept
-->  const time_series_value::time_point& {
+->  const time_point& {
   return since_;
 }
 
 inline auto alert::get_duration() const noexcept
-->  const time_series_value::time_point::duration& {
+->  const time_point::duration& {
   return trigger_duration_;
 }
 

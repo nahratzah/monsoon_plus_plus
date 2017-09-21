@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
+#include <limits>
 #include <utility>
 #include <boost/endian/conversion.hpp>
 
@@ -83,6 +85,30 @@ inline std::uint64_t xdr_istream::get_uint64() {
   return boost::endian::big_to_native(i);
 }
 
+inline float xdr_istream::get_flt32() {
+  static_assert(std::numeric_limits<float>::is_iec559,
+      "require IEEE 754 layout.");
+  static_assert(sizeof(float) == sizeof(std::uint32_t),
+      "expecting uint32 and float to have same size");
+
+  std::uint32_t tmp = get_uint32();
+  float f;
+  std::memcpy(&f, &tmp, sizeof(f));
+  return f;
+}
+
+inline double xdr_istream::get_flt64() {
+  static_assert(std::numeric_limits<double>::is_iec559,
+      "require IEEE 754 layout.");
+  static_assert(sizeof(double) == sizeof(std::uint64_t),
+      "expecting uint32 and float to have same size");
+
+  std::uint64_t tmp = get_uint64();
+  double f;
+  std::memcpy(&f, &tmp, sizeof(f));
+  return f;
+}
+
 template<typename Alloc>
 inline auto xdr_istream::get_string(const Alloc& alloc)
 -> std::basic_string<char, std::char_traits<char>, Alloc> {
@@ -104,7 +130,7 @@ inline auto xdr_istream::get_string(const Alloc& alloc)
   if (len != rounded_len) result.resize(len); // Remove excess characters.
 #else // std::basic_string::data() is not (safely) modifiable before C++17.
   result.reserve(len);
-  const auto tmp = std::vector<char, Alloc>(rounded_len, alloc);
+  auto tmp = std::vector<char, Alloc>(rounded_len, alloc);
   get_raw_bytes(tmp.data(), rounded_len);
   // Verify padding of zeroes.
   if (std::any_of(tmp.begin() + len, tmp.end(),
@@ -200,6 +226,20 @@ inline auto xdr_istream::get_collection(SerFn fn, C& c) -> C& {
   return get_collection_n(get_uint32(), std::move(fn), std::forward<C>(c));
 }
 
+template<typename SerFn, typename Acceptor>
+inline void xdr_istream::accept_collection_n(std::size_t len, SerFn fn,
+    Acceptor acceptor) {
+  for (std::size_t i = 0; i < len; ++i)
+    acceptor(fn(*this));
+}
+
+template<typename SerFn, typename Acceptor>
+inline void xdr_istream::accept_collection(SerFn fn, Acceptor acceptor) {
+  accept_collection_n(get_uint32(),
+      std::forward<SerFn>(fn),
+      std::forward<Acceptor>(acceptor));
+}
+
 
 inline void xdr_ostream::put_void() {
   return;
@@ -244,6 +284,28 @@ inline void xdr_ostream::put_int64(std::int64_t v) {
     put_uint64(static_cast<std::uint64_t>(v + 0x8000000000000000l) +
         0x8000000000000000ul);
   }
+}
+
+inline void xdr_ostream::put_flt32(float f) {
+  static_assert(std::numeric_limits<float>::is_iec559,
+      "require IEEE 754 layout.");
+  static_assert(sizeof(float) == sizeof(std::uint32_t),
+      "expecting uint32 and float to have same size");
+
+  std::uint32_t tmp;
+  std::memcpy(&tmp, &f, sizeof(tmp));
+  put_uint32(tmp);
+}
+
+inline void xdr_ostream::put_flt64(double f) {
+  static_assert(std::numeric_limits<double>::is_iec559,
+      "require IEEE 754 layout.");
+  static_assert(sizeof(double) == sizeof(std::uint64_t),
+      "expecting uint32 and float to have same size");
+
+  std::uint64_t tmp;
+  std::memcpy(&tmp, &f, sizeof(tmp));
+  put_uint64(tmp);
 }
 
 inline void xdr_ostream::put_uint64(std::uint64_t v) {

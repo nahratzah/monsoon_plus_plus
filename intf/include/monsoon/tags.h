@@ -15,6 +15,7 @@ namespace monsoon {
 class tags {
  public:
   using map_type = std::map<std::string, metric_value>;
+  using iterator = map_type::const_iterator;
 
   tags() = default;
   tags(const tags&) = default;
@@ -34,6 +35,9 @@ class tags {
   bool operator>(const tags&) const noexcept;
   bool operator<=(const tags&) const noexcept;
   bool operator>=(const tags&) const noexcept;
+
+  iterator begin() const noexcept;
+  iterator end() const noexcept;
 
   std::string tag_string() const;
   template<typename Iter> bool has_keys(Iter, Iter) const;

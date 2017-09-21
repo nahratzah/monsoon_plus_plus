@@ -28,6 +28,14 @@ inline auto tags::get_map() const noexcept -> const map_type& {
   return map_;
 }
 
+inline auto tags::begin() const noexcept -> iterator {
+  return map_.begin();
+}
+
+inline auto tags::end() const noexcept -> iterator {
+  return map_.end();
+}
+
 inline auto tags::operator!=(const tags& other) const noexcept -> bool {
   return !(*this == other);
 }

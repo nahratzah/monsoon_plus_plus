@@ -33,6 +33,14 @@ inline auto simple_group::get_path() const noexcept -> const path_type& {
   return path_;
 }
 
+inline auto simple_group::begin() const noexcept -> iterator {
+  return path_.begin();
+}
+
+inline auto simple_group::end() const noexcept -> iterator {
+  return path_.end();
+}
+
 inline auto simple_group::operator!=(const simple_group& other) const noexcept
 ->  bool {
   return !(*this == other);
