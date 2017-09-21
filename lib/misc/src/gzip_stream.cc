@@ -120,13 +120,26 @@ struct z_stream_
 };
 
 
-gzip_decompress_reader::gzip_decompress_reader()
+basic_gzip_decompress_reader::basic_gzip_decompress_reader()
 : strm_(std::make_unique<z_stream_>())
 {}
 
-gzip_decompress_reader::~gzip_decompress_reader() noexcept {}
+basic_gzip_decompress_reader::~basic_gzip_decompress_reader() noexcept {}
 
-std::size_t gzip_decompress_reader::read(void* data, std::size_t len) {
+basic_gzip_decompress_reader::basic_gzip_decompress_reader(
+    basic_gzip_decompress_reader&& o) noexcept
+: strm_(std::move(o.strm_)),
+  in_(std::move(o.in_))
+{}
+
+basic_gzip_decompress_reader& basic_gzip_decompress_reader::operator=(
+    basic_gzip_decompress_reader&& o) noexcept {
+  strm_ = std::move(o.strm_);
+  in_ = std::move(o.in_);
+  return *this;
+}
+
+std::size_t basic_gzip_decompress_reader::read(void* data, std::size_t len) {
   delayed_init_();
 
   strm_->avail_out = len;
@@ -141,7 +154,7 @@ std::size_t gzip_decompress_reader::read(void* data, std::size_t len) {
   return len - strm_->avail_out;
 }
 
-void gzip_decompress_reader::from_source_() {
+void basic_gzip_decompress_reader::from_source_() {
   const auto rpos = std::copy(
       in_.end() - strm_->avail_in,
       in_.end(),
@@ -154,27 +167,35 @@ void gzip_decompress_reader::from_source_() {
   strm_->next_in = in_.data();
 }
 
-void gzip_decompress_reader::delayed_init_() {
+void basic_gzip_decompress_reader::delayed_init_() {
   if (in_.capacity() == 0) in_.reserve(in_buffer_size);
 }
 
 
-gzip_compress_writer::gzip_compress_writer()
-: gzip_compress_writer(Z_DEFAULT_COMPRESSION)
+basic_gzip_compress_writer::basic_gzip_compress_writer()
+: basic_gzip_compress_writer(Z_DEFAULT_COMPRESSION)
 {}
 
-gzip_compress_writer::gzip_compress_writer(int level)
+basic_gzip_compress_writer::basic_gzip_compress_writer(int level)
 : strm_(std::make_unique<z_stream_>(level))
 {}
 
-gzip_compress_writer::gzip_compress_writer(gzip_compress_writer&& o) noexcept
+basic_gzip_compress_writer::basic_gzip_compress_writer(
+    basic_gzip_compress_writer&& o) noexcept
 : strm_(std::move(o.strm_)),
   out_(std::move(o.out_))
 {}
 
-gzip_compress_writer::~gzip_compress_writer() noexcept {}
+basic_gzip_compress_writer& basic_gzip_compress_writer::operator=(
+    basic_gzip_compress_writer&& o) noexcept {
+  strm_ = std::move(o.strm_);
+  out_ = std::move(o.out_);
+  return *this;
+}
 
-std::size_t gzip_compress_writer::write(const void* data, std::size_t len) {
+basic_gzip_compress_writer::~basic_gzip_compress_writer() noexcept {}
+
+std::size_t basic_gzip_compress_writer::write(const void* data, std::size_t len) {
   delayed_init_();
 
   strm_->avail_in = len;
@@ -189,7 +210,7 @@ std::size_t gzip_compress_writer::write(const void* data, std::size_t len) {
   return len - strm_->avail_in;
 }
 
-void gzip_compress_writer::close() {
+void basic_gzip_compress_writer::close() {
   delayed_init_();
 
   strm_->avail_in = 0;
@@ -206,7 +227,7 @@ void gzip_compress_writer::close() {
   strm_.reset();
 }
 
-void gzip_compress_writer::to_sink_() {
+void basic_gzip_compress_writer::to_sink_() {
   const std::size_t to_be_written = out_.size() - strm_->avail_out;
   const std::size_t wlen = writer_().write(out_.data(), to_be_written);
   const auto next_out = std::copy(
@@ -217,7 +238,7 @@ void gzip_compress_writer::to_sink_() {
   strm_->next_out = &*next_out;
 }
 
-void gzip_compress_writer::delayed_init_() {
+void basic_gzip_compress_writer::delayed_init_() {
   if (out_.empty()) {
     out_.resize(out_buffer_size);
     strm_->avail_out = out_.size();
