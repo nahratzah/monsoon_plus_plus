@@ -28,8 +28,9 @@ fd::fd(fd&& o) noexcept
 : handle_(std::exchange(o.handle_, INVALID_HANLE_VALUE))
 {}
 
-fd::fd(const std::string& fname)
-: fd()
+fd::fd(const std::string& fname, open_mode mode)
+: handle_(INVALID_HANDLE_VALUE),
+  mode_(mode)
 {
   DWORD dwDesiredAccess = 0;
   switch (mode) {
@@ -68,6 +69,13 @@ void fd::close() {
 
 fd::operator bool() const noexcept {
   return handle_ != INVALID_HANDLE_VALUE;
+}
+
+auto fd::offset() const -> offset_type {
+  LARGE_INTEGER new_off;
+  if (!SetFilePointerEx(handle_, 0, &new_off, FILE_CURRENT))
+    throw_last_error_();
+  return new_off;
 }
 
 optional<std::string> fd::get_path() const {
@@ -110,6 +118,7 @@ auto fd::size() const -> size_type {
 
 void fd::swap(fd& o) noexcept {
   std::swap(handle_, o.handle_);
+  std::swap(mode_, o.mode_);
 }
 
 
@@ -145,7 +154,8 @@ fd::fd(fd&& o) noexcept
 
 fd::fd(const std::string& fname, open_mode mode)
 : fd_(-1),
-  fname_(normalize(fname))
+  fname_(normalize(fname)),
+  mode_(mode)
 {
   int fl = 0;
   switch (mode) {
@@ -179,6 +189,12 @@ fd::operator bool() const noexcept {
   return fd_ != -1;
 }
 
+auto fd::offset() const -> offset_type {
+  const auto off = lseek(fd_, 0, SEEK_CUR);
+  if (off == -1) throw_errno_();
+  return off;
+}
+
 optional<std::string> fd::get_path() const {
   if (fd_ == -1 || fname_.empty())
     return {};
@@ -199,6 +215,7 @@ auto fd::size() const -> size_type {
 void fd::swap(fd& o) noexcept {
   std::swap(fname_, o.fname_);
   std::swap(fd_, o.fd_);
+  std::swap(mode_, o.mode_);
 }
 
 
@@ -225,6 +242,14 @@ std::string fd::normalize(const std::string& fname) {
 
   filesystem::path path = fname;
   return boost::filesystem::canonical(path).native();
+}
+
+bool fd::can_read() const noexcept {
+  return *this && (mode_ == READ_ONLY || mode_ == READ_WRITE);
+}
+
+bool fd::can_write() const noexcept {
+  return *this && (mode_ == WRITE_ONLY || mode_ == READ_WRITE);
 }
 
 

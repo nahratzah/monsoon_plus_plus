@@ -28,6 +28,9 @@ class fd {
 
   void close();
   explicit operator bool() const noexcept;
+  bool can_read() const noexcept;
+  bool can_write() const noexcept;
+  offset_type offset() const;
   optional<std::string> get_path() const;
 
   void flush();
@@ -42,6 +45,8 @@ class fd {
   int fd_;
   std::string fname_;
 #endif
+
+  open_mode mode_;
 };
 
 inline void swap(fd& x, fd& y) noexcept {
