@@ -4,7 +4,9 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <cstdint>
 #include <string>
+#include <tuple>
 #include <vector>
+#include <monsoon/fd.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
@@ -21,19 +23,31 @@ namespace history {
 namespace v0 {
 
 
+class monsoon_dirhistory_local_ tsdata_v0
+: public std::enable_shared_from_this<tsdata_v0>
+{
+ public:
+  tsdata_v0(fd&& file);
+  ~tsdata_v0() noexcept;
+
+ private:
+  fd file_;
+  bool gzipped_;
+  time_point tp_begin_, tp_end_;
+};
+
+
+monsoon_dirhistory_local_
+auto decode_tsfile_header(monsoon::xdr::xdr_istream&)
+  -> std::tuple<time_point, time_point>;
+monsoon_dirhistory_local_
+void encode_tsfile_header(monsoon::xdr::xdr_ostream&,
+    std::tuple<time_point, time_point>);
+
 monsoon_dirhistory_local_
 std::vector<std::string> decode_path(monsoon::xdr::xdr_istream&);
 monsoon_dirhistory_local_
 void encode_path(monsoon::xdr::xdr_ostream&, const std::vector<std::string>&);
-
-enum class metrickind : std::uint32_t {
-  BOOL = 0,
-  INT = 1,
-  FLOAT = 2,
-  STRING = 3,
-  HISTOGRAM = 4,
-  EMPTY = 0x7fffffff
-};
 
 monsoon_dirhistory_local_
 metric_value decode_metric_value(monsoon::xdr::xdr_istream&);

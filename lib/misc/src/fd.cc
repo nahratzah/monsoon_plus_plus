@@ -172,8 +172,10 @@ auto fd::write_at(offset_type off, const void* buf, std::size_t nbytes)
 }
 
 void fd::swap(fd& o) noexcept {
-  std::swap(handle_, o.handle_);
-  std::swap(mode_, o.mode_);
+  using std::swap;
+
+  swap(handle_, o.handle_);
+  swap(mode_, o.mode_);
 }
 
 
@@ -193,7 +195,7 @@ namespace {
 
 
 static void throw_errno_() {
-  std::system_error(errno, std::system_category());
+  throw std::system_error(errno, std::system_category());
 }
 
 
@@ -294,9 +296,11 @@ auto fd::write_at(offset_type off, const void* buf, std::size_t nbytes)
 }
 
 void fd::swap(fd& o) noexcept {
-  std::swap(fname_, o.fname_);
-  std::swap(handle_, o.handle_);
-  std::swap(mode_, o.mode_);
+  using std::swap;
+
+  swap(fname_, o.fname_);
+  swap(handle_, o.handle_);
+  swap(mode_, o.mode_);
 }
 
 

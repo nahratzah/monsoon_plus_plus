@@ -1,9 +1,42 @@
 #include "tsdata.h"
+#include <monsoon/gzip_stream.h>
 
 namespace monsoon {
 namespace history {
 namespace v0 {
 
+
+tsdata_v0::tsdata_v0(fd&& file)
+: file_(std::move(file)),
+  gzipped_(is_gzip_file(file_))
+{
+  ... // Set up xdr stream reader, gzipped iff gzipped_ is true, read mimeheader and timestamps
+}
+
+tsdata_v0::~tsdata_v0() noexcept {}
+
+
+enum class metrickind : std::uint32_t {
+  BOOL = 0,
+  INT = 1,
+  FLOAT = 2,
+  STRING = 3,
+  HISTOGRAM = 4,
+  EMPTY = 0x7fffffff
+};
+
+auto decode_tsfile_header(monsoon::xdr::xdr_istream& in)
+-> std::tuple<time_point, time_point> {
+  time_point begin = decode_timestamp(in);
+  time_point end =decode_timestamp(in);
+  return std::make_tuple(std::move(begin), std::move(end));
+}
+
+void encode_tsfile_header(monsoon::xdr::xdr_ostream& out,
+    std::tuple<time_point, time_point> range) {
+  encode_timestamp(out, std::get<0>(range));
+  encode_timestamp(out, std::get<1>(range));
+}
 
 std::vector<std::string> decode_path(monsoon::xdr::xdr_istream& in) {
   return in.template get_collection<std::vector<std::string>>(
