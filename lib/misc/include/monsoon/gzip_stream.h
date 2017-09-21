@@ -10,7 +10,7 @@ namespace monsoon {
 
 struct z_stream_;
 
-bool is_gzip_file(stream_reader&);
+bool is_gzip_file(stream_reader&&);
 
 class basic_gzip_decompress_reader
 : public stream_reader

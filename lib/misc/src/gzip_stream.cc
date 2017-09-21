@@ -11,7 +11,7 @@
 namespace monsoon {
 
 
-bool is_gzip_file(stream_reader& file) {
+bool is_gzip_file(stream_reader&& file) {
   std::array<std::uint8_t, 2> hdr;
   std::size_t off = 0;
 
