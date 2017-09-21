@@ -20,7 +20,10 @@ add_library (monsoon_dirhistory SHARED
   src/v0/tsdata.cc
 )
 target_link_libraries (monsoon_dirhistory ${extra_libs})
-target_link_libraries (monsoon_dirhistory monsoon_intf monsoon_history)
+target_link_libraries (monsoon_dirhistory
+  monsoon_intf
+  monsoon_misc
+  monsoon_history)
 if (NOT STD_FILESYSTEM)
   target_link_libraries (monsoon_dirhistory ${Boost_FILESYSTEM_LIBRARY})
 endif ()
