@@ -88,6 +88,11 @@ class gzip_decompress_reader
   : r_(std::move(r))
   {}
 
+  gzip_decompress_reader(Reader&& r, bool validate)
+  : basic_gzip_decompress_reader(validate),
+    r_(std::move(r))
+  {}
+
   gzip_decompress_reader(gzip_decompress_reader&& o)
       noexcept(std::is_nothrow_move_constructible<Reader>())
   : basic_gzip_decompress_reader(std::move(o)),
@@ -121,7 +126,7 @@ class gzip_compress_writer
 
   gzip_compress_writer(gzip_compress_writer&& o)
       noexcept(std::is_nothrow_move_constructible<Writer>())
-  : gzip_compress_writer(std::move(o)),
+  : basic_gzip_compress_writer(std::move(o)),
     w_(std::move(o.w_))
   {}
 

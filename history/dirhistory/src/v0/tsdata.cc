@@ -1,5 +1,6 @@
 #include "tsdata.h"
 #include "../tsdata_mime.h"
+#include <algorithm>
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -16,7 +17,7 @@ tsdata_v0::tsdata_v0(io::fd&& file)
 : file_(std::move(file)),
   gzipped_(io::is_gzip_file(io::positional_reader(file_)))
 {
-  const auto r = make_xdr_istream();
+  const auto r = make_xdr_istream(false);
   const tsfile_mimeheader hdr = tsfile_mimeheader(*r);
   std::tie(tp_begin_, tp_end_) = decode_tsfile_header(*r);
 
@@ -30,20 +31,71 @@ tsdata_v0::tsdata_v0(io::fd&& file)
 tsdata_v0::~tsdata_v0() noexcept {}
 
 auto tsdata_v0::read_all() const -> std::vector<time_series> {
-  const auto r = make_xdr_istream();
+  const auto r = make_xdr_istream(true);
   auto hdr = tsfile_mimeheader(*r); // Decode and discard.
   decode_tsfile_header(*r); // Decode and discard.
 
   std::vector<time_series> result;
   while (!r->at_end())
     result.push_back(decode_time_series(*r));
+  r->close();
   return result;
 }
 
-auto tsdata_v0::make_xdr_istream() const -> std::unique_ptr<xdr::xdr_istream> {
+std::shared_ptr<tsdata_v0> tsdata_v0::write_all(
+    const std::string& fname,
+    std::vector<time_series>&& datums, bool compress) {
+  std::sort(datums.begin(), datums.end(),
+      [](const time_series& x, const time_series& y) -> bool {
+        return x.get_time() < y.get_time();
+      });
+
+  io::fd file = io::fd::create(fname);
+  try {
+    // Create xdr writer.
+    std::unique_ptr<xdr::xdr_ostream> w;
+    if (compress) {
+      w = std::make_unique<xdr::xdr_stream_writer<io::gzip_compress_writer<io::positional_writer>>>(
+          io::gzip_compress_writer<io::positional_writer>(io::positional_writer(file)));
+    } else {
+      w = std::make_unique<xdr::xdr_stream_writer<io::positional_writer>>(
+          io::positional_writer(file));
+    }
+
+    // Write monsoon mime header.
+    tsfile_mimeheader(MAJOR, MAX_MINOR).write(*w);
+
+    // Write tsdata v0 header.
+    time_point b, e;
+    if (datums.empty()) {
+      b = e = time_point::now();
+    } else {
+      b = datums.front().get_time();
+      e = datums.back().get_time();
+    }
+    encode_tsfile_header(*w, std::tie(b, e));
+
+    // Write the timeseries.
+    std::for_each(datums.begin(), datums.end(),
+        [&w](const time_series& ts) {
+          encode_time_series(*w, ts);
+        });
+
+    // Close the writer, so data gets flushed properly.
+    w->close();
+
+    return std::make_shared<tsdata_v0>(std::move(file));
+  } catch (...) {
+    // XXX delete file
+    throw;
+  }
+}
+
+auto tsdata_v0::make_xdr_istream(bool validate) const
+-> std::unique_ptr<xdr::xdr_istream> {
   if (gzipped_) {
     return std::make_unique<xdr::xdr_stream_reader<io::gzip_decompress_reader<io::positional_reader>>>(
-        io::gzip_decompress_reader<io::positional_reader>(io::positional_reader(file_)));
+        io::gzip_decompress_reader<io::positional_reader>(io::positional_reader(file_), validate));
   } else {
     return std::make_unique<xdr::xdr_stream_reader<io::positional_reader>>(
         io::positional_reader(file_));

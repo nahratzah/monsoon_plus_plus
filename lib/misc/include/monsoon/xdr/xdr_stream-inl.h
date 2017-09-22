@@ -35,6 +35,11 @@ bool xdr_stream_reader<Reader>::at_end() const {
 }
 
 template<typename Reader>
+void xdr_stream_reader<Reader>::close() {
+  r_.close();
+}
+
+template<typename Reader>
 void xdr_stream_reader<Reader>::get_raw_bytes(void* buf, std::size_t len) {
   while (len > 0) {
     const std::size_t rlen = r_.read(buf, len);
@@ -66,6 +71,11 @@ noexcept(std::is_nothrow_move_constructible<Writer>())
   static_cast<xdr_ostream&>(*this) = std::move(o);
   w_ = std::move(o.w_);
   return *this;
+}
+
+template<typename Writer>
+void xdr_stream_writer<Writer>::close() {
+  w_.close();
 }
 
 template<typename Writer>

@@ -18,6 +18,9 @@ class time_point {
   std::int64_t millis_since_posix_epoch() const noexcept;
   static time_point now();
 
+  bool operator==(const time_point&) const noexcept;
+  bool operator<(const time_point&) const noexcept;
+
  private:
   std::int64_t millis_;
 };

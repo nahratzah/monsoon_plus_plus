@@ -70,6 +70,7 @@ class xdr_istream {
       void accept_collection(SerFn, Acceptor);
 
   virtual bool at_end() const = 0;
+  virtual void close() = 0;
 
  private:
   virtual void get_raw_bytes(void*, std::size_t) = 0;
@@ -124,6 +125,8 @@ class xdr_ostream {
             typename std::iterator_traits<Iter>::iterator_category>::value,
           void>;
 
+  virtual void close() = 0;
+
  private:
   virtual void put_raw_bytes(const void*, std::size_t) = 0;
   void put_padding(std::size_t);
@@ -159,6 +162,8 @@ class xdr_bytevector_ostream
   xdr_bytevector_ostream(xdr_bytevector_ostream&&) noexcept;
   xdr_bytevector_ostream(const Alloc&);
   ~xdr_bytevector_ostream() noexcept override = default;
+
+  void close() override {}
 
   std::uint8_t* data() noexcept;
   const std::uint8_t* data() const noexcept;

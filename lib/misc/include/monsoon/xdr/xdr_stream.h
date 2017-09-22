@@ -25,6 +25,7 @@ class xdr_stream_reader
       noexcept(std::is_nothrow_move_constructible<Reader>());
 
   bool at_end() const override;
+  void close() override;
 
  private:
   void get_raw_bytes(void*, std::size_t) override;
@@ -48,6 +49,8 @@ class xdr_stream_writer
 
   xdr_stream_writer& operator=(xdr_stream_writer&& o)
       noexcept(std::is_nothrow_move_constructible<Writer>());
+
+  void close() override;
 
  private:
   void put_raw_bytes(const void*, std::size_t) override;

@@ -12,6 +12,15 @@ inline std::int64_t time_point::millis_since_posix_epoch() const noexcept {
   return millis_;
 }
 
+inline bool time_point::operator==(const time_point& y) const noexcept {
+  return millis_ == y.millis_;
+}
+
+inline bool time_point::operator<(const time_point& y) const noexcept {
+  return millis_ < y.millis_;
+}
+
+
 inline time_point::duration::duration(std::int64_t millis) noexcept
 : millis_(millis)
 {}

@@ -35,9 +35,11 @@ class monsoon_dirhistory_local_ tsdata_v0
   ~tsdata_v0() noexcept;
 
   auto read_all() const -> std::vector<time_series>;
+  static std::shared_ptr<tsdata_v0> write_all(const std::string&,
+      std::vector<time_series>&&, bool);
 
  private:
-  auto make_xdr_istream() const -> std::unique_ptr<xdr::xdr_istream>;
+  auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;
 
   io::fd file_;
   bool gzipped_;
