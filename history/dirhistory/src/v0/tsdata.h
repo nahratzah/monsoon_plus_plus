@@ -3,6 +3,7 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -33,7 +34,11 @@ class monsoon_dirhistory_local_ tsdata_v0
   tsdata_v0(fd&& file);
   ~tsdata_v0() noexcept;
 
+  auto read_all() const -> std::vector<time_series>;
+
  private:
+  auto make_xdr_istream() const -> std::unique_ptr<xdr::xdr_istream>;
+
   fd file_;
   bool gzipped_;
   time_point tp_begin_, tp_end_;

@@ -53,8 +53,9 @@ class fd
 
   std::size_t read(void*, std::size_t) override;
   std::size_t write(const void*, std::size_t) override;
-  std::size_t read_at(offset_type, void*, std::size_t);
+  std::size_t read_at(offset_type, void*, std::size_t) const;
   std::size_t write_at(offset_type, const void*, std::size_t);
+  bool at_end() const override;
 
   void swap(fd&) noexcept;
 

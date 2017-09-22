@@ -24,6 +24,8 @@ class xdr_stream_reader
   xdr_stream_reader& operator=(xdr_stream_reader&& o)
       noexcept(std::is_nothrow_move_constructible<Reader>());
 
+  bool at_end() const override;
+
  private:
   void get_raw_bytes(void*, std::size_t) override;
 

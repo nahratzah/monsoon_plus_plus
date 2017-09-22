@@ -1,4 +1,5 @@
 #include <monsoon/gzip_stream.h>
+#include <algorithm>
 #include <array>
 #include <cassert>
 #include <cerrno>
@@ -33,8 +34,9 @@ enum z_dir_ {
 constexpr int WINDOW_BITS = 15;
 constexpr int GZIP_HEADER_TRAILER = 16;
 constexpr int DFL_MEMLEVEL = 8;
-constexpr int out_buffer_size = 128 * 1024;
-constexpr int in_buffer_size = 128 * 1024;
+constexpr std::size_t out_buffer_size = 128 * 1024;
+constexpr std::size_t in_buffer_size = 128 * 1024;
+constexpr std::size_t in_pending_size = 128 * 1024;
 
 static void handle_zlib_error_(int ret) {
   if (ret > 0) return; // normal event
@@ -120,8 +122,9 @@ struct z_stream_
 };
 
 
-basic_gzip_decompress_reader::basic_gzip_decompress_reader()
-: strm_(std::make_unique<z_stream_>())
+basic_gzip_decompress_reader::basic_gzip_decompress_reader(bool verify_stream)
+: strm_(std::make_unique<z_stream_>()),
+  verify_stream_(verify_stream)
 {}
 
 basic_gzip_decompress_reader::~basic_gzip_decompress_reader() noexcept {}
@@ -129,7 +132,11 @@ basic_gzip_decompress_reader::~basic_gzip_decompress_reader() noexcept {}
 basic_gzip_decompress_reader::basic_gzip_decompress_reader(
     basic_gzip_decompress_reader&& o) noexcept
 : strm_(std::move(o.strm_)),
-  in_(std::move(o.in_))
+  in_(std::move(o.in_)),
+  pending_(std::move(o.pending_)),
+  pending_off_(std::move(o.pending_off_)),
+  stream_end_seen_(std::move(o.stream_end_seen_)),
+  verify_stream_(std::move(o.verify_stream_))
 {}
 
 basic_gzip_decompress_reader& basic_gzip_decompress_reader::operator=(
@@ -140,6 +147,83 @@ basic_gzip_decompress_reader& basic_gzip_decompress_reader::operator=(
 }
 
 std::size_t basic_gzip_decompress_reader::read(void* data, std::size_t len) {
+  if (!strm_) throw std::logic_error("stream closed");
+
+  if (len == 0) return 0;
+  if (pending_.empty()) {
+    if (stream_end_seen_) return 0;
+    if (len >= in_pending_size) return read_(data, len);
+
+    fill_pending_();
+    assert(!pending_.empty() || stream_end_seen_);
+    if (pending_.empty()) return 0;
+  }
+
+  assert(pending_off_ < pending_.size());
+  const std::size_t plen = std::min(pending_.size() - pending_off_, len);
+  std::copy_n(pending_.begin() + pending_off_, plen,
+      reinterpret_cast<std::uint8_t*>(data));
+  pending_off_ += plen;
+  len -= plen;
+
+  if (pending_off_ == pending_.size()) {
+    pending_.clear();
+    pending_off_ = 0;
+  }
+
+  return plen;
+}
+
+bool basic_gzip_decompress_reader::at_end() const {
+  if (!strm_) throw std::logic_error("stream closed");
+
+  if (pending_.empty() && !stream_end_seen_) fill_pending_();
+  return pending_.empty() && stream_end_seen_;
+}
+
+void basic_gzip_decompress_reader::close() {
+  if (!strm_) throw std::logic_error("stream closed");
+
+  if (verify_stream_) {
+    while (!stream_end_seen_) {
+      pending_.clear(); // Discard data.
+      pending_off_ = 0;
+      fill_pending_();
+    }
+  }
+
+  strm_.reset();
+  reader_().close();
+}
+
+void basic_gzip_decompress_reader::from_source_() const {
+  const auto rpos = std::copy(
+      in_.end() - strm_->avail_in,
+      in_.end(),
+      in_.begin());
+  in_.resize(in_.capacity());
+  const auto rlen = const_cast<basic_gzip_decompress_reader&>(*this)
+      .reader_()
+      .read(&*rpos, in_.end() - rpos);
+  in_.erase(rpos + rlen, in_.end());
+
+  strm_->avail_in = in_.size();
+  strm_->next_in = in_.data();
+}
+
+void basic_gzip_decompress_reader::delayed_init_() const {
+  if (in_.capacity() == 0) in_.reserve(in_buffer_size);
+}
+
+void basic_gzip_decompress_reader::fill_pending_() const {
+  assert(pending_.empty());
+  assert(pending_off_ == 0);
+  pending_.resize(in_pending_size);
+  pending_.resize(read_(pending_.data(), pending_.size()));
+}
+
+std::size_t basic_gzip_decompress_reader::read_(
+    void* data, std::size_t len) const {
   delayed_init_();
 
   strm_->avail_out = len;
@@ -150,25 +234,9 @@ std::size_t basic_gzip_decompress_reader::read(void* data, std::size_t len) {
   if (ret == Z_NEED_DICT) ret = Z_DATA_ERROR; // We have no dict.
   assert(ret != Z_STREAM_ERROR);
   handle_zlib_error_(ret);
+  if (ret == Z_STREAM_END) stream_end_seen_ = true;
 
   return len - strm_->avail_out;
-}
-
-void basic_gzip_decompress_reader::from_source_() {
-  const auto rpos = std::copy(
-      in_.end() - strm_->avail_in,
-      in_.end(),
-      in_.begin());
-  in_.resize(in_.capacity());
-  const auto rlen = reader_().read(&*rpos, in_.end() - rpos);
-  in_.erase(rpos + rlen, in_.end());
-
-  strm_->avail_in = in_.size();
-  strm_->next_in = in_.data();
-}
-
-void basic_gzip_decompress_reader::delayed_init_() {
-  if (in_.capacity() == 0) in_.reserve(in_buffer_size);
 }
 
 
@@ -196,6 +264,7 @@ basic_gzip_compress_writer& basic_gzip_compress_writer::operator=(
 basic_gzip_compress_writer::~basic_gzip_compress_writer() noexcept {}
 
 std::size_t basic_gzip_compress_writer::write(const void* data, std::size_t len) {
+  if (!strm_) throw std::logic_error("stream closed");
   delayed_init_();
 
   strm_->avail_in = len;
@@ -211,6 +280,7 @@ std::size_t basic_gzip_compress_writer::write(const void* data, std::size_t len)
 }
 
 void basic_gzip_compress_writer::close() {
+  if (!strm_) throw std::logic_error("stream closed");
   delayed_init_();
 
   strm_->avail_in = 0;
@@ -225,6 +295,7 @@ void basic_gzip_compress_writer::close() {
 
   handle_zlib_error_(ret);
   strm_.reset();
+  writer_().close();
 }
 
 void basic_gzip_compress_writer::to_sink_() {

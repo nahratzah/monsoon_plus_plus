@@ -16,18 +16,9 @@ tsdata_v0::tsdata_v0(fd&& file)
 : file_(std::move(file)),
   gzipped_(is_gzip_file(positional_reader(file_)))
 {
-  tsfile_mimeheader hdr;
-  if (gzipped_) {
-    xdr::xdr_stream_reader<gzip_decompress_reader<positional_reader>> r =
-        gzip_decompress_reader<positional_reader>(positional_reader(file_));
-    hdr = tsfile_mimeheader(r);
-    std::tie(tp_begin_, tp_end_) = decode_tsfile_header(r);
-  } else {
-    xdr::xdr_stream_reader<positional_reader> r =
-        positional_reader(file_);
-    hdr = tsfile_mimeheader(r);
-    std::tie(tp_begin_, tp_end_) = decode_tsfile_header(r);
-  }
+  const auto r = make_xdr_istream();
+  const tsfile_mimeheader hdr = tsfile_mimeheader(*r);
+  std::tie(tp_begin_, tp_end_) = decode_tsfile_header(*r);
 
   if (hdr.major_version == MAJOR && hdr.minor_version <= MAX_MINOR) {
     /* SKIP: file is acceptable */
@@ -37,6 +28,27 @@ tsdata_v0::tsdata_v0(fd&& file)
 }
 
 tsdata_v0::~tsdata_v0() noexcept {}
+
+auto tsdata_v0::read_all() const -> std::vector<time_series> {
+  const auto r = make_xdr_istream();
+  auto hdr = tsfile_mimeheader(*r); // Decode and discard.
+  decode_tsfile_header(*r); // Decode and discard.
+
+  std::vector<time_series> result;
+  while (!r->at_end())
+    result.push_back(decode_time_series(*r));
+  return result;
+}
+
+auto tsdata_v0::make_xdr_istream() const -> std::unique_ptr<xdr::xdr_istream> {
+  if (gzipped_) {
+    return std::make_unique<xdr::xdr_stream_reader<gzip_decompress_reader<positional_reader>>>(
+        gzip_decompress_reader<positional_reader>(positional_reader(file_)));
+  } else {
+    return std::make_unique<xdr::xdr_stream_reader<positional_reader>>(
+        positional_reader(file_));
+  }
+}
 
 
 enum class metrickind : std::uint32_t {

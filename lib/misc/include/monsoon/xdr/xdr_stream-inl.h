@@ -30,10 +30,15 @@ noexcept(std::is_nothrow_move_constructible<Reader>())
 }
 
 template<typename Reader>
+bool xdr_stream_reader<Reader>::at_end() const {
+  return r_.at_end();
+}
+
+template<typename Reader>
 void xdr_stream_reader<Reader>::get_raw_bytes(void* buf, std::size_t len) {
   while (len > 0) {
     const std::size_t rlen = r_.read(buf, len);
-    if (rlen == 0) throw xdr_exception();
+    if (rlen == 0 && r_.at_end()) throw xdr_stream_end();
 
     len -= rlen;
     buf = reinterpret_cast<std::uint8_t*>(buf) + rlen;

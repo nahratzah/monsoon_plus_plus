@@ -16,7 +16,7 @@ class basic_gzip_decompress_reader
 : public stream_reader
 {
  protected:
-  basic_gzip_decompress_reader();
+  basic_gzip_decompress_reader(bool verify_stream = false);
   basic_gzip_decompress_reader(const basic_gzip_decompress_reader&) = delete;
   basic_gzip_decompress_reader(basic_gzip_decompress_reader&&) noexcept;
   basic_gzip_decompress_reader& operator=(
@@ -28,14 +28,22 @@ class basic_gzip_decompress_reader
   ~basic_gzip_decompress_reader() noexcept override;
 
   std::size_t read(void*, std::size_t) override;
+  bool at_end() const override;
+  void close() override;
 
  private:
-  void from_source_();
-  void delayed_init_();
+  void from_source_() const;
+  void delayed_init_() const;
+  void fill_pending_() const;
+  std::size_t read_(void*, std::size_t) const;
   virtual stream_reader& reader_() = 0;
 
   std::unique_ptr<z_stream_> strm_;
-  std::vector<std::uint8_t> in_;
+  mutable std::vector<std::uint8_t> in_;
+  mutable std::vector<std::uint8_t> pending_;
+  std::vector<std::uint8_t>::size_type pending_off_ = 0u;
+  mutable bool stream_end_seen_ = false;
+  bool verify_stream_ = false;
 };
 
 

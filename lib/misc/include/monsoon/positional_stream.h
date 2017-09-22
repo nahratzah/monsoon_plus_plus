@@ -13,15 +13,17 @@ class positional_reader
  public:
   positional_reader() = default;
   positional_reader(const positional_reader&) = default;
-  positional_reader(fd& fd, fd::offset_type = 0) noexcept;
+  positional_reader(const fd& fd, fd::offset_type = 0) noexcept;
   positional_reader& operator=(const positional_reader&) = default;
 
   ~positional_reader() noexcept override;
 
   std::size_t read(void*, std::size_t) override;
+  void close() override;
+  bool at_end() const override;
 
  private:
-  fd* fd_ = nullptr;
+  const fd* fd_ = nullptr;
   fd::offset_type off_ = 0;
 };
 
@@ -37,6 +39,7 @@ class positional_writer
   ~positional_writer() noexcept override;
 
   std::size_t write(const void*, std::size_t) override;
+  void close() override;
 
  private:
   fd* fd_ = nullptr;

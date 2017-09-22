@@ -149,7 +149,7 @@ inline OVERLAPPED make_overlapped(fd::offset_type off) {
   return overlapped;
 }
 
-auto fd::read_at(offset_type off, void* buf, std::size_t nbytes)
+auto fd::read_at(offset_type off, void* buf, std::size_t nbytes) const
 -> std::size_t {
   if (nbytes > std::numeric_limits<DWORD>::max())
     nbytes = std::numeric_limits<DWORD>::max();
@@ -281,7 +281,7 @@ auto fd::write(const void* buf, std::size_t nbytes) -> std::size_t {
   return rlen;
 }
 
-auto fd::read_at(offset_type off, void* buf, std::size_t nbytes)
+auto fd::read_at(offset_type off, void* buf, std::size_t nbytes) const
 -> std::size_t {
   const auto rlen = ::pread(handle_, buf, nbytes, off);
   if (rlen == -1) throw_errno_();
@@ -335,6 +335,10 @@ bool fd::can_read() const noexcept {
 
 bool fd::can_write() const noexcept {
   return *this && (mode_ == WRITE_ONLY || mode_ == READ_WRITE);
+}
+
+bool fd::at_end() const {
+  return offset() == size();
 }
 
 

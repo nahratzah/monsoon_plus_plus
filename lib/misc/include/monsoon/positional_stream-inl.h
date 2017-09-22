@@ -4,7 +4,7 @@
 namespace monsoon {
 
 
-inline positional_reader::positional_reader(fd& fd, fd::offset_type off)
+inline positional_reader::positional_reader(const fd& fd, fd::offset_type off)
 noexcept
 : fd_(&fd),
   off_(off)

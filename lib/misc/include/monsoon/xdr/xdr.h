@@ -69,6 +69,8 @@ class xdr_istream {
   template<typename SerFn, typename Acceptor>
       void accept_collection(SerFn, Acceptor);
 
+  virtual bool at_end() const = 0;
+
  private:
   virtual void get_raw_bytes(void*, std::size_t) = 0;
 };
@@ -131,7 +133,16 @@ class xdr_exception
 : public std::exception
 {
  public:
+  using std::exception::exception;
   ~xdr_exception() override;
+};
+
+class xdr_stream_end
+: public xdr_exception
+{
+ public:
+  using xdr_exception::xdr_exception;
+  ~xdr_stream_end() override;
 };
 
 
