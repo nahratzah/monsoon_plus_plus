@@ -1,5 +1,12 @@
 #include <monsoon/io/fd.h>
 
+#ifdef HAS_CXX_FILESYSTEM
+# include <filesystem>
+#else
+# include <boost/filesystem.hpp>
+#endif
+
+
 #if defined(WIN32)
 
 #include <Windows.h>
@@ -88,6 +95,73 @@ fd fd::create(const std::string& fname, open_mode mode) {
       FILE_ATTRIBUTE_NORMAL,
       nullptr);
   if (new_fd.handle_ == INVALID_HANDLE_VALUE) throw_last_error_();
+  new_fd.mode_ = READ_WRITE;
+  return new_fd;
+}
+
+fd fd::tmpfile(const std::string& prefix) {
+#if HAS_CXX_FILESYSTEM
+  namespace filesystem = ::std::filesystem;
+#else
+  namespace filesystem = ::boost::filesystem;
+#endif
+
+  filesystem::path prefix_path = prefix;
+
+  // Figure out the directory to use.
+  std::string dir;
+  if (prefix_path.has_parent_path()) {
+    dir = prefix_path.parent();
+  } else {
+#if __cplusplus >= 201703L // mutable std::string::data()
+    dir.resize(MAX_PATH + 1);
+    auto dirlen = GetTempPath(dir.size(), dir.data());
+    if (dirlen > dir.size()) {
+      dir.resize(dirlen + 1);
+      dirlen = GetTempPath(dir.size(), dir.data());
+    }
+    if (dirlen == 0) throw_last_error_();
+    assert(dirlen <= dir.size());
+    dir.resize(dirlen);
+#else
+    std::vector<char> dirbuf;
+    dirbuf.resize(MAX_PATH + 1);
+    auto dirlen = GetTempPath(dirbuf.size(), dirbuf.data());
+    if (dirlen > dirbuf.size()) {
+      dirbuf.resize(dirlen + 1);
+      dirlen = GetTempPath(dirbuf.size(), dirbuf.data());
+    }
+    if (dirlen == 0) throw_last_error_();
+    assert(dirlen <= dir.size());
+    dir.assign(std::copy(dirbuf.begin(), dirbuf.begin() + dirlen));
+#endif
+  }
+
+  // Figure out the temporary file name.
+  std::string name;
+#if __cplusplus >= 201703L // mutable std::string::data()
+  name.resize(MAX_PATH + 1);
+  GetTempFileName(dir.c_str(), prefix_path.filename().c_str(), 0, name.data());
+  const auto name_end = name.find('\0');
+  if (name_end != std::string::npos) name.resize(name_end);
+#else
+  std::vector<char> namebuf;
+  namebuf.resize(MAX_PATH + 1);
+  GetTempFileName(dir.c_str(), prefix_path.filename().c_str(), 0, namebuf.data());
+  name.assign(namebuf.data()); // zero-terminated string
+#endif
+
+  // Create the new file.
+  new_fd.handle_ = CreateFile(
+      fname.c_str(),
+      GENERIC_READ | GENERIC_WRITE,
+      0, // No sharing of tmp files.
+      nullptr,
+      CREATE_NEW,
+      FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE,
+      nullptr);
+  if (new_fd.handle_ == INVALID_HANDLE_VALUE) throw_last_error_();
+  new_fd.mode_ = READ_WRITE;
   return new_fd;
 }
 
@@ -212,6 +286,7 @@ void fd::swap(fd& o) noexcept {
 
 #else
 
+#include <cstdlib>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -287,9 +362,56 @@ fd fd::create(const std::string& fname, open_mode mode) {
       break;
   }
 
+  new_fd.mode_ = mode;
   new_fd.handle_ = ::open(fname.c_str(), fl);
   if (new_fd.handle_ == -1) throw_errno_();
   new_fd.fname_ = normalize(fname);
+  return new_fd;
+}
+
+fd fd::tmpfile(const std::string& prefix) {
+  using namespace std::literals;
+  static const std::string tmpl_replacement = "XXXXXX"s;
+
+#if HAS_CXX_FILESYSTEM
+  namespace filesystem = ::std::filesystem;
+#else
+  namespace filesystem = ::boost::filesystem;
+#endif
+
+  fd new_fd;
+
+  filesystem::path prefix_path = prefix + tmpl_replacement;
+  if (prefix_path.has_parent_path()) {
+    prefix_path = filesystem::absolute(prefix_path);
+  } else {
+    prefix_path = filesystem::absolute(
+        prefix_path,
+        filesystem::temp_directory_path());
+  }
+
+#if __cplusplus >= 201703L // std::string::data() is modifiable
+  std::string template_name = prefix_path;
+#else
+  const std::string ppstr = prefix_path.native();
+  std::vector<char> template_name(ppstr.begin(), ppstr.end());
+  template_name.push_back('\0');
+#endif
+
+#ifdef HAS_MKSTEMP
+  new_fd.handle_ = mkstemp(template_name.data());
+# if __cplusplus >= 201703L // template_name is a string
+  new_fd.fname_ = std::move(template_name);
+# else // template_name is a vector with a trailing zero-byte ('\0')
+  new_fd.fname_ = std::string(template_name.begin(), template_name.end() - 1);
+# endif
+#else
+  new_fd = fd::create(mktemp(template_name.data()));
+#endif
+
+  new_fd.mode_ = READ_WRITE;
+  assert(new_fd.fname_.substr(new_fd.fname_.length() - 6) != tmpl_replacement);
+  unlink(new_fd.fname_.c_str());
   return new_fd;
 }
 
@@ -367,12 +489,6 @@ void fd::swap(fd& o) noexcept {
 #endif
 
 
-#ifdef HAS_CXX_FILESYSTEM
-# include <filesystem>
-#else
-# include <boost/filesystem.hpp>
-#endif
-
 namespace monsoon {
 namespace io {
 
@@ -385,7 +501,7 @@ std::string fd::normalize(const std::string& fname) {
 #endif
 
   filesystem::path path = fname;
-  return boost::filesystem::canonical(path).native();
+  return filesystem::canonical(path).native();
 }
 
 bool fd::can_read() const noexcept {

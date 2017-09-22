@@ -1,5 +1,7 @@
 project (monsoon_misc)
 
+include (CheckFunctionExists)
+
 find_package (Boost REQUIRED)
 find_package (ZLIB REQUIRED)
 
@@ -9,6 +11,16 @@ if (STD_FILESYSTEM)
   add_definitions(-DHAS_CXX_FILESYSTEM)
 else ()
   find_package (Boost COMPONENTS filesystem REQUIRED)
+endif ()
+
+if (NOT WIN32)
+  CHECK_FUNCTION_EXISTS (mkstemp HAS_MKSTEMP)
+  mark_as_advanced (HAS_MKSTEMP)
+  if (HAS_MKSTEMP)
+    add_definitions(-DHAS_MKSTEMP)
+  else ()
+    message (WARNING "no mkstemp() function found")
+  endif ()
 endif ()
 
 include_directories (include)

@@ -40,6 +40,7 @@ class fd
   ~fd() noexcept;
 
   static fd create(const std::string&, open_mode = READ_WRITE);
+  static fd tmpfile(const std::string&);
 
   static std::string normalize(const std::string&);
 
