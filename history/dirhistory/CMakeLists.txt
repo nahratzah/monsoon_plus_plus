@@ -27,5 +27,11 @@ target_link_libraries (monsoon_dirhistory
 if (NOT STD_FILESYSTEM)
   target_link_libraries (monsoon_dirhistory ${Boost_FILESYSTEM_LIBRARY})
 endif ()
-set_property (TARGET monsoon_history PROPERTY VERSION "0.0")
-set_property (TARGET monsoon_history PROPERTY SOVERSION "0.0")
+set_property (TARGET monsoon_dirhistory PROPERTY VERSION "0.0")
+set_property (TARGET monsoon_dirhistory PROPERTY SOVERSION "0.0")
+
+install (TARGETS monsoon_dirhistory DESTINATION lib)
+install (FILES
+  include/monsoon/history/dir/dirhistory.h
+  include/monsoon/history/dir/dirhistory_export_.h
+  DESTINATION include/monsoon/history/dir)

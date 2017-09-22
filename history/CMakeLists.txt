@@ -11,4 +11,9 @@ target_link_libraries (monsoon_history monsoon_intf)
 set_property (TARGET monsoon_history PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_history PROPERTY SOVERSION "0.0")
 
+install (TARGETS monsoon_history DESTINATION lib)
+install (FILES
+  include/monsoon/history/collect_history.h
+  DESTINATION include/monsoon/history)
+
 add_subdirectory (dirhistory)

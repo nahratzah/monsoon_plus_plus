@@ -15,6 +15,13 @@ std::size_t positional_reader::read(void* buf, std::size_t len) {
   return rlen;
 }
 
+bool positional_reader::at_end() const {
+  if (fd_ == nullptr)
+    throw std::logic_error("cannot write without file descriptor");
+
+  return off_ == fd_->size();
+}
+
 void positional_reader::close() {
   if (fd_ == nullptr)
     throw std::logic_error("cannot write without file descriptor");
