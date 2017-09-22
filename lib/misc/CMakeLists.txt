@@ -46,6 +46,9 @@ set_property (TARGET monsoon_misc PROPERTY SOVERSION "0.0")
 
 install (TARGETS monsoon_misc DESTINATION lib)
 install (FILES
+  include/monsoon/misc_export_.h
+  DESTINATION include/monsoon)
+install (FILES
   include/monsoon/io/fd.h
   include/monsoon/io/gzip_stream.h
   include/monsoon/io/positional_stream-inl.h

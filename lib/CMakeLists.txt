@@ -11,6 +11,7 @@ set_property (TARGET monsoon_lib PROPERTY SOVERSION "0.0")
 
 install (TARGETS monsoon_lib DESTINATION lib)
 install (FILES
+  include/monsoon/lib_export_.h
   include/monsoon/any-inl.h
   include/monsoon/any.h
   include/monsoon/hash_support.h

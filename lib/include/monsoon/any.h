@@ -1,6 +1,7 @@
 #ifndef _ILIAS_ANY_H_
 #define _ILIAS_ANY_H_
 
+#include <monsoon/lib_export_.h>
 #include <monsoon/optional.h>
 #include <iosfwd>
 #include <stdexcept>
@@ -139,7 +140,7 @@ struct eq_<0, T...> {
 } /* namespace monsoon::impl */
 
 
-class any_error
+class monsoon_lib_export_ any_error
 : public std::runtime_error
 {
  public:

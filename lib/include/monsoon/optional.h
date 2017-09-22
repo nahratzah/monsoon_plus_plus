@@ -1,6 +1,7 @@
 #ifndef _ILIAS_OPTIONAL_H_
 #define _ILIAS_OPTIONAL_H_
 
+#include <monsoon/lib_export_.h>
 #include <type_traits>
 #include <stdexcept>
 #include <string>
@@ -9,7 +10,7 @@
 namespace monsoon {
 
 
-class optional_error
+class monsoon_lib_export_ optional_error
 : public std::runtime_error
 {
  public:
