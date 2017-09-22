@@ -19,5 +19,6 @@ if (UnitTest++_FOUND)
 
   add_executable (test_xdr_encdec xdr_encdec.cc)
   target_link_libraries (test_xdr_encdec monsoon_misc)
+  target_link_libraries (test_xdr_encdec UnitTest++)
   add_test (xdr_encdec test_xdr_encdec)
 endif ()
