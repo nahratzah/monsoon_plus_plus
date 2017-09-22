@@ -363,7 +363,7 @@ fd fd::create(const std::string& fname, open_mode mode) {
   }
 
   new_fd.mode_ = mode;
-  new_fd.handle_ = ::open(fname.c_str(), fl);
+  new_fd.handle_ = ::open(fname.c_str(), fl, 0666);
   if (new_fd.handle_ == -1) throw_errno_();
   new_fd.fname_ = normalize(fname);
   return new_fd;
