@@ -1,7 +1,7 @@
 project (monsoon_lib)
 
 include_directories (include)
-add_library (monsoon_lib SHARED
+add_library (monsoon_lib
   src/optional.cc
   src/any.cc
 )

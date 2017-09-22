@@ -4,6 +4,8 @@ include (CTest)
 
 include (CheckCXXCompilerFlag)
 
+option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+
 # Declare list variables.
 list (APPEND extra_libs)  # Libs against which to link all libraries.
 

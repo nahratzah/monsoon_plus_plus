@@ -14,7 +14,7 @@ include_directories ($<TARGET_PROPERTY:monsoon_history,INTERFACE_INCLUDE_DIRECTO
 if (NOT STD_FILESYSTEM)
   include_directories (${Boost_INCLUDE_DIR})
 endif ()
-add_library (monsoon_dirhistory SHARED
+add_library (monsoon_dirhistory
   src/dirhistory.cc
   src/tsdata_mime.cc
   src/v0/tsdata.cc

@@ -27,7 +27,7 @@ include_directories (include)
 include_directories (${Boost_INCLUDE_DIR})
 include_directories (${ZLIB_INCLUDE_DIRS})
 include_directories ($<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
-add_library (monsoon_misc SHARED
+add_library (monsoon_misc
   src/fd.cc
   src/stream.cc
   src/positional_stream.cc

@@ -4,7 +4,7 @@ find_package (Boost COMPONENTS date_time REQUIRED)
 include_directories (include)
 include_directories (${Boost_INCLUDE_DIR})
 include_directories($<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
-add_library (monsoon_intf SHARED
+add_library (monsoon_intf
   src/collector.cc
   src/group_name.cc
   src/metric_name.cc

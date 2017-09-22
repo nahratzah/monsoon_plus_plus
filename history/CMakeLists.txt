@@ -2,7 +2,7 @@ project (monsoon_history)
 
 include_directories (include)
 include_directories ($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
-add_library (monsoon_history SHARED
+add_library (monsoon_history
   src/collect_history.cc
 )
 target_include_directories(monsoon_history PUBLIC include)
