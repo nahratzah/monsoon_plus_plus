@@ -158,7 +158,7 @@ fd fd::tmpfile(const std::string& prefix) {
       0, // No sharing of tmp files.
       nullptr,
       CREATE_NEW,
-      FILE_ATTRIBUTE_NORMAL | FILE_FLAG_DELETE_ON_CLOSE,
+      FILE_ATTRIBUTE_TEMPORARY | FILE_FLAG_DELETE_ON_CLOSE,
       nullptr);
   if (new_fd.handle_ == INVALID_HANDLE_VALUE) throw_last_error_();
   new_fd.mode_ = READ_WRITE;
