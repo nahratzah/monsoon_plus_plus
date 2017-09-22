@@ -4,13 +4,14 @@
 #include <cstddef>
 #include <string>
 #include <monsoon/optional.h>
-#include <monsoon/stream.h>
+#include <monsoon/io/stream.h>
 
 #if defined(WIN32)
 # include <WinNT.h>
 #endif
 
 namespace monsoon {
+namespace io {
 
 
 class fd
@@ -77,6 +78,6 @@ inline void swap(fd& x, fd& y) noexcept {
 }
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
 
 #endif /* FD_H */

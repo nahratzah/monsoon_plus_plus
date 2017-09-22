@@ -1,4 +1,4 @@
-#include <monsoon/gzip_stream.h>
+#include <monsoon/io/gzip_stream.h>
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -10,6 +10,7 @@
 #include <zlib.h>
 
 namespace monsoon {
+namespace io {
 
 
 bool is_gzip_file(stream_reader&& file) {
@@ -318,4 +319,4 @@ void basic_gzip_compress_writer::delayed_init_() {
 }
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */

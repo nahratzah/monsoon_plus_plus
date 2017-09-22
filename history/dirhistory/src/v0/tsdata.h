@@ -7,7 +7,7 @@
 #include <string>
 #include <tuple>
 #include <vector>
-#include <monsoon/fd.h>
+#include <monsoon/io/fd.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
@@ -31,7 +31,7 @@ class monsoon_dirhistory_local_ tsdata_v0
   static const std::uint16_t MAJOR;
   static const std::uint16_t MAX_MINOR;
 
-  tsdata_v0(fd&& file);
+  tsdata_v0(io::fd&& file);
   ~tsdata_v0() noexcept;
 
   auto read_all() const -> std::vector<time_series>;
@@ -39,7 +39,7 @@ class monsoon_dirhistory_local_ tsdata_v0
  private:
   auto make_xdr_istream() const -> std::unique_ptr<xdr::xdr_istream>;
 
-  fd file_;
+  io::fd file_;
   bool gzipped_;
   time_point tp_begin_, tp_end_;
 };

@@ -1,11 +1,12 @@
 #ifndef MONSOON_GZIP_STREAM_H
 #define MONSOON_GZIP_STREAM_H
 
-#include <monsoon/stream.h>
+#include <monsoon/io/stream.h>
 #include <type_traits>
 #include <vector>
 
 namespace monsoon {
+namespace io {
 
 
 struct z_stream_;
@@ -138,6 +139,6 @@ class gzip_compress_writer
 };
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
 
 #endif /* MONSOON_GZIP_STREAM_H */

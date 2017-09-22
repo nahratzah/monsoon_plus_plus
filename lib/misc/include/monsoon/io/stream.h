@@ -4,6 +4,7 @@
 #include <cstdlib>
 
 namespace monsoon {
+namespace io {
 
 
 class stream_reader {
@@ -22,6 +23,6 @@ class stream_writer {
 };
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
 
 #endif /* MONSOON_STREAM_H */

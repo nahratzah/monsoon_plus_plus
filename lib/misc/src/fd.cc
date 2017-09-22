@@ -1,4 +1,4 @@
-#include <monsoon/fd.h>
+#include <monsoon/io/fd.h>
 
 #if defined(WIN32)
 
@@ -9,6 +9,7 @@
 #include <vector>
 
 namespace monsoon {
+namespace io {
 namespace {
 
 
@@ -19,7 +20,7 @@ static void throw_last_error_() {
 }
 
 
-} /* namespace monsoon::<anonymous> */
+} /* namespace monsoon::io::<anonymous> */
 
 
 fd::fd() noexcept
@@ -179,7 +180,7 @@ void fd::swap(fd& o) noexcept {
 }
 
 
-} /* namespace monsoon::history */
+}} /* namespace monsoon::io */
 
 #else
 
@@ -191,6 +192,7 @@ void fd::swap(fd& o) noexcept {
 #include <system_error>
 
 namespace monsoon {
+namespace io {
 namespace {
 
 
@@ -199,7 +201,7 @@ static void throw_errno_() {
 }
 
 
-} /* namespace monsoon::<anonymous> */
+} /* namespace monsoon::io::<anonymous> */
 
 fd::fd() noexcept
 : handle_(-1)
@@ -304,7 +306,7 @@ void fd::swap(fd& o) noexcept {
 }
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
 
 #endif
 
@@ -316,6 +318,7 @@ void fd::swap(fd& o) noexcept {
 #endif
 
 namespace monsoon {
+namespace io {
 
 
 std::string fd::normalize(const std::string& fname) {
@@ -342,4 +345,4 @@ bool fd::at_end() const {
 }
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */

@@ -1,10 +1,11 @@
 #ifndef MONSOON_POSITIONAL_STREAM_H
 #define MONSOON_POSITIONAL_STREAM_H
 
-#include <monsoon/fd.h>
-#include <monsoon/stream.h>
+#include <monsoon/io/fd.h>
+#include <monsoon/io/stream.h>
 
 namespace monsoon {
+namespace io {
 
 
 class positional_reader
@@ -47,7 +48,7 @@ class positional_writer
 };
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
 
 #include "positional_stream-inl.h"
 

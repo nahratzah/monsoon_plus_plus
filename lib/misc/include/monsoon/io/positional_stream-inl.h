@@ -2,6 +2,7 @@
 #define MONSOON_POSITIONAL_STREAM_INL_H
 
 namespace monsoon {
+namespace io {
 
 
 inline positional_reader::positional_reader(const fd& fd, fd::offset_type off)
@@ -17,6 +18,6 @@ noexcept
 {}
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
 
 #endif /* MONSOON_POSITIONAL_STREAM_INL_H */

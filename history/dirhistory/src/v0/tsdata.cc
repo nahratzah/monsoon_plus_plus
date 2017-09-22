@@ -1,7 +1,7 @@
 #include "tsdata.h"
 #include "../tsdata_mime.h"
-#include <monsoon/gzip_stream.h>
-#include <monsoon/positional_stream.h>
+#include <monsoon/io/gzip_stream.h>
+#include <monsoon/io/positional_stream.h>
 #include <monsoon/xdr/xdr_stream.h>
 
 namespace monsoon {
@@ -12,9 +12,9 @@ namespace v0 {
 const std::uint16_t tsdata_v0::MAJOR = 0u;
 const std::uint16_t tsdata_v0::MAX_MINOR = 1u;
 
-tsdata_v0::tsdata_v0(fd&& file)
+tsdata_v0::tsdata_v0(io::fd&& file)
 : file_(std::move(file)),
-  gzipped_(is_gzip_file(positional_reader(file_)))
+  gzipped_(io::is_gzip_file(io::positional_reader(file_)))
 {
   const auto r = make_xdr_istream();
   const tsfile_mimeheader hdr = tsfile_mimeheader(*r);
@@ -42,11 +42,11 @@ auto tsdata_v0::read_all() const -> std::vector<time_series> {
 
 auto tsdata_v0::make_xdr_istream() const -> std::unique_ptr<xdr::xdr_istream> {
   if (gzipped_) {
-    return std::make_unique<xdr::xdr_stream_reader<gzip_decompress_reader<positional_reader>>>(
-        gzip_decompress_reader<positional_reader>(positional_reader(file_)));
+    return std::make_unique<xdr::xdr_stream_reader<io::gzip_decompress_reader<io::positional_reader>>>(
+        io::gzip_decompress_reader<io::positional_reader>(io::positional_reader(file_)));
   } else {
-    return std::make_unique<xdr::xdr_stream_reader<positional_reader>>(
-        positional_reader(file_));
+    return std::make_unique<xdr::xdr_stream_reader<io::positional_reader>>(
+        io::positional_reader(file_));
   }
 }
 

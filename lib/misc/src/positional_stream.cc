@@ -1,6 +1,7 @@
-#include <monsoon/positional_stream.h>
+#include <monsoon/io/positional_stream.h>
 
 namespace monsoon {
+namespace io {
 
 
 positional_reader::~positional_reader() noexcept {}
@@ -41,4 +42,4 @@ void positional_writer::close() {
 }
 
 
-} /* namespace monsoon */
+}} /* namespace monsoon::io */
