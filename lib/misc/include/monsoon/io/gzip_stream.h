@@ -1,6 +1,7 @@
 #ifndef MONSOON_GZIP_STREAM_H
 #define MONSOON_GZIP_STREAM_H
 
+#include <monsoon/misc_export_.h>
 #include <monsoon/io/stream.h>
 #include <type_traits>
 #include <vector>
@@ -11,9 +12,9 @@ namespace io {
 
 struct z_stream_;
 
-bool is_gzip_file(stream_reader&&);
+monsoon_misc_export_ bool is_gzip_file(stream_reader&&);
 
-class basic_gzip_decompress_reader
+class monsoon_misc_export_ basic_gzip_decompress_reader
 : public stream_reader
 {
  protected:
@@ -33,10 +34,10 @@ class basic_gzip_decompress_reader
   void close() override;
 
  private:
-  void from_source_() const;
-  void delayed_init_() const;
-  void fill_pending_() const;
-  std::size_t read_(void*, std::size_t) const;
+  monsoon_misc_local_ void from_source_() const;
+  monsoon_misc_local_ void delayed_init_() const;
+  monsoon_misc_local_ void fill_pending_() const;
+  monsoon_misc_local_ std::size_t read_(void*, std::size_t) const;
   virtual stream_reader& reader_() = 0;
 
   std::unique_ptr<z_stream_> strm_;
@@ -48,7 +49,7 @@ class basic_gzip_decompress_reader
 };
 
 
-class basic_gzip_compress_writer
+class monsoon_misc_export_ basic_gzip_compress_writer
 : public stream_writer
 {
  protected:
@@ -68,8 +69,8 @@ class basic_gzip_compress_writer
   void close() override;
 
  private:
-  void to_sink_();
-  void delayed_init_();
+  monsoon_misc_local_ void to_sink_();
+  monsoon_misc_local_ void delayed_init_();
   virtual stream_writer& writer_() = 0;
 
   std::unique_ptr<z_stream_> strm_;

@@ -1,6 +1,7 @@
 #ifndef MONSOON_POSITIONAL_STREAM_H
 #define MONSOON_POSITIONAL_STREAM_H
 
+#include <monsoon/misc_export_.h>
 #include <monsoon/io/fd.h>
 #include <monsoon/io/stream.h>
 
@@ -8,7 +9,7 @@ namespace monsoon {
 namespace io {
 
 
-class positional_reader
+class monsoon_misc_export_ positional_reader
 : public stream_reader
 {
  public:
@@ -28,7 +29,7 @@ class positional_reader
   fd::offset_type off_ = 0;
 };
 
-class positional_writer
+class monsoon_misc_export_ positional_writer
 : public stream_writer
 {
  public:

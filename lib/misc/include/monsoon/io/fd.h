@@ -1,6 +1,7 @@
 #ifndef FD_H
 #define FD_H
 
+#include <monsoon/misc_export_.h>
 #include <cstddef>
 #include <string>
 #include <monsoon/optional.h>
@@ -14,7 +15,7 @@ namespace monsoon {
 namespace io {
 
 
-class fd
+class monsoon_misc_export_ fd
 : public stream_reader,
   public stream_writer
 {

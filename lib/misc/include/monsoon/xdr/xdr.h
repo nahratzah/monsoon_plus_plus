@@ -1,6 +1,7 @@
 #ifndef MONSOON_XDR_XDR_H
 #define MONSOON_XDR_XDR_H
 
+#include <monsoon/misc_export_.h>
 #include <array>
 #include <cstdint>
 #include <iterator>
@@ -16,7 +17,7 @@ namespace monsoon {
 namespace xdr {
 
 
-class xdr_istream {
+class monsoon_misc_export_ xdr_istream {
  public:
   virtual ~xdr_istream() noexcept;
 
@@ -76,7 +77,7 @@ class xdr_istream {
   virtual void get_raw_bytes(void*, std::size_t) = 0;
 };
 
-class xdr_ostream {
+class monsoon_misc_export_ xdr_ostream {
  public:
   virtual ~xdr_ostream() noexcept;
 
@@ -132,7 +133,7 @@ class xdr_ostream {
   void put_padding(std::size_t);
 };
 
-class xdr_exception
+class monsoon_misc_export_ xdr_exception
 : public std::exception
 {
  public:
@@ -140,7 +141,7 @@ class xdr_exception
   ~xdr_exception() override;
 };
 
-class xdr_stream_end
+class monsoon_misc_export_ xdr_stream_end
 : public xdr_exception
 {
  public:
