@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <iterator>
 #include <limits>
 #include <utility>
 #include <boost/endian/conversion.hpp>
@@ -146,7 +147,7 @@ template<typename Alloc>
 inline auto xdr_istream::get_opaque_n(std::size_t len, const Alloc& alloc)
 -> std::vector<std::uint8_t, Alloc> {
   std::vector<std::uint8_t, Alloc> result =
-      std::basic_string<std::uint8_t, Alloc>(alloc);
+      std::vector<std::uint8_t, Alloc>(alloc);
 
   if (len == 0) return result;
   const std::size_t rounded_len = // len, rounded up to a multiple of 4
@@ -165,7 +166,7 @@ inline auto xdr_istream::get_opaque_n(std::size_t len, const Alloc& alloc)
 template<typename Alloc>
 inline auto xdr_istream::get_opaque(const Alloc& alloc)
 -> std::vector<std::uint8_t, Alloc> {
-  return get_bytes(get_uint32(), alloc);
+  return get_opaque_n(get_uint32(), alloc);
 }
 
 template<std::size_t Len>
@@ -322,6 +323,16 @@ inline void xdr_ostream::put_string(std::string_view s) {
   put_raw_bytes(s.data(), s.length());
   if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4u);
 }
+#else
+inline void xdr_ostream::put_string(const char* s) {
+  std::size_t len = std::strlen(s);
+  if (len > 0xffffffffu)
+    throw xdr_exception();
+
+  put_uint32(static_cast<uint32_t>(len));
+  put_raw_bytes(s, len);
+  if (len % 4u != 0u) put_padding(4u - len % 4u);
+}
 #endif
 
 template<typename Alloc>
@@ -453,6 +464,14 @@ template<typename Alloc>
 inline auto xdr_bytevector_ostream<Alloc>::as_vector() const noexcept
 -> const vector_type& {
   return v_;
+}
+
+template<typename Alloc>
+inline auto xdr_bytevector_ostream<Alloc>::put_raw_bytes(const void* buf,
+    std::size_t len)
+-> void {
+  std::copy_n(reinterpret_cast<const std::uint8_t*>(buf), len,
+      std::back_inserter(v_));
 }
 
 

@@ -96,6 +96,8 @@ class monsoon_misc_export_ xdr_ostream {
 
 #if __has_include(<string_view>)
   void put_string(std::string_view);
+#else
+  void put_string(const char*);
 #endif
   template<typename Alloc>
   void put_string(
