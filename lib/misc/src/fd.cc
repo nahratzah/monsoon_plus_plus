@@ -411,7 +411,7 @@ fd fd::tmpfile(const std::string& prefix) {
 
   new_fd.mode_ = READ_WRITE;
   assert(new_fd.fname_.substr(new_fd.fname_.length() - 6) != tmpl_replacement);
-  unlink(new_fd.fname_.c_str());
+  unlink(new_fd.fname_.c_str()); // Unchecked return
   return new_fd;
 }
 
