@@ -36,8 +36,10 @@ class fd
   fd() noexcept;
   fd(const fd&) = delete;
   fd(fd&&) noexcept;
-  fd(const std::string& path, open_mode);
+  fd(const std::string&, open_mode);
   ~fd() noexcept;
+
+  static fd create(const std::string&, open_mode = READ_WRITE);
 
   static std::string normalize(const std::string&);
 

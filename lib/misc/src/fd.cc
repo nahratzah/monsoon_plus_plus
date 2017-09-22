@@ -63,6 +63,34 @@ fd::~fd() noexcept {
   close();
 }
 
+fd fd::create(const std::string& fname, open_mode mode) {
+  fd new_fd;
+
+  DWORD dwDesiredAccess = 0;
+  switch (mode) {
+    case READ_ONLY:
+      dwDesiredAccess |= GENERIC_READ;
+      break;
+    case WRITE_ONLY:
+      dwDesiredAccess |= GENERIC_WRITE;
+      break;
+    case READ_WRITE:
+      dwDesiredAccess |= GENERIC_READ | GENERIC_WRITE;
+      break;
+  }
+
+  new_fd.handle_ = CreateFile(
+      fname.c_str(),
+      dwDesiredAccess,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr,
+      CREATE_NEW,
+      FILE_ATTRIBUTE_NORMAL,
+      nullptr);
+  if (new_fd.handle_ == INVALID_HANDLE_VALUE) throw_last_error_();
+  return new_fd;
+}
+
 void fd::close() {
   if (handle_ != INVALID_HANDLE_VALUE) {
     CloseHandle(handle_);
@@ -217,6 +245,9 @@ fd::fd(const std::string& fname, open_mode mode)
   mode_(mode)
 {
   int fl = 0;
+#ifdef O_CLOEXEC
+  fl |= O_CLOEXEC;
+#endif
   switch (mode) {
     case READ_ONLY:
       fl |= O_RDONLY;
@@ -235,6 +266,31 @@ fd::fd(const std::string& fname, open_mode mode)
 
 fd::~fd() noexcept {
   close();
+}
+
+fd fd::create(const std::string& fname, open_mode mode) {
+  fd new_fd;
+
+  int fl = O_CREAT | O_EXCL;
+#ifdef O_CLOEXEC
+  fl |= O_CLOEXEC;
+#endif
+  switch (mode) {
+    case READ_ONLY:
+      fl |= O_RDONLY;
+      break;
+    case WRITE_ONLY:
+      fl |= O_WRONLY;
+      break;
+    case READ_WRITE:
+      fl |= O_RDWR;
+      break;
+  }
+
+  new_fd.handle_ = ::open(fname.c_str(), fl);
+  if (new_fd.handle_ == -1) throw_errno_();
+  new_fd.fname_ = normalize(fname);
+  return new_fd;
 }
 
 void fd::close() {
