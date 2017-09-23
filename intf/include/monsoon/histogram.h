@@ -11,6 +11,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <initializer_list>
 
 namespace monsoon {
 
@@ -84,6 +85,7 @@ class monsoon_intf_export_ histogram {
   histogram(const histogram&) = default;
   histogram(histogram&&) noexcept;
   template<typename Iter> histogram(Iter, Iter);
+  histogram(std::initializer_list<std::pair<range, std::double_t>>);
 
   std::map<range, std::double_t> map() const;
   const elems_vector& data() const noexcept;

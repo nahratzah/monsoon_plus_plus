@@ -78,6 +78,11 @@ histogram::histogram(Iter b, Iter e) {
   fixup_immed_unsorted_();
 }
 
+inline histogram::histogram(
+    std::initializer_list<std::pair<range, std::double_t>> il)
+: histogram(il.begin(), il.end())
+{}
+
 inline auto histogram::data() const noexcept -> const elems_vector& {
   return elems_;
 }

@@ -20,6 +20,14 @@ tags::tags(Iter b, Iter e)
 : map_(b, e)
 {}
 
+inline tags::tags(map_type map) noexcept
+: map_(std::move(map))
+{}
+
+inline tags::tags(std::initializer_list<map_type::value_type> il)
+: map_(il)
+{}
+
 inline auto tags::empty() const noexcept -> bool {
   return map_.empty();
 }

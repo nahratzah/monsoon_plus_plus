@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <functional>
 #include <unordered_map>
+#include <initializer_list>
 
 namespace monsoon {
 
@@ -23,6 +24,8 @@ class monsoon_intf_export_ time_series_value {
   time_series_value& operator=(time_series_value&&) noexcept;
 
   template<typename Iter> time_series_value(group_name, Iter, Iter);
+  time_series_value(group_name, metric_map) noexcept;
+  time_series_value(group_name, std::initializer_list<metric_map::value_type>);
 
   const group_name& get_name() const noexcept;
   const metric_map& get_metrics() const noexcept;

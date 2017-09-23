@@ -25,6 +25,8 @@ class monsoon_intf_export_ tags {
   tags& operator=(tags&&) noexcept;
 
   template<typename Iter> tags(Iter, Iter);
+  tags(map_type) noexcept;
+  tags(std::initializer_list<map_type::value_type>);
 
   bool empty() const noexcept;
   const map_type& get_map() const noexcept;
