@@ -8,10 +8,16 @@ using monsoon::history::tsdata;
 
 std::string SAMPLE_DATA_DIR;
 
+inline auto expect_version(std::uint16_t maj, std::uint16_t min)
+-> std::tuple<std::uint16_t, std::uint16_t> {
+  return { maj, min };
+}
+
 TEST(read_tsdata_v0) {
   auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v0.tsd");
   REQUIRE CHECK_EQUAL(true, tsd != nullptr);
 
+  CHECK_EQUAL(expect_version(0u, 1u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
 }
 

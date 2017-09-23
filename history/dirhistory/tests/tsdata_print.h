@@ -2,6 +2,8 @@
 #define TSDATA_PRINT_H
 
 #include <ostream>
+#include <cstdint>
+#include <tuple>
 #include <type_traits>
 #include <monsoon/time_series.h>
 
@@ -55,6 +57,28 @@ inline auto operator<< (ostream& out, const monsoon::time_series& ts) -> ostream
 
 inline auto operator<< (ostream& out, const monsoon::time_series_value& tsv) -> ostream& {
   out << tsv.get_name() << ": " << tsv.get_metrics();
+  return out;
+}
+
+template<size_t Idx, typename... T>
+auto print_tuple(ostream& out, const std::tuple<T...>& t)
+-> std::enable_if_t<(Idx < sizeof...(T)), void> {
+  if (Idx > 0) out << ", ";
+  out << get<Idx>(t);
+  print_tuple<Idx + 1>(out, t);
+}
+
+template<size_t Idx, typename... T>
+auto print_tuple(ostream& out, const std::tuple<T...>& t)
+-> std::enable_if_t<(Idx == sizeof...(T)), void> {
+  return;
+}
+
+template<typename... T>
+auto operator<< (ostream& out, const std::tuple<T...>& t) -> ostream& {
+  out << "(";
+  print_tuple<0>(out, t);
+  out << ")";
   return out;
 }
 

@@ -6,6 +6,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <tuple>
 #include <monsoon/time_series.h>
 
 namespace monsoon {
@@ -20,6 +21,8 @@ class monsoon_dirhistory_export_ tsdata {
   static auto open(const std::string&, io::fd::open_mode = io::fd::READ_ONLY)
       -> std::shared_ptr<tsdata>;
 
+  virtual auto version() const noexcept
+      -> std::tuple<std::uint16_t, std::uint16_t> = 0;
   virtual std::vector<time_series> read_all() const = 0;
 };
 

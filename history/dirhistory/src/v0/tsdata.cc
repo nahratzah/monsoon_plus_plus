@@ -19,6 +19,7 @@ tsdata_v0::tsdata_v0(io::fd&& file)
 {
   const auto r = make_xdr_istream(false);
   const tsfile_mimeheader hdr = tsfile_mimeheader(*r);
+  minor_version = hdr.minor_version;
   std::tie(tp_begin_, tp_end_) = decode_tsfile_header(*r);
 
   if (hdr.major_version == MAJOR && hdr.minor_version <= MAX_MINOR) {
@@ -90,6 +91,11 @@ std::shared_ptr<tsdata_v0> tsdata_v0::write_all(
     // XXX delete file
     throw;
   }
+}
+
+auto tsdata_v0::version() const noexcept
+-> std::tuple<std::uint16_t, std::uint16_t> {
+  return std::make_tuple(MAJOR, minor_version);
 }
 
 auto tsdata_v0::make_xdr_istream(bool validate) const
