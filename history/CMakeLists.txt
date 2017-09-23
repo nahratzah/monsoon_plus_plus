@@ -13,6 +13,7 @@ set_property (TARGET monsoon_history PROPERTY SOVERSION "0.0")
 
 install (TARGETS monsoon_history DESTINATION lib)
 install (FILES
+  include/monsoon/history/history_export_.h
   include/monsoon/history/collect_history.h
   DESTINATION include/monsoon/history)
 

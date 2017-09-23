@@ -368,7 +368,7 @@ inline void xdr_ostream::put_opaque(
 }
 
 template<std::size_t Len>
-inline void put_array(const std::array<std::uint8_t, Len> arr) {
+inline void xdr_ostream::put_array(const std::array<std::uint8_t, Len>& arr) {
   put_raw_bytes(arr.data(), arr.size());
   if (arr.size() % 4u != 0u) put_padding(4u - arr.size() % 4);
 }
