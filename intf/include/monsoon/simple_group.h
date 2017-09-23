@@ -21,6 +21,8 @@ class monsoon_intf_export_ simple_group {
   simple_group& operator=(const simple_group&) = default;
   simple_group& operator=(simple_group&&) noexcept;
 
+  explicit simple_group(path_type&&) noexcept;
+  explicit simple_group(const path_type&);
   simple_group(std::initializer_list<const char*>);
   simple_group(std::initializer_list<std::string>);
   template<typename Iter> simple_group(Iter, Iter);

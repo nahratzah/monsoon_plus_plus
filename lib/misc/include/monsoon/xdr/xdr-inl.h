@@ -416,12 +416,21 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
   put_raw_bytes(buffer.data(), buffer.size());
 }
 
+inline void xdr_ostream::put_raw_data(const void* buf, std::size_t len) {
+  put_raw_bytes(buf, len);
+}
+
 inline void xdr_ostream::put_padding(std::size_t n) {
   assert(n < 4);
   std::array<std::uint8_t, 4> pad;
   std::fill(pad.begin(), pad.end(), static_cast<std::uint8_t>(0u));
   put_raw_bytes(pad.data(), n);
 }
+
+
+inline xdr_exception::xdr_exception(const char* what)
+: what_(what)
+{}
 
 
 template<typename Alloc>
@@ -464,6 +473,11 @@ template<typename Alloc>
 inline auto xdr_bytevector_ostream<Alloc>::as_vector() const noexcept
 -> const vector_type& {
   return v_;
+}
+
+template<typename Alloc>
+inline void xdr_bytevector_ostream<Alloc>::copy_to(xdr_ostream& out) const {
+  out.put_raw_data(v_.data(), v_.size());
 }
 
 template<typename Alloc>

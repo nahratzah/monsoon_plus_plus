@@ -16,6 +16,14 @@ inline auto metric_name::operator=(metric_name&& other) noexcept
   return *this;
 }
 
+inline metric_name::metric_name(path_type&& p) noexcept
+: path_(std::move(p))
+{}
+
+inline metric_name::metric_name(const path_type& p)
+: path_(p)
+{}
+
 inline metric_name::metric_name(std::initializer_list<const char*> init)
 : path_(init.begin(), init.end())
 {}

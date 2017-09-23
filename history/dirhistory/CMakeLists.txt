@@ -18,6 +18,7 @@ add_library (monsoon_dirhistory
   src/dirhistory.cc
   src/tsdata_mime.cc
   src/v0/tsdata.cc
+  src/v1/tsdata.cc
   src/tsdata.cc
 )
 target_link_libraries (monsoon_dirhistory ${extra_libs})

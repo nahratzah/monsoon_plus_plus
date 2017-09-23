@@ -4,6 +4,7 @@
 #include <monsoon/xdr/xdr_stream.h>
 #include "tsdata_mime.h"
 #include "v0/tsdata.h"
+#include "v1/tsdata.h"
 
 namespace monsoon {
 namespace history {
@@ -45,9 +46,9 @@ auto tsdata::open(const std::string& fname, io::fd::open_mode mode)
   switch (hdr.major_version) {
     case 0u:
       return std::make_shared<v0::tsdata_v0>(std::move(fd));
-#if 0
     case 1u:
-      // XXX implement v1 format
+      return std::make_shared<v1::tsdata_v1>(std::move(fd));
+#if 0
     case 2u:
       // XXX implement v2 format
 #endif

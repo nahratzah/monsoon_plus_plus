@@ -128,6 +128,8 @@ class monsoon_misc_export_ xdr_ostream {
             typename std::iterator_traits<Iter>::iterator_category>::value,
           void>;
 
+  void put_raw_data(const void*, std::size_t);
+
   virtual void close() = 0;
 
  private:
@@ -139,8 +141,16 @@ class monsoon_misc_export_ xdr_exception
 : public std::exception
 {
  public:
-  using std::exception::exception;
+  xdr_exception();
+  xdr_exception(const xdr_exception&) = default;
+  xdr_exception& operator=(const xdr_exception&) = default;
+  xdr_exception(const char* what);
   ~xdr_exception() override;
+
+  const char* what() const noexcept override;
+
+ private:
+  const char* what_ = nullptr;
 };
 
 class monsoon_misc_export_ xdr_stream_end
@@ -174,6 +184,7 @@ class xdr_bytevector_ostream
 
   vector_type& as_vector() noexcept;
   const vector_type& as_vector() const noexcept;
+  void copy_to(xdr_ostream&) const;
 
  private:
   void put_raw_bytes(const void*, std::size_t) override;
