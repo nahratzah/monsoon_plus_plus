@@ -4,10 +4,13 @@
 
 using monsoon::history::tsdata;
 
-std::string SAMPLE_DATA;
+std::string SAMPLE_DATA_DIR;
 
 TEST(read_tsdata_v0) {
-  auto tsd = tsdata::open(SAMPLE_DATA + "/tsdata_v0.tsd");
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v0.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
 }
 
 int main(int argc, char** argv) {
@@ -15,7 +18,7 @@ int main(int argc, char** argv) {
     std::cerr << "Require argument: path to sample data directory.\n";
     return 1;
   }
-  SAMPLE_DATA = argv[1];
+  SAMPLE_DATA_DIR = argv[1];
 
   return UnitTest::RunAllTests();
 }

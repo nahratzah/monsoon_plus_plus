@@ -5,6 +5,8 @@
 #include <monsoon/io/fd.h>
 #include <memory>
 #include <string>
+#include <vector>
+#include <monsoon/time_series.h>
 
 namespace monsoon {
 namespace history {
@@ -17,6 +19,8 @@ class monsoon_dirhistory_export_ tsdata {
   monsoon_dirhistory_export_
   static auto open(const std::string&, io::fd::open_mode = io::fd::READ_ONLY)
       -> std::shared_ptr<tsdata>;
+
+  virtual std::vector<time_series> read_all() const = 0;
 };
 
 
