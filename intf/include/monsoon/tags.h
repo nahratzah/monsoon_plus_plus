@@ -1,6 +1,7 @@
 #ifndef MONSOON_TAGS_H
 #define MONSOON_TAGS_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/optional.h>
 #include <cstddef>
@@ -12,7 +13,7 @@
 namespace monsoon {
 
 
-class tags {
+class monsoon_intf_export_ tags {
  public:
   using map_type = std::map<std::string, metric_value>;
   using iterator = map_type::const_iterator;
@@ -46,6 +47,7 @@ class tags {
   map_type map_;
 };
 
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream&, const tags&);
 
 
@@ -60,6 +62,7 @@ struct hash<monsoon::tags> {
   using argument_type = const monsoon::tags&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::tags&) const noexcept;
 };
 

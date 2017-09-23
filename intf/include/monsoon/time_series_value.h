@@ -1,6 +1,7 @@
 #ifndef MONSOON_TIME_SERIES_VALUE_H
 #define MONSOON_TIME_SERIES_VALUE_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
@@ -11,7 +12,7 @@
 namespace monsoon {
 
 
-class time_series_value {
+class monsoon_intf_export_ time_series_value {
  public:
   using metric_map = std::unordered_map<metric_name, metric_value>;
 
@@ -47,6 +48,7 @@ struct hash<monsoon::time_series_value> {
   using argument_type = const monsoon::time_series_value&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::time_series_value&) const noexcept;
 };
 

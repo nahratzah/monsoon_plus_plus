@@ -1,6 +1,7 @@
 #ifndef MONSOON_PUSH_PROCESSOR_H
 #define MONSOON_PUSH_PROCESSOR_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/time_series.h>
 #include <monsoon/alert.h>
 #include <unordered_set>
@@ -8,7 +9,7 @@
 namespace monsoon {
 
 
-class push_processor {
+class monsoon_intf_export_ push_processor {
  public:
   push_processor() = default;
   virtual ~push_processor() noexcept;

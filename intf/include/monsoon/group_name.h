@@ -1,6 +1,7 @@
 #ifndef MONSOON_GROUP_NAME_H
 #define MONSOON_GROUP_NAME_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/tags.h>
 #include <cstddef>
@@ -10,7 +11,7 @@
 namespace monsoon {
 
 
-class group_name {
+class monsoon_intf_export_ group_name {
  public:
   group_name() = default;
   group_name(const group_name&) = default;
@@ -48,6 +49,7 @@ struct hash<monsoon::group_name> {
   using argument_type = const monsoon::group_name&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::group_name&) const noexcept;
 };
 

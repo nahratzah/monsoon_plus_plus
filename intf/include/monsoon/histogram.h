@@ -1,6 +1,7 @@
 #ifndef MONSOON_HISTOGRAM_H
 #define MONSOON_HISTOGRAM_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/optional.h>
 #include <cmath>
 #include <functional>
@@ -34,7 +35,7 @@ histogram& operator*=(histogram&, std::double_t);
 histogram& operator/=(histogram&, std::double_t);
 
 
-class histogram {
+class monsoon_intf_export_ histogram {
   friend histogram operator-(histogram) noexcept;
   friend histogram operator+(histogram&&, const histogram&);
   friend histogram operator+(const histogram&, histogram&&);
@@ -53,7 +54,7 @@ class histogram {
   friend histogram& operator/=(histogram&, std::double_t);
 
  public:
-  class range {
+  class monsoon_intf_local_ range {
    public:
     constexpr range() noexcept = default;
     constexpr range(const range&) noexcept = default;
@@ -136,9 +137,11 @@ struct hash<monsoon::histogram> {
   using argument_type = const monsoon::histogram&;
   using result_type = std::size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::histogram&) const noexcept;
 };
 
+monsoon_intf_export_
 std::string to_string(const monsoon::histogram&);
 
 

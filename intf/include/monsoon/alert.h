@@ -1,6 +1,7 @@
 #ifndef MONSOON_ALERT_H
 #define MONSOON_ALERT_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/optional.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_value.h>
@@ -19,7 +20,7 @@ enum class alert_state : unsigned char {
   UNKNOWN
 };
 
-class alert {
+class monsoon_intf_export_ alert {
  public:
   using attributes_map =
       std::unordered_map<std::string,
@@ -66,6 +67,7 @@ struct hash<monsoon::alert> {
   using argument_type = const monsoon::alert&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::alert&) const noexcept;
 };
 

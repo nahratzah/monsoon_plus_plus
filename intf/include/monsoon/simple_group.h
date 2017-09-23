@@ -1,6 +1,7 @@
 #ifndef MONSOON_SIMPLE_GROUP_H
 #define MONSOON_SIMPLE_GROUP_H
 
+#include <monsoon/intf_export_.h>
 #include <initializer_list>
 #include <iosfwd>
 #include <string>
@@ -9,7 +10,7 @@
 namespace monsoon {
 
 
-class simple_group {
+class monsoon_intf_export_ simple_group {
  public:
   using path_type = std::vector<std::string>;
   using iterator = path_type::const_iterator;
@@ -41,6 +42,7 @@ class simple_group {
   path_type path_;
 };
 
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream&, const simple_group&);
 
 
@@ -55,6 +57,7 @@ struct hash<monsoon::simple_group> {
   using argument_type = const monsoon::simple_group&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::simple_group&) const noexcept;
 };
 

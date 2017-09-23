@@ -27,6 +27,7 @@ set_property (TARGET monsoon_intf PROPERTY SOVERSION "0.0")
 
 install (TARGETS monsoon_intf DESTINATION lib)
 install (FILES
+  include/monsoon/intf_export_.h
   include/monsoon/alert-inl.h
   include/monsoon/alert.h
   include/monsoon/collector.h

@@ -1,6 +1,7 @@
 #ifndef MONSOON_METRIC_VALUE_H
 #define MONSOON_METRIC_VALUE_H
 
+#include <monsoon/intf_export_.h>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -12,7 +13,7 @@
 namespace monsoon {
 
 
-class metric_value {
+class monsoon_intf_export_ metric_value {
  public:
   using unsigned_type = std::uint64_t;
   using signed_type = std::int64_t;
@@ -51,23 +52,39 @@ class metric_value {
   optional<types> value_;
 };
 
+monsoon_intf_export_
 metric_value operator!(const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator&&(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator||(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator-(const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator+(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator-(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator*(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator/(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value operator%(const metric_value&, const metric_value&) noexcept;
 
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream&, const metric_value&);
 
+monsoon_intf_export_
 metric_value equal(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value unequal(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value less(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value greater(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value less_equal(const metric_value&, const metric_value&) noexcept;
+monsoon_intf_export_
 metric_value greater_equal(const metric_value&, const metric_value&) noexcept;
 
 
@@ -82,9 +99,11 @@ struct hash<monsoon::metric_value> {
   using argument_type = const monsoon::metric_value&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::metric_value&) const noexcept;
 };
 
+monsoon_intf_export_
 std::string to_string(const monsoon::metric_value&);
 
 

@@ -1,6 +1,7 @@
 #ifndef MONSOON_METRIC_NAME_H
 #define MONSOON_METRIC_NAME_H
 
+#include <monsoon/intf_export_.h>
 #include <cstddef>
 #include <functional>
 #include <initializer_list>
@@ -11,7 +12,7 @@
 namespace monsoon {
 
 
-class metric_name {
+class monsoon_intf_export_ metric_name {
  public:
   using path_type = std::vector<std::string>;
 
@@ -40,6 +41,7 @@ class metric_name {
   path_type path_;
 };
 
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream&, const metric_name&);
 
 
@@ -54,6 +56,7 @@ struct hash<monsoon::metric_name> {
   using argument_type = const monsoon::metric_name&;
   using result_type = size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::metric_name&) const noexcept;
 };
 

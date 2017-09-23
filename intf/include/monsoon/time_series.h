@@ -1,6 +1,7 @@
 #ifndef MONSOON_TIME_SERIES_H
 #define MONSOON_TIME_SERIES_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/time_point.h>
 #include <monsoon/time_series_value.h>
 #include <chrono>
@@ -9,7 +10,7 @@
 namespace monsoon {
 
 
-class time_series {
+class monsoon_intf_export_ time_series {
  public:
   using tsv_set = std::unordered_set<time_series_value>;
 

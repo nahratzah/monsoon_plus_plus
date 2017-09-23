@@ -1,6 +1,7 @@
 #ifndef MONSOON_COLLECTOR_H
 #define MONSOON_COLLECTOR_H
 
+#include <monsoon/intf_export_.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
@@ -9,7 +10,7 @@
 namespace monsoon {
 
 
-class collector {
+class monsoon_intf_export_ collector {
  public:
   using metric_map = std::unordered_map<metric_name, metric_value>;
   using group_map = std::unordered_map<group_name, metric_map>;

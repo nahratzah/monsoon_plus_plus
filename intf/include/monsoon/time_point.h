@@ -1,6 +1,7 @@
 #ifndef MONSOON_TIME_POINT_H
 #define MONSOON_TIME_POINT_H
 
+#include <monsoon/intf_export_.h>
 #include <cstdint>
 
 namespace monsoon {
@@ -16,6 +17,7 @@ class time_point {
   explicit time_point(std::int64_t) noexcept;
 
   std::int64_t millis_since_posix_epoch() const noexcept;
+  monsoon_intf_export_
   static time_point now();
 
   bool operator==(const time_point&) const noexcept;
