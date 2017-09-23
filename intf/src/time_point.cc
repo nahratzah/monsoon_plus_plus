@@ -3,6 +3,7 @@
 #include <boost/date_time/gregorian/gregorian.hpp>
 #include <locale>
 #include <sstream>
+#include <ostream>
 
 namespace monsoon {
 
@@ -37,6 +38,11 @@ std::string to_string(time_point tp) {
   imbue_tp_out_format(oss);
   oss << (unix_epoch() + millisec(tp.millis_since_posix_epoch()));
   return oss.str();
+}
+
+auto operator<<(std::ostream& out, time_point tp) -> std::ostream& {
+  out << (unix_epoch() + millisec(tp.millis_since_posix_epoch()));
+  return out;
 }
 
 

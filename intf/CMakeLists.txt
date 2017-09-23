@@ -13,6 +13,7 @@ add_library (monsoon_intf
   src/tags.cc
   src/time_point.cc
   src/time_series_value.cc
+  src/time_series.cc
   src/push_processor.cc
   src/alert.cc
   src/histogram.cc

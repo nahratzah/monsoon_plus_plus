@@ -35,6 +35,12 @@ inline auto time_series::get_data() const noexcept -> const tsv_set& {
   return tsvs_;
 }
 
+inline auto time_series::operator!=(const time_series& other)
+    const noexcept
+->  bool {
+  return !(*this == other);
+}
+
 
 } /* namespace monsoon */
 

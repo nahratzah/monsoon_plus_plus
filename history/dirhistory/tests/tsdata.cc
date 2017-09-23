@@ -2,6 +2,7 @@
 #include <monsoon/history/dir/tsdata.h>
 #include <iostream>
 #include "tsdata_cpp.h"
+#include "tsdata_print.h"
 
 using monsoon::history::tsdata;
 
