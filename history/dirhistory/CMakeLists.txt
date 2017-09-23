@@ -37,3 +37,5 @@ install (FILES
   include/monsoon/history/dir/dirhistory_export_.h
   include/monsoon/history/dir/tsdata.h
   DESTINATION include/monsoon/history/dir)
+
+add_subdirectory (tests)
