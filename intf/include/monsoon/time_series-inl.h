@@ -11,9 +11,20 @@ inline time_series::time_series(time_point tp)
 {}
 
 template<typename Iter>
-time_series::time_series(time_point tp, Iter b, Iter e)
+inline time_series::time_series(time_point tp, Iter b, Iter e)
 : tp_(std::move(tp)),
   tsvs_(b, e)
+{}
+
+inline time_series::time_series(time_point tp, tsv_set tsvs) noexcept
+: tp_(std::move(tp)),
+  tsvs_(std::move(tsvs))
+{}
+
+inline time_series::time_series(time_point tp,
+    std::initializer_list<time_series_value> il)
+: tp_(std::move(tp)),
+  tsvs_(il)
 {}
 
 inline auto time_series::get_time() const noexcept -> const time_point& {

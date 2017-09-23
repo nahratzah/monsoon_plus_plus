@@ -1,6 +1,7 @@
 #include "UnitTest++/UnitTest++.h"
 #include <monsoon/history/dir/tsdata.h>
 #include <iostream>
+#include "tsdata_cpp.h"
 
 using monsoon::history::tsdata;
 

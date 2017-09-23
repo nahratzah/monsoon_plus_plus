@@ -9,6 +9,7 @@
 #include <monsoon/any.h>
 #include <monsoon/histogram.h>
 #include <iosfwd>
+#include <type_traits>
 
 namespace monsoon {
 
@@ -28,11 +29,23 @@ class monsoon_intf_export_ metric_value {
   metric_value& operator=(metric_value&&) noexcept;
 
   explicit metric_value(bool) noexcept;
-  explicit metric_value(signed_type) noexcept;
-  explicit metric_value(unsigned_type) noexcept;
   explicit metric_value(fp_type) noexcept;
   explicit metric_value(std::string) noexcept;
   explicit metric_value(histogram) noexcept;
+
+  // signed type
+  template<typename T,
+      typename =
+          std::enable_if_t<
+                 std::is_integral<T>()
+              && !std::is_same<bool, T>()
+              && !std::is_same<char, T>()
+              && !std::is_same<char16_t, T>()
+              && !std::is_same<char32_t, T>()
+              && !std::is_same<wchar_t, T>(),
+              void
+          >>
+  explicit metric_value(const T&) noexcept;
 
   bool operator==(const metric_value&) const noexcept;
   bool operator!=(const metric_value&) const noexcept;
