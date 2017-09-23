@@ -21,6 +21,30 @@ TEST(read_tsdata_v0) {
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
 }
 
+TEST(read_tsdata_v1) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v1.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expect_version(1u, 0u), tsd->version());
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+}
+
+TEST(read_tsdata_v2_tables) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v2_tables.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+}
+
+TEST(read_tsdata_v2_list) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v2_list.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+}
+
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Require argument: path to sample data directory.\n";
