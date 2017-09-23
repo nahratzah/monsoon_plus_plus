@@ -56,7 +56,7 @@ std::shared_ptr<tsdata_v0> tsdata_v0::write_all(
     std::unique_ptr<xdr::xdr_ostream> w;
     if (compress) {
       w = std::make_unique<xdr::xdr_stream_writer<io::gzip_compress_writer<io::positional_writer>>>(
-          io::gzip_compress_writer<io::positional_writer>(io::positional_writer(file)));
+          io::gzip_compress_writer<io::positional_writer>(io::positional_writer(file), 9));
     } else {
       w = std::make_unique<xdr::xdr_stream_writer<io::positional_writer>>(
           io::positional_writer(file));
@@ -83,6 +83,7 @@ std::shared_ptr<tsdata_v0> tsdata_v0::write_all(
 
     // Close the writer, so data gets flushed properly.
     w->close();
+    file.flush(); // Sync to disk.
 
     return std::make_shared<tsdata_v0>(std::move(file));
   } catch (...) {

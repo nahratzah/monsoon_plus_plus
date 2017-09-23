@@ -125,6 +125,11 @@ class gzip_compress_writer
   : w_(std::move(w))
   {}
 
+  gzip_compress_writer(Writer&& w, int level)
+  : basic_gzip_compress_writer(level),
+    w_(std::move(w))
+  {}
+
   gzip_compress_writer(gzip_compress_writer&& o)
       noexcept(std::is_nothrow_move_constructible<Writer>())
   : basic_gzip_compress_writer(std::move(o)),
