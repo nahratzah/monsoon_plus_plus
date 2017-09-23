@@ -28,6 +28,10 @@ inline metric_value::metric_value(std::string v) noexcept
 : value_(types::create<4>(std::move(v)))
 {}
 
+inline metric_value::metric_value(const char* s)
+: metric_value(std::string(s))
+{}
+
 inline metric_value::metric_value(histogram v) noexcept
 : value_(types::create<5>(std::move(v)))
 {}
