@@ -18,6 +18,7 @@
 #include <monsoon/time_series_value.h>
 #include <monsoon/histogram.h>
 #include <monsoon/xdr/xdr.h>
+#include <monsoon/history/dir/tsdata.h>
 
 namespace monsoon {
 namespace history {
@@ -25,7 +26,8 @@ namespace v0 {
 
 
 class monsoon_dirhistory_local_ tsdata_v0
-: public std::enable_shared_from_this<tsdata_v0>
+: public tsdata,
+  public std::enable_shared_from_this<tsdata_v0>
 {
  public:
   static const std::uint16_t MAJOR;

@@ -18,6 +18,7 @@ add_library (monsoon_dirhistory
   src/dirhistory.cc
   src/tsdata_mime.cc
   src/v0/tsdata.cc
+  src/tsdata.cc
 )
 target_link_libraries (monsoon_dirhistory ${extra_libs})
 target_link_libraries (monsoon_dirhistory
@@ -34,4 +35,5 @@ install (TARGETS monsoon_dirhistory DESTINATION lib)
 install (FILES
   include/monsoon/history/dir/dirhistory.h
   include/monsoon/history/dir/dirhistory_export_.h
+  include/monsoon/history/dir/tsdata.h
   DESTINATION include/monsoon/history/dir)
