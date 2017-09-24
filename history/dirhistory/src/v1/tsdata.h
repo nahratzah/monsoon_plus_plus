@@ -43,7 +43,13 @@ class monsoon_dirhistory_local_ dictionary_delta {
   void decode_update(xdr::xdr_istream&);
   void encode_update(xdr::xdr_ostream&);
 
-  // Forward sets, used during decoding.
+  bool update_pending() const noexcept {
+    return sdd.update_pending()
+        || gdd.update_pending()
+        || mdd.update_pending()
+        || tdd.update_pending();
+  }
+
   dictionary<std::string> sdd;
   dictionary<simple_group> gdd;
   dictionary<metric_name> mdd;

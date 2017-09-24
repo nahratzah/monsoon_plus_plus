@@ -441,7 +441,8 @@ void encode_time_series(xdr::xdr_ostream& out,
       },
       tsvs.begin(), tsvs.end());
 
-  dict.encode_update(out);
+  out.put_bool(dict.update_pending());
+  if (dict.update_pending()) dict.encode_update(out);
   pre_encoded_tsvs.copy_to(out);
 }
 
