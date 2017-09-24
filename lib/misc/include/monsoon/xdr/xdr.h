@@ -2,7 +2,6 @@
 #define MONSOON_XDR_XDR_H
 
 #include <monsoon/misc_export_.h>
-#include <monsoon/optional.h>
 #include <monsoon/invoke.h>
 #include <array>
 #include <cstdint>
@@ -16,6 +15,12 @@
 #endif
 #include <type_traits>
 #include <vector>
+
+#if __has_include(<optional>)
+# include <optional>
+#elif __has_include(<experimental/optional>)
+# include <experimental/optional>
+#endif
 
 namespace monsoon {
 namespace xdr {
@@ -74,10 +79,17 @@ class monsoon_misc_export_ xdr_istream {
   template<typename SerFn, typename Acceptor>
       void accept_collection(SerFn, Acceptor);
 
+#if __has_include(<optional>)
   template<typename SerFn>
       auto get_optional(SerFn)
-      -> optional<decltype(
+      -> std::optional<decltype(
           invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
+#elif __has_include(<experimental/optional>)
+  template<typename SerFn>
+      auto get_optional(SerFn)
+      -> std::experimental::optional<decltype(
+          invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
+#endif
 
   virtual bool at_end() const = 0;
   virtual void close() = 0;

@@ -241,13 +241,23 @@ inline void xdr_istream::accept_collection(SerFn fn, Acceptor acceptor) {
       std::forward<Acceptor>(acceptor));
 }
 
+#if __has_include(<optional>)
 template<typename SerFn>
 auto xdr_istream::get_optional(SerFn fn)
--> optional<decltype(
+-> std::optional<decltype(
     invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
   if (!get_bool()) return {};
-  return fn(*this);
+  return invoke(fn, *this);
 }
+#elif __has_include(<experimental/optional>)
+template<typename SerFn>
+auto xdr_istream::get_optional(SerFn fn)
+-> std::experimental::optional<decltype(
+    invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
+  if (!get_bool()) return {};
+  return invoke(fn, *this);
+}
+#endif
 
 
 inline void xdr_ostream::put_void() {
