@@ -18,25 +18,29 @@ inline file_segment_ptr::file_segment_ptr(offset_type off, size_type len)
 template<typename T>
 file_segment<T>::file_segment(file_segment&& o) noexcept
 : ptr_(std::move(o.ptr_)),
-  fd_(std::move(o.fd_)),
-  decoder_(std::move(o.decoder_))
+  ctx_(std::move(o.ctx_)),
+  decoder_(std::move(o.decoder_)),
+  enable_compression_(o.enable_compression_)
 {}
 
 template<typename T>
 auto file_segment<T>::operator=(file_segment&& o) noexcept
 -> file_segment& {
   ptr_ = std::move(o.ptr_);
-  fd_ = std::move(o.fd_);
+  ctx_ = std::move(o.ctx_);
   decoder_ = std::move(o.decoder_);
+  enable_compression_ = o.enable_compression_;
   return this;
 }
 
 template<typename T>
-file_segment<T>::file_segment(std::shared_ptr<io::fd> fd, file_segment_ptr ptr,
-    std::function<T (xdr::xdr_istream&)>&& decoder) noexcept
+file_segment<T>::file_segment(const encdec_ctx& ctx, file_segment_ptr ptr,
+    std::function<T (xdr::xdr_istream&)>&& decoder, bool enable_compression)
+  noexcept
 : ptr_(std::move(ptr)),
-  fd_(std::move(fd)),
-  decoder_(std::move(decoder))
+  ctx_(ctx),
+  decoder_(std::move(decoder)),
+  enable_compression_(enable_compression)
 {}
 
 

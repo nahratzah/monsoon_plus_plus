@@ -219,7 +219,7 @@ void encode_record_metrics(xdr::xdr_ostream& out,
       metrics.begin(), metrics.end());
 }
 
-auto decode_record_array(xdr::xdr_istream& in, std::shared_ptr<io::fd> fd,
+auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
     const dictionary_delta& dict)
 -> std::unordered_map<group_name, file_segment<time_series_value::metric_map>> {
   using namespace std::placeholders;
@@ -236,16 +236,16 @@ auto decode_record_array(xdr::xdr_istream& in, std::shared_ptr<io::fd> fd,
               return std::make_tuple(path_ref, tag_ref, decode_file_segment(in));
             });
       },
-      [&dict, &fd, &result](auto&& group_list) {
+      [&dict, &ctx, &result](auto&& group_list) {
         std::transform(
             group_list.begin(), group_list.end(),
             std::inserter(result, result.end()),
-            [&dict, &fd](const auto& group_tuple) {
+            [&dict, &ctx](const auto& group_tuple) {
               group_name key = group_name(
                   simple_group(dict.pdd.decode(std::get<0>(group_tuple))),
                   dict.tdd.decode(std::get<1>(group_tuple)));
               auto fs = file_segment<time_series_value::metric_map>(
-                  fd,
+                  ctx,
                   std::get<2>(group_tuple),
                   std::bind(&decode_record_metrics, _1, dict));
               return std::make_pair(std::move(key), std::move(fs));

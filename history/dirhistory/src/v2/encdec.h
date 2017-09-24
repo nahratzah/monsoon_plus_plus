@@ -39,6 +39,14 @@ constexpr std::uint32_t KIND_MASK        = 0x0000000f,
 } /* namespace monsoon::history::v2::header_flags */
 
 
+class encdec_ctx {
+ public:
+  std::shared_ptr<io::fd> fd() const noexcept { return fd_; }
+
+ private:
+  std::shared_ptr<io::fd> fd_;
+};
+
 class file_segment_ptr {
  public:
   using offset_type = io::fd::offset_type;
@@ -82,16 +90,17 @@ class file_segment {
   file_segment(file_segment&&) noexcept;
   file_segment& operator=(const file_segment&) = delete;
   file_segment& operator=(file_segment&&) noexcept;
-  file_segment(std::shared_ptr<io::fd>, file_segment_ptr,
-      std::function<T (xdr::xdr_istream&)>&&) noexcept;
+  file_segment(const encdec_ctx&, file_segment_ptr,
+      std::function<T (xdr::xdr_istream&)>&&, bool = true) noexcept;
 
   T operator*() const;
   T get() const;
 
  private:
   file_segment_ptr ptr_;
-  std::shared_ptr<io::fd> fd_;
+  encdec_ctx ctx_;
   std::function<T (xdr::xdr_istream&)> decoder_;
+  bool enable_compression_;
 };
 
 template<typename T, typename Hasher = std::hash<T>>
@@ -173,7 +182,7 @@ void encode_record_metrics(xdr::xdr_ostream&,
     dictionary_delta&);
 
 monsoon_dirhistory_local_
-auto decode_record_array(xdr::xdr_istream&, std::shared_ptr<io::fd>,
+auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
 -> std::unordered_map<group_name, file_segment<time_series_value::metric_map>>;
 monsoon_dirhistory_local_
