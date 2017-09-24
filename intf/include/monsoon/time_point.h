@@ -24,6 +24,9 @@ class time_point {
   bool operator==(const time_point&) const noexcept;
   bool operator<(const time_point&) const noexcept;
 
+  time_point& operator+=(const duration&) noexcept;
+  time_point& operator-=(const duration&) noexcept;
+
  private:
   std::int64_t millis_;
 };
@@ -50,6 +53,12 @@ auto operator+(time_point::duration, time_point::duration)
 
 auto operator-(time_point::duration, time_point::duration)
 -> time_point::duration;
+
+auto operator+(time_point, time_point::duration) noexcept
+-> time_point;
+
+auto operator-(time_point, time_point::duration) noexcept
+-> time_point;
 
 monsoon_intf_export_
 std::string to_string(time_point);
