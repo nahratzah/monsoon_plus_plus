@@ -2,6 +2,8 @@
 #define MONSOON_XDR_XDR_H
 
 #include <monsoon/misc_export_.h>
+#include <monsoon/optional.h>
+#include <monsoon/invoke.h>
 #include <array>
 #include <cstdint>
 #include <iterator>
@@ -9,6 +11,8 @@
 #include <string>
 #if __has_include(<string_view>)
 # include <string_view>
+#elif __has_include(<experimental/string_view>)
+# include <experimental/string_view>
 #endif
 #include <type_traits>
 #include <vector>
@@ -70,6 +74,11 @@ class monsoon_misc_export_ xdr_istream {
   template<typename SerFn, typename Acceptor>
       void accept_collection(SerFn, Acceptor);
 
+  template<typename SerFn>
+      auto get_optional(SerFn)
+      -> optional<decltype(
+          invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
+
   virtual bool at_end() const = 0;
   virtual void close() = 0;
 
@@ -96,6 +105,8 @@ class monsoon_misc_export_ xdr_ostream {
 
 #if __has_include(<string_view>)
   void put_string(std::string_view);
+#elif __has_include(<experimental/string_view>)
+  void put_string(std::experimental::string_view);
 #else
   void put_string(const char*);
 #endif

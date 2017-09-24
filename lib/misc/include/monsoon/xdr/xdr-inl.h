@@ -241,6 +241,14 @@ inline void xdr_istream::accept_collection(SerFn fn, Acceptor acceptor) {
       std::forward<Acceptor>(acceptor));
 }
 
+template<typename SerFn>
+auto xdr_istream::get_optional(SerFn fn)
+-> optional<decltype(
+    invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
+  if (!get_bool()) return {};
+  return fn(*this);
+}
+
 
 inline void xdr_ostream::put_void() {
   return;
@@ -314,8 +322,13 @@ inline void xdr_ostream::put_uint64(std::uint64_t v) {
   put_raw_bytes(&i, sizeof(i));
 }
 
-#if __has_include(<string_view>)
-inline void xdr_ostream::put_string(std::string_view s) {
+#if __has_include(<string_view>) || __has_include(<experimental/string_view>)
+# if __has_include(<string_view>)
+inline void xdr_ostream::put_string(std::string_view s)
+# else
+inline void xdr_ostream::put_string(std::experimental::string_view s)
+# endif
+{
   if (s.length() > 0xffffffffu)
     throw xdr_exception();
 
