@@ -21,12 +21,12 @@ auto default_match_clause::apply(
                           std::move(*y.as_scalar())));
   if (x.is_scalar()) {
     y.transform_values(std::bind(std::move(fn),
-                                 std::move(*x.as_scalar()), _1));
+                                 std::cref(*x.as_scalar()), _1));
     return y;
   }
   if (y.is_scalar()) {
     x.transform_values(std::bind(std::move(fn),
-                                 _1, std::move(*y.as_scalar())));
+                                 _1, std::cref(*y.as_scalar())));
     return y;
   }
 

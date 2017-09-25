@@ -12,7 +12,6 @@ install (TARGETS monsoon_lib DESTINATION lib)
 install (FILES
   include/monsoon/lib_export_.h
   include/monsoon/hash_support.h
-  include/monsoon/invoke.h
   DESTINATION include/monsoon)
 
 add_subdirectory (misc)

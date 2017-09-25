@@ -2,7 +2,6 @@
 #define MONSOON_XDR_XDR_H
 
 #include <monsoon/misc_export_.h>
-#include <monsoon/invoke.h>
 #include <array>
 #include <cstdint>
 #include <iterator>
@@ -12,6 +11,7 @@
 #include <type_traits>
 #include <vector>
 #include <optional>
+#include <functional>
 
 namespace monsoon {
 namespace xdr {
@@ -73,7 +73,7 @@ class monsoon_misc_export_ xdr_istream {
   template<typename SerFn>
       auto get_optional(SerFn)
       -> std::optional<decltype(
-          invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
+          std::invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
 
   virtual bool at_end() const = 0;
   virtual void close() = 0;

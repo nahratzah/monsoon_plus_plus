@@ -1,11 +1,16 @@
 #ifndef MONSOON_EXPR_RESULT_INL_H
 #define MONSOON_EXPR_RESULT_INL_H
 
+#include <type_traits>
+#include <algorithm>
+#include <cassert>
+#include <functional>
+
 namespace monsoon {
 
 
 inline expr_result::expr_result()
-: data_(data_type::create<1>())
+: data_(std::in_place_type<map_type>)
 {}
 
 inline expr_result::expr_result(expr_result&& other) noexcept
@@ -19,136 +24,145 @@ inline auto expr_result::operator=(expr_result&& other) noexcept
 }
 
 inline expr_result::expr_result(metric_value v) noexcept
-: data_(data_type::create<0>(std::move(v)))
+: data_(std::in_place_type<metric_value>, std::move(v))
 {}
 
 template<typename Iter>
 expr_result::expr_result(Iter b, Iter e)
-: data_(data_type::create<1>(b, e))
+: data_(std::in_place_type<map_type>, b, e)
 {}
 
 inline auto expr_result::is_scalar() const noexcept -> bool {
-  return data_.selector() == 0;
+  return data_.index() == 0;
 }
 
 inline auto expr_result::is_vector() const noexcept -> bool {
-  return data_.selector() == 1;
+  return data_.index() == 1;
 }
 
 inline auto expr_result::empty() const noexcept -> bool {
-  return map_onto<bool>(data_,
-      [](const metric_value&) {
-        return false;
+  return visit(
+      [](const auto& v) {
+        using v_type = std::decay_t<decltype(v)>;
+
+        if constexpr(std::is_same_v<metric_value, v_type>)
+          return false;
+        else
+          return v.empty();
       },
-      [](const map_type& m) {
-        return m.empty();
-      });
+      data_);
 }
 
 inline auto expr_result::size() const noexcept -> size_type {
-  return map_onto<size_type>(data_,
-      [](const metric_value&) {
-        return 1u;
+  return visit(
+      [](const auto& v) -> size_type {
+        using v_type = std::decay_t<decltype(v)>;
+
+        if constexpr(std::is_same_v<metric_value, v_type>)
+          return 1u;
+        else
+          return v.size();
       },
-      [](const map_type& m) {
-        return m.size();
-      });
+      data_);
 }
 
 inline auto expr_result::as_scalar() const noexcept
-->  optional<const metric_value&> {
-  return map_onto<optional<const metric_value&>>(data_,
-      [](const metric_value& v) -> const metric_value& {
-        return v;
-      },
-      [](const map_type&) {
-        return optional<const metric_value&>();
-      });
+->  const metric_value* {
+  if (!is_scalar()) return nullptr;
+  return &std::get<metric_value>(data_);
 }
 
 inline auto expr_result::as_vector() const noexcept
-->  optional<const map_type&> {
-  return map_onto<optional<const map_type&>>(data_,
-      [](const metric_value&) {
-        return optional<const map_type&>();
-      },
-      [](const map_type& m) -> const map_type& {
-        return m;
-      });
+->  const map_type* {
+  if (!is_vector()) return nullptr;
+  return &std::get<map_type>(data_);
 }
 
 inline auto expr_result::as_scalar() noexcept
-->  optional<metric_value&> {
-  return map_onto<optional<metric_value&>>(data_,
-      [](metric_value& v) -> metric_value& {
-        return v;
-      },
-      [](map_type&) {
-        return optional<metric_value&>();
-      });
+->  metric_value* {
+  if (!is_scalar()) return nullptr;
+  return &std::get<metric_value>(data_);
 }
 
 inline auto expr_result::as_vector() noexcept
-->  optional<map_type&> {
-  return map_onto<optional<map_type&>>(data_,
-      [](metric_value&) {
-        return optional<map_type&>();
-      },
-      [](map_type& m) -> map_type& {
-        return m;
-      });
+->  map_type* {
+  if (!is_vector()) return nullptr;
+  return &std::get<map_type>(data_);
 }
 
 template<typename FN>
 auto expr_result::transform_tags(FN fn)
-    noexcept(noexcept(invoke(std::declval<FN>(),
-                             std::declval<const tags&>())))
+    noexcept(noexcept(std::invoke(std::declval<FN>(),
+                                  std::declval<const tags&>())))
 ->  void {
-  visit(data_,
-      [&fn](metric_value&) {},
-      [&fn](map_type& m) {
-        map_type replacement;
-        for (auto& v : m)
-          replacement.emplace(invoke(fn, v.first), std::move(v.second));
-        m = std::move(replacement);
-      });
+  visit(
+      [&fn](auto& v) {
+        using v_type = std::decay_t<decltype(v)>;
+
+        if constexpr(std::is_same_v<metric_value, v_type>) {
+          // SKIP
+        } else if constexpr(std::is_same_v<map_type, v_type>) {
+          map_type replacement;
+          for (auto& entry : v)
+            replacement.emplace(std::invoke(fn, entry.first), std::move(entry.second));
+          v = std::move(replacement);
+        } else {
+          assert(false); // Unreachable.
+        }
+      },
+      data_);
 }
 
 template<typename FN>
 auto expr_result::transform_values(FN fn)
-    noexcept(noexcept(invoke(std::declval<FN>(),
-                             std::declval<metric_value>())))
+    noexcept(noexcept(std::invoke(std::declval<FN>(),
+                                  std::declval<metric_value>())))
 ->  void {
-  visit(data_,
-      [&fn](metric_value& v) {
-        v = invoke(fn, std::move(v));
+  visit(
+      [&fn](auto& v) {
+        using v_type = std::decay_t<decltype(v)>;
+
+        if constexpr(std::is_same_v<metric_value, v_type>) {
+          v = std::invoke(fn, std::move(v));
+        } else if constexpr(std::is_same_v<map_type, v_type>) {
+          std::for_each(v.begin(), v.end(),
+              [&fn](map_type::value_type& pair) {
+                pair.second = std::invoke(fn, std::move(pair.second));
+              });
+        } else {
+          assert(false); // Unreachable.
+        }
       },
-      [&fn](map_type& m) {
-        for (auto& v : m)
-          v.second = invoke(fn, std::move(v.second));
-      });
+      data_);
 }
 
 template<typename FN>
 auto expr_result::filter_tags(FN fn)
-    noexcept(noexcept(invoke(std::declval<FN>(),
-                             std::declval<const tags&>())))
+    noexcept(noexcept(std::invoke(std::declval<FN>(),
+                                  std::declval<const tags&>())))
 ->  void {
-  visit(data_,
-      [](metric_value&) {},
-      [&fn](map_type& m) {
-        std::vector<map_type::iterator> to_be_removed;
-        to_be_removed.reserve(m.size());
+  visit(
+      [&fn](auto& v) {
+        using v_type = std::decay_t<decltype(v)>;
 
-        for (map_type::iterator i = m.begin(); i != m.end(); ++i) {
-          if (invoke(fn, i->first))
-            to_be_removed.push_back(i);
-        }
+        if constexpr(std::is_same_v<metric_value, v_type>) {
+          // SKIP
+        } else if constexpr(std::is_same_v<map_type, v_type>) {
+          std::vector<map_type::iterator> to_be_removed;
+          to_be_removed.reserve(v.size());
 
-        for (map_type::iterator& i : to_be_removed) {
-          m.erase(i);
+          for (map_type::iterator i = v.begin(); i != v.end(); ++i) {
+            if (std::invoke(fn, i->first))
+              to_be_removed.push_back(i);
+          }
+
+          for (map_type::iterator& i : to_be_removed)
+            v.erase(i);
+        } else {
+          assert(false); // Unreachable.
         }
-      });
+      },
+      data_);
 }
 
 

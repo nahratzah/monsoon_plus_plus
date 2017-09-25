@@ -244,9 +244,9 @@ inline void xdr_istream::accept_collection(SerFn fn, Acceptor acceptor) {
 template<typename SerFn>
 auto xdr_istream::get_optional(SerFn fn)
 -> std::optional<decltype(
-    invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
+    std::invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
   if (!get_bool()) return {};
-  return invoke(fn, *this);
+  return std::invoke(fn, *this);
 }
 
 

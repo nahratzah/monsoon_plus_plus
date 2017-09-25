@@ -32,8 +32,8 @@ auto by_clause::apply(
                                       this->tag_names_.end());
                   });
     if (!keep_common_) {
-      y.transform_tags(std::bind([](optional<tags>&& o) {
-                                   return o.release();
+      y.transform_tags(std::bind([](std::optional<tags>&& o) {
+                                   return std::move(o).value();
                                  },
                                  std::bind(&by_clause::reduce_tag_,
                                            this, _1)));
@@ -47,8 +47,8 @@ auto by_clause::apply(
                                       this->tag_names_.end());
                   });
     if (!keep_common_) {
-      x.transform_tags(std::bind([](optional<tags>&& o) {
-                                   return o.release();
+      x.transform_tags(std::bind([](std::optional<tags>&& o) {
+                                   return std::move(o).value();
                                  },
                                  std::bind(&by_clause::reduce_tag_,
                                            this, _1)));
@@ -97,15 +97,15 @@ auto by_clause::do_ostream(std::ostream& out) const -> void {
     out << " keep_common";
 }
 
-auto by_clause::reduce_tag_(const tags& t) const -> optional<tags> {
+auto by_clause::reduce_tag_(const tags& t) const -> std::optional<tags> {
   std::vector<std::tuple<std::string, metric_value>> filtered;
   filtered.reserve(tag_names_.size());
 
   for (const std::string& name : tag_names_) {
-    optional<const metric_value&> v = t[name];
-    if (!v.is_present()) return optional<tags>();
+    std::optional<metric_value> v = t[name];
+    if (!v.has_value()) return {};
 
-    filtered.emplace_back(name, *v);
+    filtered.emplace_back(name, std::move(v).value());
   }
 
   return tags(std::make_move_iterator(filtered.begin()),
@@ -117,10 +117,10 @@ auto by_clause::map_(std::unordered_map<tags, metric_value>& x) const
   mapping result;
 
   for (auto xval = x.begin(); xval != x.end(); ++xval) {
-    optional<tags> reduced = reduce_tag_(xval->first);
-    if (!reduced.is_present()) continue;
+    std::optional<tags> reduced = reduce_tag_(xval->first);
+    if (!reduced.has_value()) continue;
 
-    result.emplace(reduced.release(), xval);
+    result.emplace(std::move(reduced).value(), xval);
   }
 
   return result;
