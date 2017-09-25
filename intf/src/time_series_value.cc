@@ -5,11 +5,10 @@ namespace monsoon {
 
 
 auto time_series_value::operator[](const metric_name& m) const noexcept
-->  optional<const metric_value&> {
+->  std::optional<metric_value> {
   auto pos = metrics_.find(m);
-  return ( pos == metrics_.end()
-         ? optional<const metric_value&>()
-         : pos->second);
+  if (pos == metrics_.end()) return {};
+  return pos->second;
 }
 
 auto time_series_value::operator==(const time_series_value& other)

@@ -10,11 +10,10 @@ namespace monsoon {
 
 
 auto tags::operator[](const std::string& key) const noexcept
-->  optional<const metric_value&> {
+->  std::optional<metric_value> {
   auto pos = map_.find(key);
-  return ( pos == map_.end()
-         ? optional<const metric_value&>()
-         : pos->second);
+  if (pos == map_.end()) return {};
+  return pos->second;
 }
 
 auto tags::operator==(const tags& other) const noexcept -> bool {

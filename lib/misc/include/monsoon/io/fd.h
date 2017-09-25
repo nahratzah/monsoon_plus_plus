@@ -4,7 +4,7 @@
 #include <monsoon/misc_export_.h>
 #include <cstddef>
 #include <string>
-#include <monsoon/optional.h>
+#include <optional>
 #include <monsoon/io/stream.h>
 
 #if defined(WIN32)
@@ -51,7 +51,7 @@ class monsoon_misc_export_ fd
   bool can_read() const noexcept;
   bool can_write() const noexcept;
   offset_type offset() const;
-  optional<std::string> get_path() const;
+  std::optional<std::string> get_path() const;
 
   void flush();
   size_type size() const;

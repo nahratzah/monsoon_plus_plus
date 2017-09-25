@@ -97,18 +97,18 @@ inline auto histogram::data() const noexcept -> const elems_vector& {
   return elems_;
 }
 
-inline auto histogram::min() const noexcept -> optional<std::double_t> {
-  if (empty()) return optional<std::double_t>();
+inline auto histogram::min() const noexcept -> std::optional<std::double_t> {
+  if (empty()) return {};
   return std::get<0>(elems_.front()).low();
 }
 
-inline auto histogram::max() const noexcept -> optional<std::double_t> {
-  if (empty()) return optional<std::double_t>();
+inline auto histogram::max() const noexcept -> std::optional<std::double_t> {
+  if (empty()) return {};
   return std::get<0>(elems_.back()).high();
 }
 
-inline auto histogram::avg() const noexcept -> optional<std::double_t> {
-  if (empty()) return optional<std::double_t>();
+inline auto histogram::avg() const noexcept -> std::optional<std::double_t> {
+  if (empty()) return {};
   return sum() / count();
 }
 

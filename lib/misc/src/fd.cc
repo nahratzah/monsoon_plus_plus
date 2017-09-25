@@ -183,7 +183,7 @@ auto fd::offset() const -> offset_type {
   return new_off;
 }
 
-optional<std::string> fd::get_path() const {
+std::optional<std::string> fd::get_path() const {
   if (handle_ == INVALID_HANDLE_VALUE)
     return {};
 
@@ -432,7 +432,7 @@ auto fd::offset() const -> offset_type {
   return off;
 }
 
-optional<std::string> fd::get_path() const {
+std::optional<std::string> fd::get_path() const {
   if (handle_ == -1 || fname_.empty())
     return {};
   return fname_;

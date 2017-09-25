@@ -2,7 +2,7 @@
 #define MONSOON_HISTOGRAM_H
 
 #include <monsoon/intf_export_.h>
-#include <monsoon/optional.h>
+#include <optional>
 #include <cmath>
 #include <functional>
 #include <iosfwd>
@@ -91,9 +91,9 @@ class monsoon_intf_export_ histogram {
 
   std::map<range, std::double_t> map() const;
   const elems_vector& data() const noexcept;
-  optional<std::double_t> min() const noexcept;
-  optional<std::double_t> max() const noexcept;
-  optional<std::double_t> avg() const noexcept;
+  std::optional<std::double_t> min() const noexcept;
+  std::optional<std::double_t> max() const noexcept;
+  std::optional<std::double_t> avg() const noexcept;
   std::double_t sum() const noexcept;
   std::double_t count() const noexcept;
   bool empty() const noexcept;
