@@ -57,7 +57,7 @@ class monsoon_intf_export_ histogram {
  public:
   class monsoon_intf_local_ range {
    public:
-    constexpr range() noexcept = default;
+    constexpr range() noexcept;
     constexpr range(const range&) noexcept = default;
     constexpr range(std::double_t, std::double_t);
     range& operator=(const range&) noexcept = default;
@@ -75,7 +75,7 @@ class monsoon_intf_export_ histogram {
     constexpr bool operator>=(const range&) const noexcept;
 
    private:
-    std::double_t low_ = 0, high_ = 0;
+    std::double_t low_, high_;
   };
 
   using elems_vector =
@@ -84,6 +84,8 @@ class monsoon_intf_export_ histogram {
   histogram() = default;
   histogram(const histogram&) = default;
   histogram(histogram&&) noexcept;
+  histogram& operator=(const histogram&) = default;
+  histogram& operator=(histogram&&) noexcept;
   template<typename Iter> histogram(Iter, Iter);
   histogram(std::initializer_list<std::pair<range, std::double_t>>);
 

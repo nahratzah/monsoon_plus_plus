@@ -6,6 +6,11 @@
 namespace monsoon {
 
 
+constexpr histogram::range::range() noexcept
+: low_(0),
+  high_(0)
+{}
+
 constexpr histogram::range::range(std::double_t low, std::double_t high)
 : low_(low),
   high_(high)
@@ -70,6 +75,11 @@ constexpr auto histogram::range::operator>=(const range& r) const noexcept
 inline histogram::histogram(histogram&& h) noexcept
 : elems_(std::move(h.elems_))
 {}
+
+inline histogram& histogram::operator=(histogram&& h) noexcept {
+  elems_ = std::move(h.elems_);
+  return *this;
+}
 
 template<typename Iter>
 histogram::histogram(Iter b, Iter e) {

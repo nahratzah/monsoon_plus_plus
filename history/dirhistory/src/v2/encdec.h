@@ -140,6 +140,37 @@ class monsoon_dirhistory_local_ dictionary_delta {
   dictionary<tags> tdd;
 };
 
+/** The TSData structure of the 'list' implementation. */
+class tsdata_list {
+ public:
+  using record_array = std::unordered_map<
+      group_name,
+      file_segment<time_series_value::metric_map>>;
+
+  tsdata_list() = default;
+  tsdata_list(tsdata_list&&) noexcept;
+  tsdata_list& operator=(tsdata_list&&) noexcept;
+  tsdata_list(
+      time_point ts,
+      optional<file_segment<tsdata_list>>&& pred,
+      optional<file_segment<dictionary_delta>>&& dd,
+      file_segment<record_array>&& records,
+      std::uint32_t reserved) noexcept;
+  ~tsdata_list() noexcept;
+
+  time_point ts() { return ts_; }
+  const optional<file_segment<tsdata_list>>& pred() const { return pred_; }
+  const optional<file_segment<dictionary_delta>>& dd() const { return dd_; }
+  const file_segment<record_array>& records() const { return records_; }
+
+ private:
+  time_point ts_;
+  optional<file_segment<tsdata_list>> pred_;
+  optional<file_segment<dictionary_delta>> dd_;
+  file_segment<record_array> records_;
+  std::uint32_t reserved_;
+};
+
 
 monsoon_dirhistory_local_
 time_point decode_timestamp(xdr::xdr_istream&);
@@ -184,7 +215,7 @@ void encode_record_metrics(xdr::xdr_ostream&,
 monsoon_dirhistory_local_
 auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
--> std::unordered_map<group_name, file_segment<time_series_value::metric_map>>;
+-> tsdata_list::record_array;
 monsoon_dirhistory_local_
 void encode_record_array(xdr::xdr_ostream&,
     const std::vector<std::pair<group_name, file_segment_ptr>>&,

@@ -221,7 +221,7 @@ void encode_record_metrics(xdr::xdr_ostream& out,
 
 auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
     const dictionary_delta& dict)
--> std::unordered_map<group_name, file_segment<time_series_value::metric_map>> {
+-> tsdata_list::record_array {
   using namespace std::placeholders;
 
   std::unordered_map<group_name, file_segment<time_series_value::metric_map>>
@@ -359,6 +359,9 @@ void dictionary_delta::encode_update(xdr::xdr_ostream& out) {
       });
   pre_computed.copy_to(out);
 }
+
+
+tsdata_list::~tsdata_list() noexcept {}
 
 
 }}} /* namespace monsoon::history::v2 */

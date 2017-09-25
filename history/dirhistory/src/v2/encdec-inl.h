@@ -2,6 +2,7 @@
 #define V2_ENCDEC_INL_H
 
 #include <algorithm>
+#include <utility>
 
 namespace monsoon {
 namespace history {
@@ -30,7 +31,7 @@ auto file_segment<T>::operator=(file_segment&& o) noexcept
   ctx_ = std::move(o.ctx_);
   decoder_ = std::move(o.decoder_);
   enable_compression_ = o.enable_compression_;
-  return this;
+  return *this;
 }
 
 template<typename T>
@@ -124,6 +125,38 @@ const noexcept {
       });
   return hval;
 }
+
+
+inline tsdata_list::tsdata_list(tsdata_list&& o) noexcept
+: ts_(std::move(o.ts_)),
+  pred_(std::move(o.pred_)),
+  dd_(std::move(o.dd_)),
+  records_(std::move(o.records_)),
+  reserved_(std::move(o.reserved_))
+{}
+
+inline auto tsdata_list::operator=(tsdata_list&& o) noexcept
+-> tsdata_list::tsdata_list& {
+  ts_ = std::move(o.ts_);
+  pred_ = std::move(o.pred_);
+  dd_ = std::move(o.dd_);
+  records_ = std::move(o.records_);
+  reserved_ = std::move(o.reserved_);
+  return *this;
+}
+
+inline tsdata_list::tsdata_list(
+    time_point ts,
+    optional<file_segment<tsdata_list>>&& pred,
+    optional<file_segment<dictionary_delta>>&& dd,
+    file_segment<record_array>&& records,
+    std::uint32_t reserved) noexcept
+: ts_(std::move(ts)),
+  pred_(std::move(pred)),
+  dd_(std::move(dd)),
+  records_(std::move(records)),
+  reserved_(std::move(reserved))
+{}
 
 
 }}} /* namespace monsoon::history::v2 */
