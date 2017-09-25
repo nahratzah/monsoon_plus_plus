@@ -241,7 +241,6 @@ inline void xdr_istream::accept_collection(SerFn fn, Acceptor acceptor) {
       std::forward<Acceptor>(acceptor));
 }
 
-#if __has_include(<optional>)
 template<typename SerFn>
 auto xdr_istream::get_optional(SerFn fn)
 -> std::optional<decltype(
@@ -249,15 +248,6 @@ auto xdr_istream::get_optional(SerFn fn)
   if (!get_bool()) return {};
   return invoke(fn, *this);
 }
-#elif __has_include(<experimental/optional>)
-template<typename SerFn>
-auto xdr_istream::get_optional(SerFn fn)
--> std::experimental::optional<decltype(
-    invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
-  if (!get_bool()) return {};
-  return invoke(fn, *this);
-}
-#endif
 
 
 inline void xdr_ostream::put_void() {
@@ -332,41 +322,13 @@ inline void xdr_ostream::put_uint64(std::uint64_t v) {
   put_raw_bytes(&i, sizeof(i));
 }
 
-#if __has_include(<string_view>) || __has_include(<experimental/string_view>)
-# if __has_include(<string_view>)
-inline void xdr_ostream::put_string(std::string_view s)
-# else
-inline void xdr_ostream::put_string(std::experimental::string_view s)
-# endif
-{
+inline void xdr_ostream::put_string(std::string_view s) {
   if (s.length() > 0xffffffffu)
     throw xdr_exception();
 
   put_uint32(static_cast<uint32_t>(s.length()));
   put_raw_bytes(s.data(), s.length());
   if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4u);
-}
-#else
-inline void xdr_ostream::put_string(const char* s) {
-  std::size_t len = std::strlen(s);
-  if (len > 0xffffffffu)
-    throw xdr_exception();
-
-  put_uint32(static_cast<uint32_t>(len));
-  put_raw_bytes(s, len);
-  if (len % 4u != 0u) put_padding(4u - len % 4u);
-}
-#endif
-
-template<typename Alloc>
-inline void xdr_ostream::put_string(
-    const std::basic_string<char, std::char_traits<char>, Alloc>& s) {
-  if (s.length() > 0xffffffffu)
-    throw xdr_exception();
-
-  put_uint32(static_cast<uint32_t>(s.length()));
-  put_raw_bytes(s.data(), s.length());
-  if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4);
 }
 
 template<typename Alloc>

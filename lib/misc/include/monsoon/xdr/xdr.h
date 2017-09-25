@@ -8,19 +8,10 @@
 #include <iterator>
 #include <memory>
 #include <string>
-#if __has_include(<string_view>)
-# include <string_view>
-#elif __has_include(<experimental/string_view>)
-# include <experimental/string_view>
-#endif
+#include <string_view>
 #include <type_traits>
 #include <vector>
-
-#if __has_include(<optional>)
-# include <optional>
-#elif __has_include(<experimental/optional>)
-# include <experimental/optional>
-#endif
+#include <optional>
 
 namespace monsoon {
 namespace xdr {
@@ -79,17 +70,10 @@ class monsoon_misc_export_ xdr_istream {
   template<typename SerFn, typename Acceptor>
       void accept_collection(SerFn, Acceptor);
 
-#if __has_include(<optional>)
   template<typename SerFn>
       auto get_optional(SerFn)
       -> std::optional<decltype(
           invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
-#elif __has_include(<experimental/optional>)
-  template<typename SerFn>
-      auto get_optional(SerFn)
-      -> std::experimental::optional<decltype(
-          invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
-#endif
 
   virtual bool at_end() const = 0;
   virtual void close() = 0;
@@ -115,16 +99,7 @@ class monsoon_misc_export_ xdr_ostream {
   void put_flt32(float);
   void put_flt64(double);
 
-#if __has_include(<string_view>)
   void put_string(std::string_view);
-#elif __has_include(<experimental/string_view>)
-  void put_string(std::experimental::string_view);
-#else
-  void put_string(const char*);
-#endif
-  template<typename Alloc>
-  void put_string(
-      const std::basic_string<char, std::char_traits<char>, Alloc>&);
 
   template<typename Alloc = std::allocator<uint8_t>>
       void put_opaque_n(std::size_t, const std::vector<std::uint8_t, Alloc>&);
