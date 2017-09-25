@@ -1,5 +1,6 @@
 #include "tsdata.h"
 #include "../tsdata_mime.h"
+#include "../overload.h"
 #include <algorithm>
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/io/positional_stream.h>
@@ -294,37 +295,36 @@ metric_value decode_metric_value(monsoon::xdr::xdr_istream& in,
 
 void encode_metric_value(monsoon::xdr::xdr_ostream& out,
     const metric_value& value, dictionary<std::string>& dict) {
-  const auto& opt_raw = value.get();
-  if (!opt_raw) {
-    out.put_uint32(static_cast<std::uint32_t>(metrickind::EMPTY));
-    return;
-  }
-
-  visit(opt_raw.get(),
-      [&out](bool b) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::BOOL));
-        out.put_bool(b);
-      },
-      [&out](const metric_value::signed_type& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-        out.put_int64(v);
-      },
-      [&out](const metric_value::unsigned_type& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-        out.put_int64(static_cast<std::int64_t>(v));
-      },
-      [&out](const metric_value::fp_type& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
-        out.put_flt64(v);
-      },
-      [&out, &dict](const std::string& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
-        out.put_uint32(dict.encode(v));
-      },
-      [&out](const histogram& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
-        encode_histogram(out, v);
-      });
+  std::visit(
+      overload(
+          [&out](const metric_value::empty&) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::EMPTY));
+          },
+          [&out](bool b) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::BOOL));
+            out.put_bool(b);
+          },
+          [&out](const metric_value::signed_type& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
+            out.put_int64(v);
+          },
+          [&out](const metric_value::unsigned_type& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
+            out.put_int64(static_cast<std::int64_t>(v));
+          },
+          [&out](const metric_value::fp_type& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
+            out.put_flt64(v);
+          },
+          [&out, &dict](const std::string& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
+            out.put_uint32(dict.encode(v));
+          },
+          [&out](const histogram& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
+            encode_histogram(out, v);
+          }),
+      value.get());
 }
 
 histogram decode_histogram(monsoon::xdr::xdr_istream& in) {
