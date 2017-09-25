@@ -11,15 +11,15 @@ inline auto alert::get_name() const noexcept -> const group_name& {
 }
 
 inline auto alert::value_is_ok() const noexcept -> bool {
-  return !value_.get(true);
+  return !value_.value_or(true);
 }
 
 inline auto alert::value_is_triggering() const noexcept -> bool {
-  return value_.get(false);
+  return value_.value_or(false);
 }
 
 inline auto alert::value_is_unknown() const noexcept -> bool {
-  return !value_.is_present();
+  return !value_.has_value();
 }
 
 inline auto alert::get_message() const noexcept -> const std::string& {
