@@ -254,11 +254,11 @@ auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
 
 monsoon_dirhistory_local_
-std::vector<metric_value> decode_metric_table(xdr::xdr_istream&,
+std::vector<std::optional<metric_value>> decode_metric_table(xdr::xdr_istream&,
     const dictionary<std::string>&);
 monsoon_dirhistory_local_
 void write_metric_table(xdr::xdr_ostream&,
-    const std::vector<metric_value>&,
+    const std::vector<std::optional<metric_value>>&,
     dictionary<std::string>&);
 
 

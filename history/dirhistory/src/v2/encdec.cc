@@ -480,9 +480,9 @@ std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
 }
 
 monsoon_dirhistory_local_
-std::vector<metric_value> decode_metric_table(xdr::xdr_istream& in,
+std::vector<std::optional<metric_value>> decode_metric_table(xdr::xdr_istream& in,
     const dictionary<std::string>& dict) {
-  std::vector<metric_value> result;
+  std::vector<std::optional<metric_value>> result;
   std::vector<bool> presence;
 
   auto callback = [&result](std::size_t index, auto&& v) {
@@ -528,9 +528,6 @@ std::vector<metric_value> decode_metric_table(xdr::xdr_istream& in,
           },
           callback));
 
-  if (!std::all_of(presence.begin(), presence.end(), [](bool b) { return b; }))
-    throw xdr::xdr_exception("presence gap");
-
   return result;
 }
 
@@ -547,7 +544,7 @@ template<typename T> struct mt {
 
 monsoon_dirhistory_local_
 void write_metric_table(xdr::xdr_ostream& out,
-    const std::vector<metric_value>& metrics,
+    const std::vector<std::optional<metric_value>>& metrics,
     dictionary<std::string>& dict) {
   using namespace std::placeholders;
 
@@ -558,70 +555,73 @@ void write_metric_table(xdr::xdr_ostream& out,
   mt<metric_value::fp_type> mt_dbl{ std::vector<bool>(metrics.size(), false), {} };
   mt<std::reference_wrapper<const std::string>> mt_str{ std::vector<bool>(metrics.size(), false), {} };
   mt<std::reference_wrapper<const histogram>> mt_hist{ std::vector<bool>(metrics.size(), false), {} };
-  std::vector<bool> mt_empty(metrics.size(), false);
+  std::vector<bool> mt_empty = std::vector<bool>(metrics.size(), false);
   mt<std::reference_wrapper<const metric_value>> mt_other{ std::vector<bool>(metrics.size(), false), {} };
 
   for (auto iter = metrics.cbegin(); iter != metrics.cend(); ++iter) {
     const auto index = iter - metrics.cbegin();
-    visit(
-        overload(
-            [&](const auto& v) { // Fallback
-              mt_other.presence[index] = true;
-              mt_other.value.emplace_back(v);
-            },
-            [&](const metric_value::empty&) {
-              mt_empty[index] = true;
-            },
-            [&](const bool& b) {
-              mt_bool.presence[index] = true;
-              mt_bool.value.push_back(b);
-            },
-            [&](const metric_value::signed_type& v) {
-              if (v >= std::numeric_limits<std::int16_t>::min()
-                  && v <= std::numeric_limits<std::int16_t>::max()) {
-                mt_16bit.presence[index] = true;
-                mt_16bit.value.push_back(v);
-              } else if (v >= std::numeric_limits<std::int32_t>::min()
-                  && v <= std::numeric_limits<std::int32_t>::max()) {
-                mt_32bit.presence[index] = true;
-                mt_32bit.value.push_back(v);
-              } else if (v >= std::numeric_limits<std::int64_t>::min()
-                  && v <= std::numeric_limits<std::int64_t>::max()) {
-                mt_64bit.presence[index] = true;
-                mt_64bit.value.push_back(v);
-              } else {
-                assert(false); // Unreachable.
-              }
-            },
-            [&](const metric_value::unsigned_type& v) {
-              if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int16_t>::max())) {
-                mt_16bit.presence[index] = true;
-                mt_16bit.value.push_back(v);
-              } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int32_t>::max())) {
-                mt_32bit.presence[index] = true;
-                mt_32bit.value.push_back(v);
-              } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int64_t>::max())) {
-                mt_64bit.presence[index] = true;
-                mt_64bit.value.push_back(v);
-              } else { // Too large to represent as integer, store as floating point.
+    if (iter->has_value()) {
+      const metric_value& mv = iter->value();
+      visit(
+          overload(
+              [&](const auto& v) { // Fallback
+                mt_other.presence[index] = true;
+                mt_other.value.emplace_back(v);
+              },
+              [&](const metric_value::empty&) {
+                mt_empty[index] = true;
+              },
+              [&](const bool& b) {
+                mt_bool.presence[index] = true;
+                mt_bool.value.push_back(b);
+              },
+              [&](const metric_value::signed_type& v) {
+                if (v >= std::numeric_limits<std::int16_t>::min()
+                    && v <= std::numeric_limits<std::int16_t>::max()) {
+                  mt_16bit.presence[index] = true;
+                  mt_16bit.value.push_back(v);
+                } else if (v >= std::numeric_limits<std::int32_t>::min()
+                    && v <= std::numeric_limits<std::int32_t>::max()) {
+                  mt_32bit.presence[index] = true;
+                  mt_32bit.value.push_back(v);
+                } else if (v >= std::numeric_limits<std::int64_t>::min()
+                    && v <= std::numeric_limits<std::int64_t>::max()) {
+                  mt_64bit.presence[index] = true;
+                  mt_64bit.value.push_back(v);
+                } else {
+                  assert(false); // Unreachable.
+                }
+              },
+              [&](const metric_value::unsigned_type& v) {
+                if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int16_t>::max())) {
+                  mt_16bit.presence[index] = true;
+                  mt_16bit.value.push_back(v);
+                } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int32_t>::max())) {
+                  mt_32bit.presence[index] = true;
+                  mt_32bit.value.push_back(v);
+                } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int64_t>::max())) {
+                  mt_64bit.presence[index] = true;
+                  mt_64bit.value.push_back(v);
+                } else { // Too large to represent as integer, store as floating point.
+                  mt_dbl.presence[index] = true;
+                  mt_dbl.value.push_back(v);
+                }
+              },
+              [&](const metric_value::fp_type& v) {
                 mt_dbl.presence[index] = true;
                 mt_dbl.value.push_back(v);
+              },
+              [&](const std::string& v) {
+                mt_str.presence[index] = true;
+                mt_str.value.emplace_back(v);
+              },
+              [&](const histogram& v) {
+                mt_hist.presence[index] = true;
+                mt_hist.value.emplace_back(v);
               }
-            },
-            [&](const metric_value::fp_type& v) {
-              mt_dbl.presence[index] = true;
-              mt_dbl.value.push_back(v);
-            },
-            [&](const std::string& v) {
-              mt_str.presence[index] = true;
-              mt_str.value.emplace_back(v);
-            },
-            [&](const histogram& v) {
-              mt_hist.presence[index] = true;
-              mt_hist.value.emplace_back(v);
-            }
-            ),
-        iter->get());
+              ),
+          mv.get());
+    }
   }
 
   mt_bool.encode(out, &xdr::xdr_ostream::put_bool);
