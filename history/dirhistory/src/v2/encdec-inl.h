@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <utility>
+#include <monsoon/history/dir/hdir_exception.h>
 
 namespace monsoon {
 namespace history {
@@ -31,18 +32,34 @@ auto file_segment<T>::operator=(file_segment&& o) noexcept
   ctx_ = std::move(o.ctx_);
   decoder_ = std::move(o.decoder_);
   enable_compression_ = o.enable_compression_;
+  decode_result_ = std::weak_ptr<const T>();
   return *this;
 }
 
 template<typename T>
 file_segment<T>::file_segment(const encdec_ctx& ctx, file_segment_ptr ptr,
-    std::function<T (xdr::xdr_istream&)>&& decoder, bool enable_compression)
+    std::function<std::shared_ptr<T> (xdr::xdr_istream&)>&& decoder, bool enable_compression)
   noexcept
 : ptr_(std::move(ptr)),
   ctx_(ctx),
   decoder_(std::move(decoder)),
   enable_compression_(enable_compression)
 {}
+
+template<typename T>
+std::shared_ptr<const T> file_segment<T>::get() const {
+  std::lock_guard<std::mutex> lck{ lck_ };
+
+  std::shared_ptr<const T> result = decode_result_.lock();
+  if (result == nullptr) {
+    auto xdr = ctx_.new_reader(ptr_, enable_compression_);
+    result = decoder_(xdr);
+    if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
+    xdr.close();
+    decode_result_ = result;
+  }
+  return result;
+}
 
 
 template<typename T, typename H>

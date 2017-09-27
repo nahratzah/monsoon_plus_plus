@@ -112,16 +112,17 @@ class file_segment {
   file_segment& operator=(const file_segment&) = delete;
   file_segment& operator=(file_segment&&) noexcept;
   file_segment(const encdec_ctx&, file_segment_ptr,
-      std::function<T (xdr::xdr_istream&)>&&, bool = true) noexcept;
+      std::function<std::shared_ptr<T> (xdr::xdr_istream&)>&&, bool = true) noexcept;
 
-  T operator*() const;
-  T get() const;
+  std::shared_ptr<const T> get() const;
 
  private:
   file_segment_ptr ptr_;
   encdec_ctx ctx_;
-  std::function<T (xdr::xdr_istream&)> decoder_;
+  std::function<std::shared_ptr<T> (xdr::xdr_istream&)> decoder_;
   bool enable_compression_;
+  mutable std::mutex lck_;
+  mutable std::weak_ptr<const T> decode_result_;
 };
 
 template<typename T, typename Hasher = std::hash<T>>
@@ -200,6 +201,13 @@ class tsdata_list
 };
 
 
+using metric_table = std::vector<std::optional<metric_value>>;
+using group_table = std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment<metric_table>>>;
+using tables = std::unordered_map<group_name, file_segment<group_table>>;
+using file_data_tables_block = std::tuple<std::vector<time_point>, file_segment<tables>>;
+using file_data_tables = std::vector<file_data_tables_block>;
+
+
 monsoon_dirhistory_local_
 time_point decode_timestamp(xdr::xdr_istream&);
 monsoon_dirhistory_local_
@@ -233,8 +241,8 @@ monsoon_dirhistory_local_
 void encode_file_segment(xdr::xdr_ostream&, const file_segment_ptr&);
 
 monsoon_dirhistory_local_
-time_series_value::metric_map decode_record_metrics(xdr::xdr_istream&,
-    const dictionary_delta&);
+auto decode_record_metrics(xdr::xdr_istream&, const dictionary_delta&)
+  -> std::shared_ptr<time_series_value::metric_map>;
 monsoon_dirhistory_local_
 void encode_record_metrics(xdr::xdr_ostream&,
     const time_series_value::metric_map&,
@@ -254,16 +262,26 @@ auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
 
 monsoon_dirhistory_local_
-auto decode_tables(xdr::xdr_istream&, const dictionary_delta&)
-  -> std::unordered_map<group_name, file_segment_ptr>;
+auto decode_file_data_tables_block(xdr::xdr_istream&, const encdec_ctx&)
+  -> file_data_tables_block;
+
+monsoon_dirhistory_local_
+auto decode_file_data_tables(xdr::xdr_istream&, const encdec_ctx&)
+  -> file_data_tables;
+
+monsoon_dirhistory_local_
+auto decode_tables(xdr::xdr_istream&, const encdec_ctx&,
+    const std::shared_ptr<const dictionary_delta>&)
+  -> std::shared_ptr<tables>;
 monsoon_dirhistory_local_
 void encode_tables(xdr::xdr_ostream&,
     const std::unordered_map<group_name, file_segment_ptr>&,
     dictionary_delta&);
 
 monsoon_dirhistory_local_
-auto decode_group_table(xdr::xdr_istream&, const dictionary_delta&)
-  -> std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment_ptr>>;
+auto decode_group_table(xdr::xdr_istream&,
+    const encdec_ctx&, const std::shared_ptr<const dictionary_delta>&)
+  -> std::shared_ptr<group_table>;
 monsoon_dirhistory_local_
 void encode_group_table(xdr::xdr_ostream&,
     const std::vector<bool>&,
@@ -271,8 +289,9 @@ void encode_group_table(xdr::xdr_ostream&,
     dictionary_delta&);
 
 monsoon_dirhistory_local_
-std::vector<std::optional<metric_value>> decode_metric_table(xdr::xdr_istream&,
-    const dictionary<std::string>&);
+auto decode_metric_table(xdr::xdr_istream&,
+    const std::shared_ptr<const dictionary<std::string>>&)
+  -> std::shared_ptr<metric_table>;
 monsoon_dirhistory_local_
 void write_metric_table(xdr::xdr_ostream&,
     const std::vector<std::optional<metric_value>>&,

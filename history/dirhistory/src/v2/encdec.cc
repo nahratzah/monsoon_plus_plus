@@ -209,15 +209,16 @@ void encode_file_segment(xdr::xdr_ostream& out, const file_segment_ptr& fsp) {
   out.put_uint64(fsp.size());
 }
 
-time_series_value::metric_map decode_record_metrics(xdr::xdr_istream& in,
-    const dictionary_delta& dict) {
-  return in.get_collection<time_series_value::metric_map>(
-      [&dict](xdr::xdr_istream& in) {
-        const std::uint32_t path_ref = in.get_uint32();
-        return std::make_pair(
-            metric_name(dict.pdd.decode(path_ref)),
-            decode_metric_value(in, dict.sdd));
-      });
+auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
+-> std::shared_ptr<time_series_value::metric_map> {
+  return std::make_shared<time_series_value::metric_map>(
+      in.get_collection<time_series_value::metric_map>(
+          [&dict](xdr::xdr_istream& in) {
+            const std::uint32_t path_ref = in.get_uint32();
+            return std::make_pair(
+                metric_name(dict.pdd.decode(path_ref)),
+                decode_metric_value(in, dict.sdd));
+          }));
 }
 
 void encode_record_metrics(xdr::xdr_ostream& out,
@@ -438,12 +439,50 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   return result;
 }
 
-auto decode_tables(xdr::xdr_istream& in, const dictionary_delta& dict)
--> std::unordered_map<group_name, file_segment_ptr> {
-  std::unordered_map<group_name, file_segment_ptr> result;
+auto decode_file_data_tables_block(xdr::xdr_istream& in, const encdec_ctx& ctx)
+-> file_data_tables_block {
+  using namespace std::placeholders;
+
+  auto timestamp = decode_timestamp_delta(in);
+  auto dict_ptr = decode_file_segment(in);
+  auto tables_data_ptr = decode_file_segment(in);
+
+  auto xdr = ctx.new_reader(dict_ptr);
+  std::shared_ptr<const dictionary_delta> dict;
+  {
+    auto tmp_dict = std::make_shared<dictionary_delta>();
+    tmp_dict->decode_update(xdr);
+    dict = std::move(tmp_dict);
+    if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
+    xdr.close();
+  }
+
+  return std::make_tuple(
+      std::move(timestamp),
+      file_segment<tables>(
+          ctx,
+          tables_data_ptr,
+          std::bind(&decode_tables, _1, ctx, std::move(dict))));
+}
+
+monsoon_dirhistory_local_
+auto decode_file_data_tables(xdr::xdr_istream& in, const encdec_ctx& ctx)
+-> file_data_tables {
+  using namespace std::placeholders;
+
+  return in.get_collection<file_data_tables>(
+      std::bind(&decode_file_data_tables_block, _1, std::cref(ctx)));
+}
+
+auto decode_tables(xdr::xdr_istream& in,
+    const encdec_ctx& ctx,
+    const std::shared_ptr<const dictionary_delta>& dict) -> std::shared_ptr<tables> {
+  using namespace std::placeholders;
+
+  auto result = std::make_shared<tables>();
 
   in.accept_collection(
-      [&dict](xdr::xdr_istream& in) {
+      [](xdr::xdr_istream& in) {
         auto path_ref = in.get_uint32();
         return std::make_tuple(
             path_ref,
@@ -453,15 +492,18 @@ auto decode_tables(xdr::xdr_istream& in, const dictionary_delta& dict)
                   return std::make_tuple(tag_ref, decode_file_segment(in));
                 }));
       },
-      [&dict, &result](auto&& v) {
-        const auto path = simple_group(dict.pdd.decode(std::get<0>(v)));
+      [&dict, &result, &ctx](auto&& v) {
+        const auto path = simple_group(dict->pdd.decode(std::get<0>(v)));
 
         std::transform(std::get<1>(v).begin(), std::get<1>(v).end(),
-            std::inserter(result, result.end()),
-            [&path, &dict](const auto& tag_map_entry) {
+            std::inserter(*result, result->end()),
+            [&path, &dict, &ctx](const auto& tag_map_entry) {
               return std::make_pair(
-                  group_name(path, dict.tdd.decode(std::get<0>(tag_map_entry))),
-                  std::get<1>(tag_map_entry));
+                  group_name(path, dict->tdd.decode(std::get<0>(tag_map_entry))),
+                  file_segment<group_table>(
+                      ctx,
+                      std::get<1>(tag_map_entry),
+                      std::bind(&decode_group_table, _1, ctx, dict)));
             });
       });
   return result;
@@ -498,18 +540,25 @@ void encode_tables(xdr::xdr_ostream& out,
       tmp.end());
 }
 
-auto decode_group_table(xdr::xdr_istream& in, const dictionary_delta& dict)
--> std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment_ptr>> {
-  using metric_map_type = std::unordered_map<metric_name, file_segment_ptr>;
+auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
+    const std::shared_ptr<const dictionary_delta>& dict)
+-> std::shared_ptr<group_table> {
+  using namespace std::placeholders;
+  using metric_map_type = std::tuple_element<1, group_table>::type;
 
   auto presence = decode_bitset(in);
   auto metric_map = in.get_collection<metric_map_type>(
-      [&dict](xdr::xdr_istream& in) {
-        auto name = metric_name(dict.pdd.decode(in.get_uint32()));
-        return std::make_tuple(name, decode_file_segment(in));
+      [&dict, &ctx](xdr::xdr_istream& in) {
+        auto name = metric_name(dict->pdd.decode(in.get_uint32()));
+        return std::make_tuple(
+            std::move(name),
+            file_segment<metric_table>(
+                ctx,
+                decode_file_segment(in),
+                std::bind(&decode_metric_table, _1, std::shared_ptr<const dictionary<std::string>>(dict, &dict->sdd))));
       });
 
-  return std::make_tuple(std::move(presence), std::move(metric_map));
+  return std::make_shared<group_table>(std::move(presence), std::move(metric_map));
 }
 
 void encode_group_table(xdr::xdr_ostream& out,
@@ -543,21 +592,21 @@ std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
 }
 
 monsoon_dirhistory_local_
-std::vector<std::optional<metric_value>> decode_metric_table(xdr::xdr_istream& in,
-    const dictionary<std::string>& dict) {
-  std::vector<std::optional<metric_value>> result;
+std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
+    const std::shared_ptr<const dictionary<std::string>>& dict) {
+  auto result = std::make_shared<metric_table>();
   std::vector<bool> presence;
 
   auto callback = [&result](std::size_t index, auto&& v) {
-    if (result.size() <= index) {
-      result.reserve(index + 1u);
-      result.resize(index);
-      result.emplace_back(std::move(v));
+    if (result->size() <= index) {
+      result->reserve(index + 1u);
+      result->resize(index);
+      result->emplace_back(std::move(v));
     } else {
       if constexpr(std::is_same_v<metric_value, std::decay_t<decltype(v)>>)
-        result[index] = std::move(v);
+        (*result)[index] = std::move(v);
       else
-        result[index] = metric_value(std::move(v));
+        (*result)[index] = metric_value(std::move(v));
     }
   };
 
@@ -578,16 +627,23 @@ std::vector<std::optional<metric_value>> decode_metric_table(xdr::xdr_istream& i
   update_presence(decode_mt(in, &xdr::xdr_istream::get_flt64, callback));
   update_presence(decode_mt(in,
           [&dict](xdr::xdr_istream& in) {
-            return dict.decode(in.get_uint32());
+            return dict->decode(in.get_uint32());
           },
           callback));
   update_presence(decode_mt(in, &decode_histogram, callback));
-  const std::vector<bool> empty_bitset = decode_bitset(in);
-  if (result.size() < empty_bitset.size()) result.resize(empty_bitset.size());
-  update_presence(empty_bitset);
+  /* empty handling */ {
+    const std::vector<bool> empty_bitset = decode_bitset(in);
+    update_presence(empty_bitset);
+
+    if (result->size() < empty_bitset.size()) result->resize(empty_bitset.size());
+    for (auto iter = empty_bitset.cbegin(); iter != empty_bitset.cend(); ++iter) {
+      const auto index = iter - empty_bitset.cbegin();
+      (*result)[index] = metric_value(); // Assigns the optional.
+    }
+  }
   update_presence(decode_mt(in,
           [&dict](xdr::xdr_istream& in) {
-            return decode_metric_value(in, dict);
+            return decode_metric_value(in, *dict);
           },
           callback));
 
