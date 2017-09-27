@@ -44,7 +44,15 @@ class ptr_stream_writer
   std::unique_ptr<stream_writer> nested_;
 };
 
+template<typename, typename... Args>
+ptr_stream_reader make_ptr_reader(Args&&... args);
+
+template<typename, typename... Args>
+ptr_stream_writer make_ptr_writer(Args&&... args);
+
 
 }} /* namespace monsoon::io */
+
+#include "ptr_stream-inl.h"
 
 #endif /* MONSOON_IO_PTR_STREAM_H */
