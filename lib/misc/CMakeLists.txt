@@ -51,6 +51,7 @@ install (FILES
 install (FILES
   include/monsoon/io/fd.h
   include/monsoon/io/gzip_stream.h
+  include/monsoon/io/gzip_stream-inl.h
   include/monsoon/io/positional_stream-inl.h
   include/monsoon/io/positional_stream.h
   include/monsoon/io/stream.h

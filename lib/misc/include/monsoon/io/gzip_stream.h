@@ -84,31 +84,15 @@ class gzip_decompress_reader
 {
  public:
   gzip_decompress_reader() = default;
-
-  gzip_decompress_reader(Reader&& r)
-  : r_(std::move(r))
-  {}
-
-  gzip_decompress_reader(Reader&& r, bool validate)
-  : basic_gzip_decompress_reader(validate),
-    r_(std::move(r))
-  {}
-
-  gzip_decompress_reader(gzip_decompress_reader&& o)
-      noexcept(std::is_nothrow_move_constructible<Reader>())
-  : basic_gzip_decompress_reader(std::move(o)),
-    r_(std::move(o.r_))
-  {}
-
-  gzip_decompress_reader& operator=(gzip_decompress_reader&& o)
-      noexcept(std::is_nothrow_move_assignable<Reader>()) {
-    static_cast<gzip_decompress_reader&>(*this) = std::move(o);
-    r_ = std::move(o.r_);
-    return *this;
-  }
+  gzip_decompress_reader(Reader&&);
+  gzip_decompress_reader(Reader&&, bool);
+  gzip_decompress_reader(gzip_decompress_reader&&)
+      noexcept(std::is_nothrow_move_constructible<Reader>());
+  gzip_decompress_reader& operator=(gzip_decompress_reader&&)
+      noexcept(std::is_nothrow_move_assignable<Reader>());
 
  private:
-  stream_reader& reader_() override { return r_; }
+  stream_reader& reader_() override;
 
   Reader r_;
 };
@@ -120,36 +104,37 @@ class gzip_compress_writer
 {
  public:
   gzip_compress_writer() = default;
-
-  gzip_compress_writer(Writer&& w)
-  : w_(std::move(w))
-  {}
-
-  gzip_compress_writer(Writer&& w, int level)
-  : basic_gzip_compress_writer(level),
-    w_(std::move(w))
-  {}
-
-  gzip_compress_writer(gzip_compress_writer&& o)
-      noexcept(std::is_nothrow_move_constructible<Writer>())
-  : basic_gzip_compress_writer(std::move(o)),
-    w_(std::move(o.w_))
-  {}
-
-  gzip_compress_writer& operator=(gzip_compress_writer&& o)
-      noexcept(std::is_nothrow_move_assignable<Writer>()) {
-    static_cast<gzip_compress_writer&>(*this) = std::move(o);
-    w_ = std::move(o.w_);
-    return *this;
-  }
+  gzip_compress_writer(Writer&&);
+  gzip_compress_writer(Writer&&, int);
+  gzip_compress_writer(gzip_compress_writer&&)
+      noexcept(std::is_nothrow_move_constructible<Writer>());
+  gzip_compress_writer& operator=(gzip_compress_writer&&)
+      noexcept(std::is_nothrow_move_assignable<Writer>());
 
  private:
-  stream_writer& writer_() override { return w_; }
+  stream_writer& writer_() override;
 
   Writer w_;
 };
 
+template<typename W>
+auto gzip_compression(W&&, int)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    gzip_compress_writer<W>>;
+
+template<typename W>
+auto gzip_compression(W&&)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    gzip_compress_writer<W>>;
+
+template<typename R>
+auto gzip_decompression(R&&)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<R>>;
+
 
 }} /* namespace monsoon::io */
+
+#include "gzip_stream-inl.h"
 
 #endif /* MONSOON_GZIP_STREAM_H */
