@@ -28,6 +28,10 @@ inline metric_value::metric_value(std::string_view v) noexcept
 : value_(std::in_place_type<std::string>, v)
 {}
 
+inline metric_value::metric_value(const char* v) noexcept
+: metric_value(std::string_view(v))
+{}
+
 inline metric_value::metric_value(histogram v) noexcept
 : value_(std::in_place_type<histogram>, std::move(v))
 {}

@@ -86,6 +86,7 @@ class monsoon_intf_export_ metric_value {
   explicit metric_value(bool) noexcept;
   explicit metric_value(fp_type) noexcept;
   explicit metric_value(std::string_view) noexcept;
+  explicit metric_value(const char*) noexcept;
   explicit metric_value(histogram) noexcept;
 
   // signed type
