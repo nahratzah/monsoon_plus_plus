@@ -30,7 +30,7 @@ auto gzip_decompress_reader<Reader>::operator=(
     gzip_decompress_reader&& o)
     noexcept(std::is_nothrow_move_assignable<Reader>())
 -> gzip_decompress_reader& {
-  static_cast<gzip_decompress_reader&>(*this) = std::move(o);
+  basic_gzip_decompress_reader::operator=(std::move(o));
   r_ = std::move(o.r_);
   return *this;
 }
@@ -63,7 +63,7 @@ template<typename Writer>
 auto gzip_compress_writer<Writer>::operator=(gzip_compress_writer&& o)
     noexcept(std::is_nothrow_move_assignable<Writer>())
 -> gzip_compress_writer& {
-  static_cast<gzip_compress_writer&>(*this) = std::move(o);
+  basic_gzip_compress_writer::operator=(std::move(o));
   w_ = std::move(o.w_);
   return *this;
 }
@@ -89,10 +89,51 @@ auto gzip_compression(W&& writer)
 }
 
 template<typename R>
+auto gzip_decompression(R&& reader, bool validate)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<R>> {
+  return gzip_decompress_reader<R>(std::forward<R>(reader), validate);
+}
+
+template<typename R>
 auto gzip_decompression(R&& reader)
 -> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
     gzip_decompress_reader<R>> {
   return gzip_decompress_reader<R>(std::forward<R>(reader));
+}
+
+
+template<typename W>
+auto gzip_compression(std::unique_ptr<W>&& writer, int level)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    gzip_compress_writer<ptr_stream_writer>> {
+  return gzip_compress_writer<ptr_stream_writer>(
+      ptr_stream_writer(std::move(writer), level));
+}
+
+template<typename W>
+auto gzip_compression(std::unique_ptr<W>&& writer)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    gzip_compress_writer<ptr_stream_writer>> {
+  return gzip_compress_writer<ptr_stream_writer>(
+      ptr_stream_writer(std::move(writer)));
+}
+
+template<typename R>
+auto gzip_decompression(std::unique_ptr<R>&& reader, bool validate)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<ptr_stream_reader>> {
+  return gzip_decompress_reader<ptr_stream_reader>(
+      ptr_stream_reader(std::move(reader)),
+      validate);
+}
+
+template<typename R>
+auto gzip_decompression(std::unique_ptr<R>&& reader)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<ptr_stream_reader>> {
+  return gzip_decompress_reader<ptr_stream_reader>(
+      ptr_stream_reader(std::move(reader)));
 }
 
 

@@ -3,6 +3,7 @@
 
 #include <monsoon/misc_export_.h>
 #include <monsoon/io/stream.h>
+#include <monsoon/io/ptr_stream.h>
 #include <type_traits>
 #include <vector>
 
@@ -117,6 +118,7 @@ class gzip_compress_writer
   Writer w_;
 };
 
+
 template<typename W>
 auto gzip_compression(W&&, int)
 -> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
@@ -128,9 +130,39 @@ auto gzip_compression(W&&)
     gzip_compress_writer<W>>;
 
 template<typename R>
+auto gzip_decompression(R&&, bool)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<R>>;
+
+template<typename R>
 auto gzip_decompression(R&&)
 -> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
     gzip_decompress_reader<R>>;
+
+
+template<typename W>
+auto gzip_compression(std::unique_ptr<W>&&, int)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    gzip_compress_writer<ptr_stream_writer>>;
+
+template<typename W>
+auto gzip_compression(std::unique_ptr<W>&&)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    gzip_compress_writer<ptr_stream_writer>>;
+
+template<typename R>
+auto gzip_decompression(std::unique_ptr<R>&&)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<ptr_stream_reader>>;
+
+template<typename R>
+auto gzip_decompression(std::unique_ptr<R>&&, bool)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+    gzip_decompress_reader<ptr_stream_reader>>;
+
+
+extern template class monsoon_misc_export_ gzip_decompress_reader<ptr_stream_reader>;
+extern template class monsoon_misc_export_ gzip_compress_writer<ptr_stream_writer>;
 
 
 }} /* namespace monsoon::io */
