@@ -30,6 +30,7 @@ include_directories ($<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES
 add_library (monsoon_misc
   src/fd.cc
   src/stream.cc
+  src/ptr_stream.cc
   src/positional_stream.cc
   src/xdr.cc
   src/gzip_stream.cc
@@ -50,6 +51,7 @@ install (FILES
   DESTINATION include/monsoon)
 install (FILES
   include/monsoon/io/fd.h
+  include/monsoon/io/ptr_stream.h
   include/monsoon/io/gzip_stream.h
   include/monsoon/io/gzip_stream-inl.h
   include/monsoon/io/positional_stream-inl.h
