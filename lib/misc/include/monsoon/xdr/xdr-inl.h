@@ -205,7 +205,7 @@ template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C&& c)
 -> C&& {
   std::generate_n(std::inserter(c, c.end()), len,
-      [this, &fn]() { return fn(*this); });
+      [this, &fn]() { return std::invoke(fn, *this); });
   return std::forward<C>(c);
 }
 
@@ -213,7 +213,7 @@ template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C& c)
 -> C& {
   std::generate_n(std::inserter(c, c.end()), len,
-      [this, &fn]() { return fn(*this); });
+      [this, &fn]() { return std::invoke(fn, *this); });
   return c;
 }
 
@@ -231,7 +231,7 @@ template<typename SerFn, typename Acceptor>
 inline void xdr_istream::accept_collection_n(std::size_t len, SerFn fn,
     Acceptor acceptor) {
   for (std::size_t i = 0; i < len; ++i)
-    acceptor(fn(*this));
+    std::invoke(acceptor, std::invoke(fn, *this));
 }
 
 template<typename SerFn, typename Acceptor>
@@ -362,7 +362,7 @@ template<typename SerFn, typename Iter>
 inline auto xdr_ostream::put_collection_n(std::size_t len, SerFn fn, Iter iter)
 -> Iter {
   for (std::size_t i = 0; i < len; ++i, ++iter)
-    fn(*this, *iter);
+    std::invoke(fn, *this, *iter);
   return iter;
 }
 
@@ -377,7 +377,8 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
   if (len < 0 || len > 0xffffffffu)
     throw xdr_exception();
   put_uint32(static_cast<std::uint32_t>(len));
-  std::for_each(begin, end, [this, &fn](const auto& arg) { fn(*this, arg); });
+  std::for_each(begin, end,
+      [this, &fn](const auto& arg) { std::invoke(fn, *this, arg); });
 }
 
 template<typename SerFn, typename Iter>
@@ -393,7 +394,7 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
       [&](const auto& v) {
         if (len == 0xffffffffu)
           throw xdr_exception();
-        fn(buffer, v);
+          std::invoke(fn, buffer, v);
         ++len;
       });
 
