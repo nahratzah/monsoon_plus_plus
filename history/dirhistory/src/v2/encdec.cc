@@ -438,30 +438,92 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   return result;
 }
 
+auto decode_tables(xdr::xdr_istream& in, const dictionary_delta& dict)
+-> std::unordered_map<group_name, file_segment_ptr> {
+  std::unordered_map<group_name, file_segment_ptr> result;
 
-auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
-  const
--> xdr::xdr_stream_reader<io::ptr_stream_reader> {
-  auto rd = io::make_ptr_reader<raw_file_segment_reader>(
-      *fd_, ptr.offset(),
-      ptr.size());
-  if (compression && this->compression() != compression_type::NONE)
-    rd = decompress_(std::move(rd), true);
-  return xdr::xdr_stream_reader<io::ptr_stream_reader>(std::move(rd));
+  in.accept_collection(
+      [&dict](xdr::xdr_istream& in) {
+        auto path_ref = in.get_uint32();
+        return std::make_tuple(
+            path_ref,
+            in.template get_collection<std::vector<std::tuple<std::uint32_t, file_segment_ptr>>>(
+                [](xdr::xdr_istream& in) {
+                  auto tag_ref = in.get_uint32();
+                  return std::make_tuple(tag_ref, decode_file_segment(in));
+                }));
+      },
+      [&dict, &result](auto&& v) {
+        const auto path = simple_group(dict.pdd.decode(std::get<0>(v)));
+
+        std::transform(std::get<1>(v).begin(), std::get<1>(v).end(),
+            std::inserter(result, result.end()),
+            [&path, &dict](const auto& tag_map_entry) {
+              return std::make_pair(
+                  group_name(path, dict.tdd.decode(std::get<0>(tag_map_entry))),
+                  std::get<1>(tag_map_entry));
+            });
+      });
+  return result;
 }
 
-auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
--> std::unique_ptr<io::stream_reader> {
-  switch (compression()) {
-    default:
-    case compression_type::LZO_1X1: // XXX implement reader
-    case compression_type::SNAPPY: // XXX implement reader
-      throw std::logic_error("Unsupported compression");
-    case compression_type::NONE:
-      return std::move(rd).get();
-    case compression_type::GZIP:
-      return io::new_gzip_decompression(std::move(rd), validate);
-  }
+void encode_tables(xdr::xdr_ostream& out,
+    const std::unordered_map<group_name, file_segment_ptr>& groups,
+    dictionary_delta& dict) {
+  // Recreate to-be-written structure in memory.
+  std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, file_segment_ptr>>
+      tmp;
+  std::for_each(groups.begin(), groups.end(),
+      [&tmp, &dict](const auto& group) {
+        const auto path_ref = dict.pdd.encode(std::get<0>(group).get_path().get_path());
+        const auto tag_ref = dict.tdd.encode(std::get<0>(group).get_tags());
+        const auto& ptr = std::get<1>(group);
+
+        tmp[path_ref].emplace(tag_ref, ptr);
+      });
+
+  // Write the previously computed structure.
+  out.put_collection(
+      [](xdr::xdr_ostream& out, const auto& path_map_entry) {
+        out.put_uint32(std::get<0>(path_map_entry));
+        out.put_collection(
+            [](xdr::xdr_ostream& out, const auto& tag_map_entry) {
+              out.put_uint32(std::get<0>(tag_map_entry));
+              encode_file_segment(out, std::get<1>(tag_map_entry));
+            },
+            std::get<1>(path_map_entry).begin(),
+            std::get<1>(path_map_entry).end());
+      },
+      tmp.begin(),
+      tmp.end());
+}
+
+auto decode_group_table(xdr::xdr_istream& in, const dictionary_delta& dict)
+-> std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment_ptr>> {
+  using metric_map_type = std::unordered_map<metric_name, file_segment_ptr>;
+
+  auto presence = decode_bitset(in);
+  auto metric_map = in.get_collection<metric_map_type>(
+      [&dict](xdr::xdr_istream& in) {
+        auto name = metric_name(dict.pdd.decode(in.get_uint32()));
+        return std::make_tuple(name, decode_file_segment(in));
+      });
+
+  return std::make_tuple(std::move(presence), std::move(metric_map));
+}
+
+void encode_group_table(xdr::xdr_ostream& out,
+    const std::vector<bool>& presence,
+    std::unordered_map<metric_name, file_segment_ptr>& metrics_map,
+    dictionary_delta& dict) {
+  encode_bitset(out, presence);
+
+  out.put_collection(
+      [&dict](xdr::xdr_ostream& out, const auto& mm_entry) {
+        out.put_uint32(dict.pdd.encode(std::get<0>(mm_entry).get_path()));
+        encode_file_segment(out, std::get<1>(mm_entry));
+      },
+      metrics_map.begin(), metrics_map.end());
 }
 
 template<typename SerFn, typename Callback>
@@ -475,6 +537,7 @@ std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
         auto index = bitset_iter - bitset.cbegin();
         assert(index >= 0);
         cb(index, std::move(v));
+        ++bitset_iter;
       });
   return bitset;
 }
@@ -637,6 +700,32 @@ void write_metric_table(xdr::xdr_ostream& out,
   encode_bitset(out, mt_empty);
   mt_other.encode(out,
       std::bind(&encode_metric_value, _1, _2, std::ref(dict)));
+}
+
+
+auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
+  const
+-> xdr::xdr_stream_reader<io::ptr_stream_reader> {
+  auto rd = io::make_ptr_reader<raw_file_segment_reader>(
+      *fd_, ptr.offset(),
+      ptr.size());
+  if (compression && this->compression() != compression_type::NONE)
+    rd = decompress_(std::move(rd), true);
+  return xdr::xdr_stream_reader<io::ptr_stream_reader>(std::move(rd));
+}
+
+auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
+-> std::unique_ptr<io::stream_reader> {
+  switch (compression()) {
+    default:
+    case compression_type::LZO_1X1: // XXX implement reader
+    case compression_type::SNAPPY: // XXX implement reader
+      throw std::logic_error("Unsupported compression");
+    case compression_type::NONE:
+      return std::move(rd).get();
+    case compression_type::GZIP:
+      return io::new_gzip_decompression(std::move(rd), validate);
+  }
 }
 
 

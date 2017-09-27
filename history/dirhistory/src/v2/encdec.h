@@ -254,6 +254,23 @@ auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
 
 monsoon_dirhistory_local_
+auto decode_tables(xdr::xdr_istream&, const dictionary_delta&)
+  -> std::unordered_map<group_name, file_segment_ptr>;
+monsoon_dirhistory_local_
+void encode_tables(xdr::xdr_ostream&,
+    const std::unordered_map<group_name, file_segment_ptr>&,
+    dictionary_delta&);
+
+monsoon_dirhistory_local_
+auto decode_group_table(xdr::xdr_istream&, const dictionary_delta&)
+  -> std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment_ptr>>;
+monsoon_dirhistory_local_
+void encode_group_table(xdr::xdr_ostream&,
+    const std::vector<bool>&,
+    const std::vector<std::pair<metric_name, file_segment_ptr>>&,
+    dictionary_delta&);
+
+monsoon_dirhistory_local_
 std::vector<std::optional<metric_value>> decode_metric_table(xdr::xdr_istream&,
     const dictionary<std::string>&);
 monsoon_dirhistory_local_
