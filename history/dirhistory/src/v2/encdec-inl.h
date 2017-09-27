@@ -18,6 +18,10 @@ inline file_segment_ptr::file_segment_ptr(offset_type off, size_type len)
 
 
 template<typename T>
+file_segment<T>::file_segment() noexcept
+{}
+
+template<typename T>
 file_segment<T>::file_segment(file_segment&& o) noexcept
 : ptr_(std::move(o.ptr_)),
   ctx_(std::move(o.ctx_)),

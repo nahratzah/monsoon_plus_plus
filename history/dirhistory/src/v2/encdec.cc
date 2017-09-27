@@ -467,11 +467,12 @@ auto decode_file_data_tables_block(xdr::xdr_istream& in, const encdec_ctx& ctx)
 
 monsoon_dirhistory_local_
 auto decode_file_data_tables(xdr::xdr_istream& in, const encdec_ctx& ctx)
--> file_data_tables {
+-> std::shared_ptr<file_data_tables> {
   using namespace std::placeholders;
 
-  return in.get_collection<file_data_tables>(
-      std::bind(&decode_file_data_tables_block, _1, std::cref(ctx)));
+  return std::make_shared<file_data_tables>(
+      in.get_collection<file_data_tables>(
+          std::bind(&decode_file_data_tables_block, _1, std::cref(ctx))));
 }
 
 auto decode_tables(xdr::xdr_istream& in,
@@ -759,6 +760,38 @@ void write_metric_table(xdr::xdr_ostream& out,
 }
 
 
+encdec_ctx::encdec_ctx() noexcept {}
+
+encdec_ctx::encdec_ctx(const encdec_ctx& o)
+: fd_(o.fd_),
+  hdr_flags_(o.hdr_flags_)
+{}
+
+encdec_ctx::encdec_ctx(encdec_ctx&& o) noexcept
+: fd_(std::move(o.fd_)),
+  hdr_flags_(std::move(o.hdr_flags_))
+{}
+
+auto encdec_ctx::operator=(const encdec_ctx& o) -> encdec_ctx& {
+  fd_ = o.fd_;
+  hdr_flags_ = o.hdr_flags_;
+  return *this;
+}
+
+auto encdec_ctx::operator=(encdec_ctx&& o) noexcept -> encdec_ctx& {
+  fd_ = std::move(o.fd_);
+  hdr_flags_ = std::move(o.hdr_flags_);
+  return *this;
+}
+
+encdec_ctx::encdec_ctx(std::shared_ptr<io::fd> fd, std::uint32_t hdr_flags)
+  noexcept
+: fd_(std::move(fd)),
+  hdr_flags_(hdr_flags)
+{}
+
+encdec_ctx::~encdec_ctx() noexcept {}
+
 auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
   const
 -> xdr::xdr_stream_reader<io::ptr_stream_reader> {
@@ -783,6 +816,39 @@ auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
       return io::new_gzip_decompression(std::move(rd), validate);
   }
 }
+
+
+tsfile_header::tsfile_header(xdr::xdr_istream& in,
+    std::shared_ptr<io::fd> fd) {
+  using namespace std::placeholders;
+
+  first_ = decode_timestamp(in);
+  last_ = decode_timestamp(in);
+  flags_ = in.get_uint32();
+  reserved_ = in.get_uint32();
+  file_size_ = in.get_uint64();
+
+  auto fdt_ptr = decode_file_segment(in);
+  switch (flags_ & header_flags::KIND_MASK) {
+    default:
+      throw xdr::xdr_exception("file kind not recognized");
+    case header_flags::KIND_LIST:
+      fdt_ = file_segment<tsdata_list>(
+          encdec_ctx(fd, flags_),
+          fdt_ptr,
+          std::bind(&decode_tsdata, _1, encdec_ctx(fd, flags_)),
+          false);
+      break;
+    case header_flags::KIND_TABLES:
+      fdt_ = file_segment<file_data_tables>(
+          encdec_ctx(fd, flags_),
+          fdt_ptr,
+          std::bind(&decode_file_data_tables, _1, encdec_ctx(fd, flags_)));
+      break;
+  }
+}
+
+tsfile_header::~tsfile_header() noexcept {}
 
 
 }}} /* namespace monsoon::history::v2 */

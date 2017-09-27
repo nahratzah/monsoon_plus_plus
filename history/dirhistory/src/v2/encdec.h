@@ -27,8 +27,9 @@ namespace v2 {
 namespace header_flags {
 
 
-                        /* KIND: indicate if the type of file data. */
-constexpr std::uint32_t KIND_MASK        = 0x0000000f,
+monsoon_dirhistory_local_
+constexpr std::uint32_t /* KIND: indicate if the type of file data. */
+                        KIND_MASK        = 0x0000000f,
                         KIND_LIST        = 0x00000000,
                         KIND_TABLES      = 0x00000001,
                         /* Indicates segment compression algorithm. */
@@ -44,7 +45,7 @@ constexpr std::uint32_t KIND_MASK        = 0x0000000f,
 } /* namespace monsoon::history::v2::header_flags */
 
 
-class file_segment_ptr {
+class monsoon_dirhistory_local_ file_segment_ptr {
  public:
   using offset_type = io::fd::offset_type;
   using size_type = io::fd::size_type;
@@ -62,7 +63,7 @@ class file_segment_ptr {
   size_type len_;
 };
 
-class encdec_ctx {
+class monsoon_dirhistory_local_ encdec_ctx {
  public:
   enum class compression_type : std::uint32_t {
     NONE = 0,
@@ -70,6 +71,14 @@ class encdec_ctx {
     GZIP = header_flags::GZIP,
     SNAPPY = header_flags::SNAPPY
   };
+
+  encdec_ctx() noexcept;
+  encdec_ctx(const encdec_ctx&);
+  encdec_ctx(encdec_ctx&&) noexcept;
+  encdec_ctx& operator=(const encdec_ctx&);
+  encdec_ctx& operator=(encdec_ctx&&) noexcept;
+  encdec_ctx(std::shared_ptr<io::fd>, std::uint32_t) noexcept;
+  ~encdec_ctx() noexcept;
 
   const std::shared_ptr<io::fd>& fd() const noexcept { return fd_; }
   auto new_reader(const file_segment_ptr&, bool = true) const
@@ -82,7 +91,7 @@ class encdec_ctx {
   }
 
  private:
-  std::shared_ptr<io::fd> fd_;
+  std::shared_ptr<io::fd> fd_ = nullptr;
   std::uint32_t hdr_flags_ = 0;
 };
 
@@ -101,12 +110,12 @@ class encdec_ctx {
  * The CRC32 is calculated over the data and the padding bytes.
  */
 template<typename T>
-class file_segment {
+class monsoon_dirhistory_local_ file_segment {
  public:
   using offset_type = file_segment_ptr::offset_type;
   using size_type = file_segment_ptr::size_type;
 
-  file_segment() = default;
+  file_segment() noexcept;
   file_segment(const file_segment&) = delete;
   file_segment(file_segment&&) noexcept;
   file_segment& operator=(const file_segment&) = delete;
@@ -163,7 +172,7 @@ class monsoon_dirhistory_local_ dictionary_delta {
 };
 
 /** The TSData structure of the 'list' implementation. */
-class tsdata_list
+class monsoon_dirhistory_local_ tsdata_list
 : public std::enable_shared_from_this<tsdata_list>
 {
  public:
@@ -200,12 +209,27 @@ class tsdata_list
   const encdec_ctx ctx_;
 };
 
-
 using metric_table = std::vector<std::optional<metric_value>>;
 using group_table = std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment<metric_table>>>;
 using tables = std::unordered_map<group_name, file_segment<group_table>>;
 using file_data_tables_block = std::tuple<std::vector<time_point>, file_segment<tables>>;
 using file_data_tables = std::vector<file_data_tables_block>;
+
+class monsoon_dirhistory_local_ tsfile_header {
+ public:
+  tsfile_header(xdr::xdr_istream&, std::shared_ptr<io::fd>);
+  ~tsfile_header() noexcept;
+
+ private:
+  time_point first_, last_;
+  std::uint32_t flags_;
+  std::uint32_t reserved_;
+  std::uint64_t file_size_;
+  std::variant<
+      file_segment<tsdata_list>,
+      file_segment<file_data_tables>
+      > fdt_;
+};
 
 
 monsoon_dirhistory_local_
@@ -267,7 +291,7 @@ auto decode_file_data_tables_block(xdr::xdr_istream&, const encdec_ctx&)
 
 monsoon_dirhistory_local_
 auto decode_file_data_tables(xdr::xdr_istream&, const encdec_ctx&)
-  -> file_data_tables;
+  -> std::shared_ptr<file_data_tables>;
 
 monsoon_dirhistory_local_
 auto decode_tables(xdr::xdr_istream&, const encdec_ctx&,
