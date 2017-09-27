@@ -184,7 +184,7 @@ class tsdata_list
 
   time_point ts() { return ts_; }
   std::shared_ptr<tsdata_list> pred() const;
-  std::shared_ptr<record_array> records() const;
+  std::shared_ptr<record_array> records(const dictionary_delta&) const;
   std::shared_ptr<dictionary_delta> dictionary() const;
 
  private:
@@ -194,6 +194,7 @@ class tsdata_list
   file_segment_ptr records_;
   std::uint32_t reserved_;
   mutable std::weak_ptr<tsdata_list> cached_pred_;
+  mutable std::weak_ptr<record_array> cached_records_;
   mutable std::mutex lock_;
   const encdec_ctx ctx_;
 };
@@ -251,6 +252,14 @@ void encode_record_array(xdr::xdr_ostream&,
 monsoon_dirhistory_local_
 auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
+
+monsoon_dirhistory_local_
+std::vector<metric_value> decode_metric_table(xdr::xdr_istream&,
+    const dictionary<std::string>&);
+monsoon_dirhistory_local_
+void write_metric_table(xdr::xdr_ostream&,
+    const std::vector<metric_value>&,
+    dictionary<std::string>&);
 
 
 }}} /* namespace monsoon::history::v2 */

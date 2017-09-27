@@ -5,6 +5,7 @@
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/history/dir/hdir_exception.h>
 #include <stdexcept>
+#include <functional>
 #include <algorithm>
 #include <stack>
 #include <cstring>
@@ -174,8 +175,13 @@ void encode_metric_value(monsoon::xdr::xdr_ostream& out,
             out.put_int64(v);
           },
           [&out](const metric_value::unsigned_type& v) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-            out.put_int64(static_cast<std::int64_t>(v));
+            if (v < static_cast<metric_value::unsigned_type>(std::numeric_limits<metric_value::signed_type>::max())) {
+              out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
+              out.put_int64(static_cast<std::int64_t>(v));
+            } else { // Can't be represented in signed type.
+              out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
+              out.put_flt64(v);
+            }
           },
           [&out](const metric_value::fp_type& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
@@ -419,6 +425,19 @@ auto tsdata_list::pred() const -> std::shared_ptr<tsdata_list> {
   return result;
 }
 
+auto tsdata_list::records(const dictionary_delta& dict) const
+-> std::shared_ptr<tsdata_list::record_array> {
+  const auto lck = std::lock_guard<std::mutex>(lock_);
+
+  std::shared_ptr<tsdata_list::record_array> result = cached_records_.lock();
+  if (result == nullptr) {
+    auto xdr = ctx_.new_reader(pred_.value(), false);
+    result = std::make_shared<record_array>(decode_record_array(xdr, ctx_, dict));
+    cached_records_ = result;
+  }
+  return result;
+}
+
 
 auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
   const
@@ -443,6 +462,181 @@ auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
     case compression_type::GZIP:
       return io::new_gzip_decompression(std::move(rd), validate);
   }
+}
+
+template<typename SerFn, typename Callback>
+std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
+  std::vector<bool> bitset = decode_bitset(in);
+  std::vector<bool>::const_iterator bitset_iter = bitset.cbegin();
+  in.accept_collection(
+      fn,
+      [&cb, &bitset, &bitset_iter](auto&& v) {
+        bitset_iter = std::find(bitset_iter, bitset.cend(), true);
+        auto index = bitset_iter - bitset.cbegin();
+        assert(index >= 0);
+        cb(index, std::move(v));
+      });
+  return bitset;
+}
+
+monsoon_dirhistory_local_
+std::vector<metric_value> decode_metric_table(xdr::xdr_istream& in,
+    const dictionary<std::string>& dict) {
+  std::vector<metric_value> result;
+  std::vector<bool> presence;
+
+  auto callback = [&result](std::size_t index, auto&& v) {
+    if (result.size() <= index) {
+      result.reserve(index + 1u);
+      result.resize(index);
+      result.emplace_back(std::move(v));
+    } else {
+      if constexpr(std::is_same_v<metric_value, std::decay_t<decltype(v)>>)
+        result[index] = std::move(v);
+      else
+        result[index] = metric_value(std::move(v));
+    }
+  };
+
+  auto update_presence = [&presence](const std::vector<bool>& u) {
+    if (presence.size() < u.size())
+      presence.resize(u.size(), false);
+    std::transform(u.begin(), u.end(), presence.begin(), presence.begin(),
+        [](bool u, bool p) {
+          if (p && u) throw xdr::xdr_exception("presence collision");
+          return p || u;
+        });
+  };
+
+  update_presence(decode_mt(in, &xdr::xdr_istream::get_bool, callback));
+  update_presence(decode_mt(in, &xdr::xdr_istream::get_int16, callback));
+  update_presence(decode_mt(in, &xdr::xdr_istream::get_int32, callback));
+  update_presence(decode_mt(in, &xdr::xdr_istream::get_int64, callback));
+  update_presence(decode_mt(in, &xdr::xdr_istream::get_flt64, callback));
+  update_presence(decode_mt(in,
+          [&dict](xdr::xdr_istream& in) {
+            return dict.decode(in.get_uint32());
+          },
+          callback));
+  update_presence(decode_mt(in, &decode_histogram, callback));
+  const std::vector<bool> empty_bitset = decode_bitset(in);
+  if (result.size() < empty_bitset.size()) result.resize(empty_bitset.size());
+  update_presence(empty_bitset);
+  update_presence(decode_mt(in,
+          [&dict](xdr::xdr_istream& in) {
+            return decode_metric_value(in, dict);
+          },
+          callback));
+
+  if (!std::all_of(presence.begin(), presence.end(), [](bool b) { return b; }))
+    throw xdr::xdr_exception("presence gap");
+
+  return result;
+}
+
+template<typename T> struct mt {
+  std::vector<bool> presence;
+  std::vector<T> value;
+
+  template<typename SerFn>
+  void encode(xdr::xdr_ostream& out, SerFn fn) {
+    encode_bitset(out, presence);
+    out.put_collection(fn, value.begin(), value.end());
+  }
+};
+
+monsoon_dirhistory_local_
+void write_metric_table(xdr::xdr_ostream& out,
+    const std::vector<metric_value>& metrics,
+    dictionary<std::string>& dict) {
+  using namespace std::placeholders;
+
+  mt<bool> mt_bool{ std::vector<bool>(metrics.size(), false), {} };
+  mt<std::int16_t> mt_16bit{ std::vector<bool>(metrics.size(), false), {} };
+  mt<std::int32_t> mt_32bit{ std::vector<bool>(metrics.size(), false), {} };
+  mt<std::int64_t> mt_64bit{ std::vector<bool>(metrics.size(), false), {} };
+  mt<metric_value::fp_type> mt_dbl{ std::vector<bool>(metrics.size(), false), {} };
+  mt<std::reference_wrapper<const std::string>> mt_str{ std::vector<bool>(metrics.size(), false), {} };
+  mt<std::reference_wrapper<const histogram>> mt_hist{ std::vector<bool>(metrics.size(), false), {} };
+  std::vector<bool> mt_empty(metrics.size(), false);
+  mt<std::reference_wrapper<const metric_value>> mt_other{ std::vector<bool>(metrics.size(), false), {} };
+
+  for (auto iter = metrics.cbegin(); iter != metrics.cend(); ++iter) {
+    const auto index = iter - metrics.cbegin();
+    visit(
+        overload(
+            [&](const auto& v) { // Fallback
+              mt_other.presence[index] = true;
+              mt_other.value.emplace_back(v);
+            },
+            [&](const metric_value::empty&) {
+              mt_empty[index] = true;
+            },
+            [&](const bool& b) {
+              mt_bool.presence[index] = true;
+              mt_bool.value.push_back(b);
+            },
+            [&](const metric_value::signed_type& v) {
+              if (v >= std::numeric_limits<std::int16_t>::min()
+                  && v <= std::numeric_limits<std::int16_t>::max()) {
+                mt_16bit.presence[index] = true;
+                mt_16bit.value.push_back(v);
+              } else if (v >= std::numeric_limits<std::int32_t>::min()
+                  && v <= std::numeric_limits<std::int32_t>::max()) {
+                mt_32bit.presence[index] = true;
+                mt_32bit.value.push_back(v);
+              } else if (v >= std::numeric_limits<std::int64_t>::min()
+                  && v <= std::numeric_limits<std::int64_t>::max()) {
+                mt_64bit.presence[index] = true;
+                mt_64bit.value.push_back(v);
+              } else {
+                assert(false); // Unreachable.
+              }
+            },
+            [&](const metric_value::unsigned_type& v) {
+              if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int16_t>::max())) {
+                mt_16bit.presence[index] = true;
+                mt_16bit.value.push_back(v);
+              } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int32_t>::max())) {
+                mt_32bit.presence[index] = true;
+                mt_32bit.value.push_back(v);
+              } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int64_t>::max())) {
+                mt_64bit.presence[index] = true;
+                mt_64bit.value.push_back(v);
+              } else { // Too large to represent as integer, store as floating point.
+                mt_dbl.presence[index] = true;
+                mt_dbl.value.push_back(v);
+              }
+            },
+            [&](const metric_value::fp_type& v) {
+              mt_dbl.presence[index] = true;
+              mt_dbl.value.push_back(v);
+            },
+            [&](const std::string& v) {
+              mt_str.presence[index] = true;
+              mt_str.value.emplace_back(v);
+            },
+            [&](const histogram& v) {
+              mt_hist.presence[index] = true;
+              mt_hist.value.emplace_back(v);
+            }
+            ),
+        iter->get());
+  }
+
+  mt_bool.encode(out, &xdr::xdr_ostream::put_bool);
+  mt_16bit.encode(out, &xdr::xdr_ostream::put_int16);
+  mt_32bit.encode(out, &xdr::xdr_ostream::put_int32);
+  mt_64bit.encode(out, &xdr::xdr_ostream::put_int64);
+  mt_dbl.encode(out, &xdr::xdr_ostream::put_flt64);
+  mt_str.encode(out,
+      [&dict](xdr::xdr_ostream& out, const auto& v) {
+        out.put_uint32(dict.encode(v));
+      });
+  mt_hist.encode(out, &encode_histogram);
+  encode_bitset(out, mt_empty);
+  mt_other.encode(out,
+      std::bind(&encode_metric_value, _1, _2, std::ref(dict)));
 }
 
 
