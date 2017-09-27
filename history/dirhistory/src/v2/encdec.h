@@ -3,6 +3,7 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
+#include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/time_point.h>
 #include <cstddef>
 #include <cstdint>
@@ -15,6 +16,10 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/time_series_value.h>
 #include <monsoon/io/fd.h>
+#include <monsoon/io/ptr_stream.h>
+#include <monsoon/io/stream.h>
+#include <mutex>
+#include <memory>
 
 namespace monsoon {
 namespace history {
@@ -39,14 +44,6 @@ constexpr std::uint32_t KIND_MASK        = 0x0000000f,
 } /* namespace monsoon::history::v2::header_flags */
 
 
-class encdec_ctx {
- public:
-  std::shared_ptr<io::fd> fd() const noexcept { return fd_; }
-
- private:
-  std::shared_ptr<io::fd> fd_;
-};
-
 class file_segment_ptr {
  public:
   using offset_type = io::fd::offset_type;
@@ -63,6 +60,30 @@ class file_segment_ptr {
  private:
   offset_type off_;
   size_type len_;
+};
+
+class encdec_ctx {
+ public:
+  enum class compression_type : std::uint32_t {
+    NONE = 0,
+    LZO_1X1 = header_flags::LZO_1X1,
+    GZIP = header_flags::GZIP,
+    SNAPPY = header_flags::SNAPPY
+  };
+
+  const std::shared_ptr<io::fd>& fd() const noexcept { return fd_; }
+  auto new_reader(const file_segment_ptr&, bool = true) const
+      -> xdr::xdr_stream_reader<io::ptr_stream_reader>;
+  auto decompress_(io::ptr_stream_reader&&, bool) const
+      -> std::unique_ptr<io::stream_reader>;
+
+  compression_type compression() const noexcept {
+    return compression_type(hdr_flags_ & header_flags::COMPRESSION_MASK);
+  }
+
+ private:
+  std::shared_ptr<io::fd> fd_;
+  std::uint32_t hdr_flags_ = 0;
 };
 
 /*
@@ -141,34 +162,40 @@ class monsoon_dirhistory_local_ dictionary_delta {
 };
 
 /** The TSData structure of the 'list' implementation. */
-class tsdata_list {
+class tsdata_list
+: public std::enable_shared_from_this<tsdata_list>
+{
  public:
   using record_array = std::unordered_map<
       group_name,
       file_segment<time_series_value::metric_map>>;
 
   tsdata_list() = default;
-  tsdata_list(tsdata_list&&) noexcept;
-  tsdata_list& operator=(tsdata_list&&) noexcept;
+  tsdata_list(tsdata_list&&) = delete;
+  tsdata_list& operator=(tsdata_list&&) = delete;
   tsdata_list(
+      const encdec_ctx&,
       time_point ts,
-      optional<file_segment<tsdata_list>>&& pred,
-      optional<file_segment<dictionary_delta>>&& dd,
-      file_segment<record_array>&& records,
+      std::optional<file_segment_ptr> pred,
+      std::optional<file_segment_ptr> dd,
+      file_segment_ptr records,
       std::uint32_t reserved) noexcept;
   ~tsdata_list() noexcept;
 
   time_point ts() { return ts_; }
-  const optional<file_segment<tsdata_list>>& pred() const { return pred_; }
-  const optional<file_segment<dictionary_delta>>& dd() const { return dd_; }
-  const file_segment<record_array>& records() const { return records_; }
+  std::shared_ptr<tsdata_list> pred() const;
+  std::shared_ptr<record_array> records() const;
+  std::shared_ptr<dictionary_delta> dictionary() const;
 
  private:
   time_point ts_;
-  optional<file_segment<tsdata_list>> pred_;
-  optional<file_segment<dictionary_delta>> dd_;
-  file_segment<record_array> records_;
+  std::optional<file_segment_ptr> pred_;
+  std::optional<file_segment_ptr> dd_;
+  file_segment_ptr records_;
   std::uint32_t reserved_;
+  mutable std::weak_ptr<tsdata_list> cached_pred_;
+  mutable std::mutex lock_;
+  const encdec_ctx ctx_;
 };
 
 
@@ -215,11 +242,15 @@ void encode_record_metrics(xdr::xdr_ostream&,
 monsoon_dirhistory_local_
 auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
--> tsdata_list::record_array;
+  -> tsdata_list::record_array;
 monsoon_dirhistory_local_
 void encode_record_array(xdr::xdr_ostream&,
     const std::vector<std::pair<group_name, file_segment_ptr>>&,
     dictionary_delta&);
+
+monsoon_dirhistory_local_
+auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
+  -> std::shared_ptr<tsdata_list>;
 
 
 }}} /* namespace monsoon::history::v2 */

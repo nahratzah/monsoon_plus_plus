@@ -15,6 +15,8 @@ if (NOT STD_FILESYSTEM)
   include_directories (${Boost_INCLUDE_DIR})
 endif ()
 add_library (monsoon_dirhistory
+  src/raw_file_segment_reader.cc
+  src/hdir_exception.cc
   src/dirhistory.cc
   src/tsdata_mime.cc
   src/v0/tsdata.cc
@@ -36,6 +38,7 @@ set_property (TARGET monsoon_dirhistory PROPERTY SOVERSION "0.0")
 install (TARGETS monsoon_dirhistory DESTINATION lib)
 install (FILES
   include/monsoon/history/dir/dirhistory.h
+  include/monsoon/history/dir/hdir_exception.h
   include/monsoon/history/dir/dirhistory_export_.h
   include/monsoon/history/dir/tsdata.h
   DESTINATION include/monsoon/history/dir)

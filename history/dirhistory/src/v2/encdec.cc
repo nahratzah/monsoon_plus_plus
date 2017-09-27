@@ -1,6 +1,13 @@
 #include "encdec.h"
+#include "../overload.h"
+#include "../raw_file_segment_reader.h"
+#include <monsoon/xdr/xdr_stream.h>
+#include <monsoon/io/gzip_stream.h>
+#include <monsoon/history/dir/hdir_exception.h>
 #include <stdexcept>
 #include <algorithm>
+#include <stack>
+#include <cstring>
 
 namespace monsoon {
 namespace history {
@@ -153,37 +160,36 @@ metric_value decode_metric_value(monsoon::xdr::xdr_istream& in,
 
 void encode_metric_value(monsoon::xdr::xdr_ostream& out,
     const metric_value& value, dictionary<std::string>& dict) {
-  const auto& opt_raw = value.get();
-  if (!opt_raw) {
-    out.put_uint32(static_cast<std::uint32_t>(metrickind::EMPTY));
-    return;
-  }
-
-  visit(opt_raw.get(),
-      [&out](bool b) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::BOOL));
-        out.put_bool(b);
-      },
-      [&out](const metric_value::signed_type& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-        out.put_int64(v);
-      },
-      [&out](const metric_value::unsigned_type& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-        out.put_int64(static_cast<std::int64_t>(v));
-      },
-      [&out](const metric_value::fp_type& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
-        out.put_flt64(v);
-      },
-      [&out, &dict](const std::string& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
-        out.put_uint32(dict.encode(v));
-      },
-      [&out](const histogram& v) {
-        out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
-        encode_histogram(out, v);
-      });
+  visit(
+      overload(
+          [&out](const metric_value::empty&) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::EMPTY));
+          },
+          [&out](bool b) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::BOOL));
+            out.put_bool(b);
+          },
+          [&out](const metric_value::signed_type& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
+            out.put_int64(v);
+          },
+          [&out](const metric_value::unsigned_type& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
+            out.put_int64(static_cast<std::int64_t>(v));
+          },
+          [&out](const metric_value::fp_type& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
+            out.put_flt64(v);
+          },
+          [&out, &dict](const std::string& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
+            out.put_uint32(dict.encode(v));
+          },
+          [&out](const histogram& v) {
+            out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
+            encode_histogram(out, v);
+          }),
+      value.get());
 }
 
 file_segment_ptr decode_file_segment(xdr::xdr_istream& in) {
@@ -360,8 +366,84 @@ void dictionary_delta::encode_update(xdr::xdr_ostream& out) {
   pre_computed.copy_to(out);
 }
 
+auto decode_tsdata(xdr::xdr_istream& in, const encdec_ctx& ctx)
+-> std::shared_ptr<tsdata_list> {
+  using namespace std::placeholders;
+
+  const auto ts = decode_timestamp(in);
+  const auto previous_ptr = in.get_optional(&decode_file_segment);
+  const auto dict_ptr = in.get_optional(&decode_file_segment);
+  const auto records_ptr = decode_file_segment(in);
+  const auto reserved = in.get_uint32();
+
+  return std::make_shared<tsdata_list>(
+      ctx, ts, previous_ptr, dict_ptr, records_ptr, reserved);
+}
+
 
 tsdata_list::~tsdata_list() noexcept {}
+
+auto tsdata_list::dictionary() const -> std::shared_ptr<dictionary_delta> {
+  std::stack<file_segment_ptr> dd_stack;
+  if (dd_) dd_stack.push(dd_.value());
+
+  for (std::shared_ptr<tsdata_list> pred_tsdata = this->pred();
+      pred_tsdata != nullptr;
+      pred_tsdata = pred_tsdata->pred()) {
+    auto pdd = pred_tsdata->dd_;
+    if (pdd.has_value())
+      dd_stack.push(std::move(pdd).value());
+  }
+
+  auto dict = std::make_shared<dictionary_delta>();
+  while (!dd_stack.empty()) {
+    auto xdr = ctx_.new_reader(dd_stack.top());
+    dict->decode_update(xdr);
+    if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
+    xdr.close();
+    dd_stack.pop();
+  }
+  return dict;
+}
+
+auto tsdata_list::pred() const -> std::shared_ptr<tsdata_list> {
+  if (!pred_.has_value()) return nullptr;
+  const auto lck = std::lock_guard<std::mutex>(lock_);
+
+  std::shared_ptr<tsdata_list> result = cached_pred_.lock();
+  if (result == nullptr) {
+    auto xdr = ctx_.new_reader(pred_.value(), false);
+    result = decode_tsdata(xdr, ctx_);
+    cached_pred_ = result;
+  }
+  return result;
+}
+
+
+auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
+  const
+-> xdr::xdr_stream_reader<io::ptr_stream_reader> {
+  auto rd = io::make_ptr_reader<raw_file_segment_reader>(
+      *fd_, ptr.offset(),
+      ptr.size());
+  if (compression && this->compression() != compression_type::NONE)
+    rd = decompress_(std::move(rd), true);
+  return xdr::xdr_stream_reader<io::ptr_stream_reader>(std::move(rd));
+}
+
+auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
+-> std::unique_ptr<io::stream_reader> {
+  switch (compression()) {
+    default:
+    case compression_type::LZO_1X1: // XXX implement reader
+    case compression_type::SNAPPY: // XXX implement reader
+      throw std::logic_error("Unsupported compression");
+    case compression_type::NONE:
+      return std::move(rd).get();
+    case compression_type::GZIP:
+      return io::new_gzip_decompression(std::move(rd), validate);
+  }
+}
 
 
 }}} /* namespace monsoon::history::v2 */

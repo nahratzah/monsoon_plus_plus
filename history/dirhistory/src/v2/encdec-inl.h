@@ -127,35 +127,19 @@ const noexcept {
 }
 
 
-inline tsdata_list::tsdata_list(tsdata_list&& o) noexcept
-: ts_(std::move(o.ts_)),
-  pred_(std::move(o.pred_)),
-  dd_(std::move(o.dd_)),
-  records_(std::move(o.records_)),
-  reserved_(std::move(o.reserved_))
-{}
-
-inline auto tsdata_list::operator=(tsdata_list&& o) noexcept
--> tsdata_list::tsdata_list& {
-  ts_ = std::move(o.ts_);
-  pred_ = std::move(o.pred_);
-  dd_ = std::move(o.dd_);
-  records_ = std::move(o.records_);
-  reserved_ = std::move(o.reserved_);
-  return *this;
-}
-
 inline tsdata_list::tsdata_list(
+    const encdec_ctx& ctx,
     time_point ts,
-    optional<file_segment<tsdata_list>>&& pred,
-    optional<file_segment<dictionary_delta>>&& dd,
-    file_segment<record_array>&& records,
+    std::optional<file_segment_ptr> pred,
+    std::optional<file_segment_ptr> dd,
+    file_segment_ptr records,
     std::uint32_t reserved) noexcept
 : ts_(std::move(ts)),
   pred_(std::move(pred)),
   dd_(std::move(dd)),
   records_(std::move(records)),
-  reserved_(std::move(reserved))
+  reserved_(std::move(reserved)),
+  ctx_(ctx)
 {}
 
 

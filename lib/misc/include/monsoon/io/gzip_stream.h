@@ -131,12 +131,12 @@ auto gzip_compression(W&&)
 
 template<typename R>
 auto gzip_decompression(R&&, bool)
--> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+-> std::enable_if_t<std::is_base_of_v<stream_reader, R> && !std::is_const_v<R>,
     gzip_decompress_reader<R>>;
 
 template<typename R>
 auto gzip_decompression(R&&)
--> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+-> std::enable_if_t<std::is_base_of_v<stream_reader, R> && !std::is_const_v<R>,
     gzip_decompress_reader<R>>;
 
 
@@ -152,13 +152,34 @@ auto gzip_compression(std::unique_ptr<W>&&)
 
 template<typename R>
 auto gzip_decompression(std::unique_ptr<R>&&)
--> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+-> std::enable_if_t<std::is_base_of_v<stream_reader, R> && !std::is_const_v<R>,
     gzip_decompress_reader<ptr_stream_reader>>;
 
 template<typename R>
 auto gzip_decompression(std::unique_ptr<R>&&, bool)
--> std::enable_if_t<std::is_base_of_v<stream_writer, R> && !std::is_const_v<R>,
+-> std::enable_if_t<std::is_base_of_v<stream_reader, R> && !std::is_const_v<R>,
     gzip_decompress_reader<ptr_stream_reader>>;
+
+
+template<typename W>
+auto new_gzip_compression(W&&, int)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    std::unique_ptr<gzip_compress_writer<W>>>;
+
+template<typename W>
+auto new_gzip_compression(W&&)
+-> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
+    std::unique_ptr<gzip_compress_writer<W>>>;
+
+template<typename R>
+auto new_gzip_decompression(R&&, bool)
+-> std::enable_if_t<std::is_base_of_v<stream_reader, R> && !std::is_const_v<R>,
+    std::unique_ptr<gzip_decompress_reader<R>>>;
+
+template<typename R>
+auto new_gzip_decompression(R&&)
+-> std::enable_if_t<std::is_base_of_v<stream_reader, R> && !std::is_const_v<R>,
+    std::unique_ptr<gzip_decompress_reader<R>>>;
 
 
 extern template class monsoon_misc_export_ gzip_decompress_reader<ptr_stream_reader>;

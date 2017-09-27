@@ -23,6 +23,10 @@ class monsoon_misc_export_ ptr_stream_reader
   void close() override;
   bool at_end() const override;
 
+  const std::unique_ptr<stream_reader>& get() const &;
+  std::unique_ptr<stream_reader>& get() &;
+  std::unique_ptr<stream_reader>&& get() &&;
+
  private:
   std::unique_ptr<stream_reader> nested_;
 };
@@ -39,6 +43,10 @@ class ptr_stream_writer
 
   std::size_t write(const void*, std::size_t) override;
   void close() override;
+
+  const std::unique_ptr<stream_writer>& get() const &;
+  std::unique_ptr<stream_writer>& get() &;
+  std::unique_ptr<stream_writer>&& get() &&;
 
  private:
   std::unique_ptr<stream_writer> nested_;
