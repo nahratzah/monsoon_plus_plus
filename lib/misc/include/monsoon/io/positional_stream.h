@@ -42,6 +42,7 @@ class monsoon_misc_export_ positional_writer
 
   std::size_t write(const void*, std::size_t) override;
   void close() override;
+  fd::offset_type offset() const noexcept { return off_; }
 
  private:
   fd* fd_ = nullptr;
