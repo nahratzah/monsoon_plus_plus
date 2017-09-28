@@ -5,6 +5,7 @@
 #include "tsdata_mime.h"
 #include "v0/tsdata.h"
 #include "v1/tsdata.h"
+#include "v2/tsdata.h"
 
 namespace monsoon {
 namespace history {
@@ -48,10 +49,8 @@ auto tsdata::open(const std::string& fname, io::fd::open_mode mode)
       return std::make_shared<v0::tsdata_v0>(std::move(fd));
     case 1u:
       return std::make_shared<v1::tsdata_v1>(std::move(fd));
-#if 0
     case 2u:
-      // XXX implement v2 format
-#endif
+      return v2::tsdata_v2::open(std::move(fd));
   }
   return nullptr; // XXX should not reach this
 }

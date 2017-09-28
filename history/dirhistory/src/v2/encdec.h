@@ -81,6 +81,7 @@ class monsoon_dirhistory_local_ encdec_ctx {
   ~encdec_ctx() noexcept;
 
   const std::shared_ptr<io::fd>& fd() const noexcept { return fd_; }
+  std::uint32_t flags() const noexcept { return hdr_flags_; }
   auto new_reader(const file_segment_ptr&, bool = true) const
       -> xdr::xdr_stream_reader<io::ptr_stream_reader>;
   auto decompress_(io::ptr_stream_reader&&, bool) const
@@ -124,6 +125,7 @@ class monsoon_dirhistory_local_ file_segment {
       std::function<std::shared_ptr<T> (xdr::xdr_istream&)>&&, bool = true) noexcept;
 
   std::shared_ptr<const T> get() const;
+  const encdec_ctx& ctx() const noexcept { return ctx_; }
 
  private:
   file_segment_ptr ptr_;
@@ -217,15 +219,17 @@ using file_data_tables = std::vector<file_data_tables_block>;
 
 class monsoon_dirhistory_local_ tsfile_header {
  public:
+  static constexpr std::size_t XDR_SIZE = 16 + 4 + 4 + 8 + 16;
+
   tsfile_header(xdr::xdr_istream&, std::shared_ptr<io::fd>);
   ~tsfile_header() noexcept;
 
  private:
-  time_point first_, last_;
-  std::uint32_t flags_;
-  std::uint32_t reserved_;
-  std::uint64_t file_size_;
-  std::variant<
+  time_point first_, last_; // 16 bytes (8 each)
+  std::uint32_t flags_; // 4 bytes
+  std::uint32_t reserved_; // 4 bytes
+  std::uint64_t file_size_; // 8 bytes
+  std::variant< // 16 bytes (underlying file pointer)
       file_segment<tsdata_list>,
       file_segment<file_data_tables>
       > fdt_;
