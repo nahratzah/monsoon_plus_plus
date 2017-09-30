@@ -17,7 +17,6 @@ class monsoon_dirhistory_local_ tsdata_v2_list
   ~tsdata_v2_list() noexcept override;
 
   std::shared_ptr<io::fd> fd() const noexcept override;
-  std::vector<time_series> read_all() const override;
 
  private:
   file_segment<tsdata_list> data_;

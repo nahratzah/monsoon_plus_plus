@@ -20,6 +20,14 @@ class monsoon_dirhistory_local_ tsdata_v2
   ~tsdata_v2() noexcept override;
 
   virtual std::shared_ptr<io::fd> fd() const noexcept = 0;
+  std::vector<time_series> read_all() const override final;
+
+ private:
+  virtual std::vector<time_series> read_all_raw_() const = 0;
+
+  time_point first_, last_;
+  std::uint32_t flags_, reserved_;
+  std::uint64_t file_size_;
 };
 
 
