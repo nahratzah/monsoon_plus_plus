@@ -22,6 +22,7 @@ class time_point {
   monsoon_intf_export_ static time_point now();
 
   bool operator==(const time_point&) const noexcept;
+  bool operator!=(const time_point&) const noexcept;
   bool operator<(const time_point&) const noexcept;
 
   time_point& operator+=(const duration&) noexcept;

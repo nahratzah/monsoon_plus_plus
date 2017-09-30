@@ -30,6 +30,7 @@ class monsoon_intf_export_ time_series_value {
 
   const group_name& get_name() const noexcept;
   const metric_map& get_metrics() const noexcept;
+  metric_map& metrics() noexcept;
   auto operator[](const metric_name&) const noexcept
       -> std::optional<metric_value>;
 

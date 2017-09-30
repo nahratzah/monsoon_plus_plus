@@ -22,6 +22,7 @@ class monsoon_intf_export_ time_series {
 
   const time_point& get_time() const noexcept;
   const tsv_set& get_data() const noexcept;
+  tsv_set& data() noexcept;
 
   bool operator==(const time_series&) const noexcept;
   bool operator!=(const time_series&) const noexcept;

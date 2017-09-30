@@ -45,6 +45,11 @@ inline auto time_series_value::get_metrics() const noexcept
   return metrics_;
 }
 
+inline auto time_series_value::metrics() noexcept
+->  metric_map& {
+  return metrics_;
+}
+
 inline auto time_series_value::operator!=(const time_series_value& other)
     const noexcept
 ->  bool {

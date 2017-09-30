@@ -16,6 +16,10 @@ inline bool time_point::operator==(const time_point& y) const noexcept {
   return millis_ == y.millis_;
 }
 
+inline bool time_point::operator!=(const time_point& y) const noexcept {
+  return !(*this == y);
+}
+
 inline bool time_point::operator<(const time_point& y) const noexcept {
   return millis_ < y.millis_;
 }
