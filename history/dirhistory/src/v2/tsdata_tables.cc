@@ -17,6 +17,12 @@ namespace history {
 namespace v2 {
 
 
+tsdata_v2_tables::tsdata_v2_tables(file_segment<file_data_tables>&& data,
+    const tsdata_v2::carg& constructor_arg)
+: tsdata_v2(constructor_arg),
+  data_(std::move(data))
+{}
+
 tsdata_v2_tables::~tsdata_v2_tables() noexcept {}
 
 std::shared_ptr<io::fd> tsdata_v2_tables::fd() const noexcept {
