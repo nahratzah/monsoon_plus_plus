@@ -35,8 +35,18 @@ fd::fd() noexcept
 {}
 
 fd::fd(fd&& o) noexcept
-: handle_(std::exchange(o.handle_, INVALID_HANLE_VALUE))
+: handle_(std::exchange(o.handle_, INVALID_HANLE_VALUE)),
+  mode_(std::move(o.mode_))
 {}
+
+fd& fd::operator=(fd&& o) noexcept {
+  using std::swap;
+
+  close();
+  swap(handle_, o.handle_);
+  mode_ = std::move(o.mode_);
+  return *this;
+}
 
 fd::fd(const std::string& fname, open_mode mode)
 : handle_(INVALID_HANDLE_VALUE),
@@ -311,8 +321,20 @@ fd::fd() noexcept
 {}
 
 fd::fd(fd&& o) noexcept
-: handle_(std::exchange(o.handle_, -1))
+: handle_(std::exchange(o.handle_, -1)),
+  fname_(std::move(o.fname_)),
+  mode_(std::move(o.mode_))
 {}
+
+fd& fd::operator=(fd&& o) noexcept {
+  using std::swap;
+
+  close();
+  swap(handle_, o.handle_);
+  fname_ = std::move(o.fname_);
+  mode_ = std::move(o.mode_);
+  return *this;
+}
 
 fd::fd(const std::string& fname, open_mode mode)
 : handle_(-1),

@@ -4,6 +4,7 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include "encdec.h"
 #include "tsdata.h"
+#include "../tsdata_mime.h"
 
 namespace monsoon {
 namespace history {
@@ -14,6 +15,7 @@ class monsoon_dirhistory_local_ tsdata_v2_tables
 : public tsdata_v2
 {
  public:
+  tsdata_v2_tables(file_segment<file_data_tables>&&, const tsdata_v2::carg&);
   ~tsdata_v2_tables() noexcept override;
 
   std::shared_ptr<io::fd> fd() const noexcept override;

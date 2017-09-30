@@ -37,6 +37,8 @@ class monsoon_misc_export_ fd
   fd() noexcept;
   fd(const fd&) = delete;
   fd(fd&&) noexcept;
+  fd& operator=(const fd&) = delete;
+  fd& operator=(fd&&) noexcept;
   fd(const std::string&, open_mode);
   ~fd() noexcept;
 

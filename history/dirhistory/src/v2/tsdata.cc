@@ -8,11 +8,61 @@
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
+#include <monsoon/xdr/xdr_stream.h>
+#include "../raw_file_segment_reader.h"
+#include "../tsdata_mime.h"
+#include "../overload.h"
+#include "tsdata_tables.h"
+#include "tsdata_list.h"
 
 namespace monsoon {
 namespace history {
 namespace v2 {
 
+
+struct monsoon_dirhistory_local_ tsdata_v2::carg {
+  carg(const tsfile_mimeheader& mime, const tsfile_header& hdr)
+  : mime(mime),
+    hdr(hdr)
+  {}
+
+  const tsfile_mimeheader& mime;
+  const tsfile_header& hdr;
+};
+
+
+std::shared_ptr<tsdata_v2> tsdata_v2::open(io::fd&& fd_) {
+  auto fd = std::make_shared<io::fd>(std::move(fd_));
+
+  try {
+    xdr::xdr_stream_reader<raw_file_segment_reader> xdr = raw_file_segment_reader(*fd, 0, tsfile_mimeheader::XDR_ENCODED_LEN + tsfile_header::XDR_SIZE);
+    auto mime = tsfile_mimeheader(xdr);
+    auto hdr = tsfile_header(xdr, fd);
+    const carg constructor_arg = carg(mime, hdr);
+    xdr.close();
+
+    return visit(
+        overload(
+            [&constructor_arg](file_segment<tsdata_list>&& data) -> std::shared_ptr<tsdata_v2> {
+              return std::make_shared<tsdata_v2_list>(std::move(data), constructor_arg);
+            },
+            [&constructor_arg](file_segment<file_data_tables>&& data) -> std::shared_ptr<tsdata_v2> {
+              return std::make_shared<tsdata_v2_tables>(std::move(data), constructor_arg);
+            }),
+        std::move(hdr).fdt());
+  } catch (...) {
+    fd_ = std::move(*fd);
+    throw;
+  }
+}
+
+tsdata_v2::tsdata_v2(const carg& arg)
+: first_(arg.hdr.first()),
+  last_(arg.hdr.last()),
+  flags_(arg.hdr.flags()),
+  file_size_(arg.hdr.file_size()),
+  minor_version_(arg.mime.minor_version)
+{}
 
 tsdata_v2::~tsdata_v2() noexcept {}
 
@@ -75,6 +125,10 @@ std::vector<time_series> tsdata_v2::read_all() const {
   }
 
   return result;
+}
+
+std::tuple<std::uint16_t, std::uint16_t> tsdata_v2::version() const noexcept {
+  return std::make_tuple(MAJOR_VERSION, minor_version_);
 }
 
 

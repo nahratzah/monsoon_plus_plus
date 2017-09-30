@@ -221,18 +221,35 @@ class monsoon_dirhistory_local_ tsfile_header {
  public:
   static constexpr std::size_t XDR_SIZE = 16 + 4 + 4 + 8 + 16;
 
+  using kind_variant =
+      std::variant<file_segment<tsdata_list>, file_segment<file_data_tables>>;
+
   tsfile_header(xdr::xdr_istream&, std::shared_ptr<io::fd>);
   ~tsfile_header() noexcept;
+
+  const kind_variant& fdt() const & {
+    return fdt_;
+  }
+
+  kind_variant& fdt() & {
+    return fdt_;
+  }
+
+  kind_variant&& fdt() && {
+    return std::move(fdt_);
+  }
+
+  const time_point& first() const { return first_; }
+  const time_point& last() const { return last_; }
+  const std::uint32_t& flags() const { return flags_; }
+  const std::uint64_t& file_size() const { return file_size_; }
 
  private:
   time_point first_, last_; // 16 bytes (8 each)
   std::uint32_t flags_; // 4 bytes
   std::uint32_t reserved_; // 4 bytes
   std::uint64_t file_size_; // 8 bytes
-  std::variant< // 16 bytes (underlying file pointer)
-      file_segment<tsdata_list>,
-      file_segment<file_data_tables>
-      > fdt_;
+  kind_variant fdt_; // 16 bytes (underlying file pointer)
 };
 
 
