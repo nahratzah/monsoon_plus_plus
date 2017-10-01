@@ -392,7 +392,7 @@ tsdata_list::~tsdata_list() noexcept {}
 
 auto tsdata_list::dictionary() const -> std::shared_ptr<dictionary_delta> {
   std::stack<file_segment_ptr> dd_stack;
-  if (dd_) dd_stack.push(dd_.value());
+  if (dd_.has_value()) dd_stack.push(dd_.value());
 
   for (std::shared_ptr<tsdata_list> pred_tsdata = this->pred();
       pred_tsdata != nullptr;
@@ -421,6 +421,7 @@ auto tsdata_list::pred() const -> std::shared_ptr<tsdata_list> {
   if (result == nullptr) {
     auto xdr = ctx_.new_reader(pred_.value(), false);
     result = decode_tsdata(xdr, ctx_);
+    xdr.close();
     cached_pred_ = result;
   }
   return result;
@@ -432,8 +433,9 @@ auto tsdata_list::records(const dictionary_delta& dict) const
 
   std::shared_ptr<tsdata_list::record_array> result = cached_records_.lock();
   if (result == nullptr) {
-    auto xdr = ctx_.new_reader(pred_.value(), false);
+    auto xdr = ctx_.new_reader(records_);
     result = std::make_shared<record_array>(decode_record_array(xdr, ctx_, dict));
+    xdr.close();
     cached_records_ = result;
   }
   return result;

@@ -14,11 +14,14 @@ class monsoon_dirhistory_local_ tsdata_v2_list
 : public tsdata_v2
 {
  public:
+  tsdata_v2_list(file_segment<tsdata_list>&&, const tsdata_v2::carg&);
   ~tsdata_v2_list() noexcept override;
 
   std::shared_ptr<io::fd> fd() const noexcept override;
 
  private:
+  std::vector<time_series> read_all_raw_() const override;
+
   file_segment<tsdata_list> data_;
 };
 

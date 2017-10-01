@@ -194,7 +194,7 @@ class monsoon_dirhistory_local_ tsdata_list
       std::uint32_t reserved) noexcept;
   ~tsdata_list() noexcept;
 
-  time_point ts() { return ts_; }
+  time_point ts() const { return ts_; }
   std::shared_ptr<tsdata_list> pred() const;
   std::shared_ptr<record_array> records(const dictionary_delta&) const;
   std::shared_ptr<dictionary_delta> dictionary() const;
