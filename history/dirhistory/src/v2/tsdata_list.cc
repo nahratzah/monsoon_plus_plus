@@ -21,6 +21,9 @@ std::shared_ptr<io::fd> tsdata_v2_list::fd() const noexcept {
 std::vector<time_series> tsdata_v2_list::read_all_raw_() const {
   std::vector<time_series> result;
 
+  if (data_.file_ptr().offset() == 0u) // Empty file, bail out early
+    return result;
+
   // Build stack of tsdata_list entries.
   std::stack<std::shared_ptr<const tsdata_list>> data_stack;
   data_stack.push(data_.get());

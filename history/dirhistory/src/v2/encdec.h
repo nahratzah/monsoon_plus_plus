@@ -126,6 +126,7 @@ class monsoon_dirhistory_local_ file_segment {
 
   std::shared_ptr<const T> get() const;
   const encdec_ctx& ctx() const noexcept { return ctx_; }
+  const file_segment_ptr& file_ptr() const { return ptr_; }
 
  private:
   file_segment_ptr ptr_;
