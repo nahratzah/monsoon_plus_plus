@@ -119,6 +119,10 @@ class monsoon_intf_export_ histogram {
   elems_vector elems_;
 };
 
+monsoon_intf_export_
+std::string to_string(const monsoon::histogram&);
+
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream&, const histogram&);
 
 
@@ -133,6 +137,7 @@ struct hash<monsoon::histogram::range> {
   using argument_type = const monsoon::histogram::range&;
   using result_type = std::size_t;
 
+  monsoon_intf_export_
   size_t operator()(const monsoon::histogram::range&) const noexcept;
 };
 
@@ -144,9 +149,6 @@ struct hash<monsoon::histogram> {
   monsoon_intf_export_
   size_t operator()(const monsoon::histogram&) const noexcept;
 };
-
-monsoon_intf_export_
-std::string to_string(const monsoon::histogram&);
 
 
 } /* namespace std */

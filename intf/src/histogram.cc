@@ -270,6 +270,11 @@ auto operator/=(histogram& h, std::double_t v) -> histogram& {
   return h;
 }
 
+
+auto to_string(const monsoon::histogram& h) -> std::string {
+  return (std::ostringstream() << h).str();
+}
+
 auto operator<<(std::ostream& out, const histogram& h) -> std::ostream& {
   if (h.empty()) return out << "[]";
 
@@ -306,10 +311,6 @@ auto hash<monsoon::histogram>::operator()(const monsoon::histogram& h)
     result = 29 * result + std::hash<std::double_t>()(std::get<1>(e));
   }
   return result;
-}
-
-auto to_string(const monsoon::histogram& h) -> std::string {
-  return (std::ostringstream() << h).str();
 }
 
 

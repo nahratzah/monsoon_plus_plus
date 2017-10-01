@@ -584,6 +584,9 @@ std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
       fn,
       [&cb, &bitset, &bitset_iter](auto&& v) {
         bitset_iter = std::find(bitset_iter, bitset.cend(), true);
+        if (bitset_iter == bitset.cend())
+          return; // Silent discard too many items.
+
         auto index = bitset_iter - bitset.cbegin();
         assert(index >= 0);
         cb(index, std::move(v));
@@ -638,8 +641,10 @@ std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
 
     if (result->size() < empty_bitset.size()) result->resize(empty_bitset.size());
     for (auto iter = empty_bitset.cbegin(); iter != empty_bitset.cend(); ++iter) {
-      const auto index = iter - empty_bitset.cbegin();
-      (*result)[index] = metric_value(); // Assigns the optional.
+      if (*iter) {
+        const auto index = iter - empty_bitset.cbegin();
+        (*result)[index] = metric_value(); // Assigns the optional.
+      }
     }
   }
   update_presence(decode_mt(in,
