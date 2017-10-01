@@ -16,6 +16,11 @@ const char* xdr_exception::what() const noexcept {
   return (what_ == nullptr ? "monsoon::xdr::xdr_exception" : what_);
 }
 
+
+xdr_stream_end::xdr_stream_end() noexcept
+: xdr_exception("monsoon::xdr::xdr_stream_end")
+{}
+
 xdr_stream_end::~xdr_stream_end() {}
 
 

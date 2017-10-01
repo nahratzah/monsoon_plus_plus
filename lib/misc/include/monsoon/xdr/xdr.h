@@ -155,6 +155,7 @@ class monsoon_misc_export_ xdr_stream_end
 : public xdr_exception
 {
  public:
+  xdr_stream_end() noexcept;
   using xdr_exception::xdr_exception;
   ~xdr_stream_end() override;
 };
