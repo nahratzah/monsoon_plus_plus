@@ -1,9 +1,8 @@
 #ifndef MONSOON_EXPR_RESULT_H
 #define MONSOON_EXPR_RESULT_H
 
-#include <monsoon/any.h>
-#include <monsoon/optional.h>
-#include <monsoon/invoke.h>
+#include <variant>
+#include <functional>
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
 #include <unordered_map>
@@ -17,7 +16,7 @@ class expr_result {
   using size_type = map_type::size_type;
 
  private:
-  using data_type = any<metric_value, map_type>;
+  using data_type = std::variant<metric_value, map_type>;
 
  public:
   expr_result();
@@ -33,23 +32,23 @@ class expr_result {
   bool is_vector() const noexcept;
   bool empty() const noexcept;
   size_type size() const noexcept;
-  optional<const metric_value&> as_scalar() const noexcept;
-  optional<const map_type&> as_vector() const noexcept;
-  optional<metric_value&> as_scalar() noexcept;
-  optional<map_type&> as_vector() noexcept;
+  const metric_value* as_scalar() const noexcept;
+  const map_type* as_vector() const noexcept;
+  metric_value* as_scalar() noexcept;
+  map_type* as_vector() noexcept;
 
   template<typename FN> void transform_tags(FN)
-      noexcept(noexcept(invoke(std::declval<FN>(),
-                               std::declval<const tags&>())));
+      noexcept(noexcept(std::invoke(std::declval<FN>(),
+                                    std::declval<const tags&>())));
   template<typename FN> void transform_values(FN)
-      noexcept(noexcept(invoke(std::declval<FN>(),
-                               std::declval<metric_value>())));
+      noexcept(noexcept(std::invoke(std::declval<FN>(),
+                                    std::declval<metric_value>())));
   template<typename FN> void filter_tags(FN)
-      noexcept(noexcept(invoke(std::declval<FN>(),
-                               std::declval<const tags&>())));
+      noexcept(noexcept(std::invoke(std::declval<FN>(),
+                                    std::declval<const tags&>())));
 
  private:
-  any<metric_value, map_type> data_;
+  data_type data_;
 };
 
 

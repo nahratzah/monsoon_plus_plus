@@ -35,6 +35,7 @@ class monsoon_intf_export_ group_name {
   tags tags_;
 };
 
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream&, const group_name&);
 
 

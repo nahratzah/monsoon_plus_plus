@@ -318,5 +318,8 @@ void basic_gzip_compress_writer::delayed_init_() {
   }
 }
 
+template class monsoon_misc_export_ gzip_decompress_reader<ptr_stream_reader>;
+template class monsoon_misc_export_ gzip_compress_writer<ptr_stream_writer>;
+
 
 }} /* namespace monsoon::io */

@@ -2,12 +2,13 @@
 #define MONSOON_ALERT_H
 
 #include <monsoon/intf_export_.h>
-#include <monsoon/optional.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/time_point.h>
 #include <functional>
 #include <string>
+#include <optional>
+#include <variant>
 #include <unordered_map>
 
 namespace monsoon {
@@ -24,7 +25,7 @@ class monsoon_intf_export_ alert {
  public:
   using attributes_map =
       std::unordered_map<std::string,
-                         any<metric_value, std::vector<metric_value>>>;
+                         std::variant<metric_value, std::vector<metric_value>>>;
 
   alert();
   alert(const alert&);
@@ -47,7 +48,7 @@ class monsoon_intf_export_ alert {
 
  private:
   group_name name_;
-  optional<bool> value_;
+  std::optional<bool> value_;
   std::string message_;
   alert_state state_;
   time_point since_;

@@ -16,8 +16,22 @@ inline bool time_point::operator==(const time_point& y) const noexcept {
   return millis_ == y.millis_;
 }
 
+inline bool time_point::operator!=(const time_point& y) const noexcept {
+  return !(*this == y);
+}
+
 inline bool time_point::operator<(const time_point& y) const noexcept {
   return millis_ < y.millis_;
+}
+
+inline time_point& time_point::operator+=(const duration& d) noexcept {
+  millis_ += d.millis();
+  return *this;
+}
+
+inline time_point& time_point::operator-=(const duration& d) noexcept {
+  millis_ -= d.millis();
+  return *this;
 }
 
 
@@ -50,6 +64,16 @@ inline auto operator+(time_point::duration x, time_point::duration y)
 
 inline auto operator-(time_point::duration x, time_point::duration y)
 -> time_point::duration {
+  return x -= y;
+}
+
+inline auto operator+(time_point x, time_point::duration y) noexcept
+-> time_point {
+  return x += y;
+}
+
+inline auto operator-(time_point x, time_point::duration y) noexcept
+-> time_point {
   return x -= y;
 }
 

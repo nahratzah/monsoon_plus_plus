@@ -55,9 +55,12 @@ endif ()
 
 # Enable C++14 and C++17 using flags, if the compiler has them.
 check_cxx_compiler_flag ("-std=c++17" STD_CXX17)
+check_cxx_compiler_flag ("-std=c++1z" STD_CXX1Z)
 check_cxx_compiler_flag ("-std=c++14" STD_CXX14)
 if (STD_CXX17)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+elseif (STD_CXX1Z)
+  set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z")
 elseif (STD_CXX14)
   set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
 endif ()

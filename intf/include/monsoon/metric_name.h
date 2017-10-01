@@ -22,6 +22,8 @@ class monsoon_intf_export_ metric_name {
   metric_name& operator=(const metric_name&) = default;
   metric_name& operator=(metric_name&&) noexcept;
 
+  explicit metric_name(path_type&&) noexcept;
+  explicit metric_name(const path_type&);
   metric_name(std::initializer_list<const char*>);
   metric_name(std::initializer_list<std::string>);
   template<typename Iter> metric_name(Iter, Iter);

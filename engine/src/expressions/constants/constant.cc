@@ -9,7 +9,11 @@ namespace constants {
 constant::constant(metric_value v)
 : value_(std::move(v))
 {
-  if (!v.get().is_present())
+  if (visit(
+          [](const auto& v) {
+            return std::is_same_v<metric_value::empty, std::decay_t<decltype(v)>>;
+          },
+          v.get()))
     throw std::invalid_argument("metric_value may not be nil");
 }
 

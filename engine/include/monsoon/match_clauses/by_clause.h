@@ -1,7 +1,7 @@
 #ifndef MONSOON_MATCH_CLAUSES_BY_CLAUSE_H
 #define MONSOON_MATCH_CLAUSES_BY_CLAUSE_H
 
-#include <monsoon/optional.h>
+#include <optional>
 #include <monsoon/match_clause.h>
 #include <map>
 #include <string>
@@ -30,7 +30,7 @@ class by_clause
   void do_ostream(std::ostream&) const override;
 
  private:
-  optional<tags> reduce_tag_(const tags&) const;
+  std::optional<tags> reduce_tag_(const tags&) const;
   mapping map_(std::unordered_map<tags, metric_value>&) const;
   tags select_tags_(const tags&, const tags&, const tags&) const;
 

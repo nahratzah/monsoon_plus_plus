@@ -7,11 +7,11 @@
 #include <iterator>
 #include <memory>
 #include <string>
-#if __has_include(<string_view>)
-# include <string_view>
-#endif
+#include <string_view>
 #include <type_traits>
 #include <vector>
+#include <optional>
+#include <functional>
 
 namespace monsoon {
 namespace xdr {
@@ -70,6 +70,11 @@ class monsoon_misc_export_ xdr_istream {
   template<typename SerFn, typename Acceptor>
       void accept_collection(SerFn, Acceptor);
 
+  template<typename SerFn>
+      auto get_optional(SerFn)
+      -> std::optional<decltype(
+          std::invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
+
   virtual bool at_end() const = 0;
   virtual void close() = 0;
 
@@ -94,14 +99,7 @@ class monsoon_misc_export_ xdr_ostream {
   void put_flt32(float);
   void put_flt64(double);
 
-#if __has_include(<string_view>)
   void put_string(std::string_view);
-#else
-  void put_string(const char*);
-#endif
-  template<typename Alloc>
-  void put_string(
-      const std::basic_string<char, std::char_traits<char>, Alloc>&);
 
   template<typename Alloc = std::allocator<uint8_t>>
       void put_opaque_n(std::size_t, const std::vector<std::uint8_t, Alloc>&);
@@ -128,6 +126,8 @@ class monsoon_misc_export_ xdr_ostream {
             typename std::iterator_traits<Iter>::iterator_category>::value,
           void>;
 
+  void put_raw_data(const void*, std::size_t);
+
   virtual void close() = 0;
 
  private:
@@ -139,14 +139,23 @@ class monsoon_misc_export_ xdr_exception
 : public std::exception
 {
  public:
-  using std::exception::exception;
+  xdr_exception();
+  xdr_exception(const xdr_exception&) = default;
+  xdr_exception& operator=(const xdr_exception&) = default;
+  xdr_exception(const char* what);
   ~xdr_exception() override;
+
+  const char* what() const noexcept override;
+
+ private:
+  const char* what_ = nullptr;
 };
 
 class monsoon_misc_export_ xdr_stream_end
 : public xdr_exception
 {
  public:
+  xdr_stream_end() noexcept;
   using xdr_exception::xdr_exception;
   ~xdr_stream_end() override;
 };
@@ -174,6 +183,7 @@ class xdr_bytevector_ostream
 
   vector_type& as_vector() noexcept;
   const vector_type& as_vector() const noexcept;
+  void copy_to(xdr_ostream&) const;
 
  private:
   void put_raw_bytes(const void*, std::size_t) override;

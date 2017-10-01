@@ -12,11 +12,15 @@ inline tsfile_mimeheader::tsfile_mimeheader(std::uint16_t majver,
 {}
 
 inline tsfile_mimeheader::tsfile_mimeheader(monsoon::xdr::xdr_istream& in)
-: tsfile_mimeheader(read(in).template release_or_throw<tsfile_badmagic>())
-{}
+: tsfile_mimeheader()
+{
+  auto opt_hdr = read(in);
+  if (!opt_hdr.has_value()) throw tsfile_badmagic();
+  *this = std::move(opt_hdr).value();
+}
 
 inline auto tsfile_mimeheader::read(monsoon::xdr::xdr_istream& in)
--> optional<tsfile_mimeheader> {
+-> std::optional<tsfile_mimeheader> {
   if (in.template get_array<MAGIC.size()>() != MAGIC)
     return {};
 

@@ -3,7 +3,7 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <cstdint>
-#include <monsoon/optional.h>
+#include <optional>
 #include <monsoon/xdr/xdr.h>
 
 namespace monsoon {
@@ -26,7 +26,8 @@ class monsoon_dirhistory_local_ tsfile_mimeheader {
 
   tsfile_mimeheader(monsoon::xdr::xdr_istream&);
 
-  static auto read(monsoon::xdr::xdr_istream&) -> optional<tsfile_mimeheader>;
+  static auto read(monsoon::xdr::xdr_istream&)
+      -> std::optional<tsfile_mimeheader>;
   void write(monsoon::xdr::xdr_ostream&) const;
 
   std::uint16_t major_version, minor_version;

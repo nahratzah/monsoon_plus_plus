@@ -16,6 +16,14 @@ inline auto simple_group::operator=(simple_group&& other) noexcept
   return *this;
 }
 
+inline simple_group::simple_group(path_type&& p) noexcept
+: path_(std::move(p))
+{}
+
+inline simple_group::simple_group(const path_type& p)
+: path_(p)
+{}
+
 inline simple_group::simple_group(std::initializer_list<const char*> init)
 : path_(init.begin(), init.end())
 {}

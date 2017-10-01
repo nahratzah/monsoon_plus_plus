@@ -205,7 +205,7 @@ template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C&& c)
 -> C&& {
   std::generate_n(std::inserter(c, c.end()), len,
-      [this, &fn]() { return fn(*this); });
+      [this, &fn]() { return std::invoke(fn, *this); });
   return std::forward<C>(c);
 }
 
@@ -213,7 +213,7 @@ template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C& c)
 -> C& {
   std::generate_n(std::inserter(c, c.end()), len,
-      [this, &fn]() { return fn(*this); });
+      [this, &fn]() { return std::invoke(fn, *this); });
   return c;
 }
 
@@ -231,7 +231,7 @@ template<typename SerFn, typename Acceptor>
 inline void xdr_istream::accept_collection_n(std::size_t len, SerFn fn,
     Acceptor acceptor) {
   for (std::size_t i = 0; i < len; ++i)
-    acceptor(fn(*this));
+    std::invoke(acceptor, std::invoke(fn, *this));
 }
 
 template<typename SerFn, typename Acceptor>
@@ -239,6 +239,14 @@ inline void xdr_istream::accept_collection(SerFn fn, Acceptor acceptor) {
   accept_collection_n(get_uint32(),
       std::forward<SerFn>(fn),
       std::forward<Acceptor>(acceptor));
+}
+
+template<typename SerFn>
+auto xdr_istream::get_optional(SerFn fn)
+-> std::optional<decltype(
+    std::invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))> {
+  if (!get_bool()) return {};
+  return std::invoke(fn, *this);
 }
 
 
@@ -314,7 +322,6 @@ inline void xdr_ostream::put_uint64(std::uint64_t v) {
   put_raw_bytes(&i, sizeof(i));
 }
 
-#if __has_include(<string_view>)
 inline void xdr_ostream::put_string(std::string_view s) {
   if (s.length() > 0xffffffffu)
     throw xdr_exception();
@@ -322,28 +329,6 @@ inline void xdr_ostream::put_string(std::string_view s) {
   put_uint32(static_cast<uint32_t>(s.length()));
   put_raw_bytes(s.data(), s.length());
   if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4u);
-}
-#else
-inline void xdr_ostream::put_string(const char* s) {
-  std::size_t len = std::strlen(s);
-  if (len > 0xffffffffu)
-    throw xdr_exception();
-
-  put_uint32(static_cast<uint32_t>(len));
-  put_raw_bytes(s, len);
-  if (len % 4u != 0u) put_padding(4u - len % 4u);
-}
-#endif
-
-template<typename Alloc>
-inline void xdr_ostream::put_string(
-    const std::basic_string<char, std::char_traits<char>, Alloc>& s) {
-  if (s.length() > 0xffffffffu)
-    throw xdr_exception();
-
-  put_uint32(static_cast<uint32_t>(s.length()));
-  put_raw_bytes(s.data(), s.length());
-  if (s.length() % 4u != 0u) put_padding(4u - s.length() % 4);
 }
 
 template<typename Alloc>
@@ -377,7 +362,7 @@ template<typename SerFn, typename Iter>
 inline auto xdr_ostream::put_collection_n(std::size_t len, SerFn fn, Iter iter)
 -> Iter {
   for (std::size_t i = 0; i < len; ++i, ++iter)
-    fn(*this, *iter);
+    std::invoke(fn, *this, *iter);
   return iter;
 }
 
@@ -392,7 +377,8 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
   if (len < 0 || len > 0xffffffffu)
     throw xdr_exception();
   put_uint32(static_cast<std::uint32_t>(len));
-  std::for_each(begin, end, [this, &fn](const auto& arg) { fn(*this, arg); });
+  std::for_each(begin, end,
+      [this, &fn](const auto& arg) { std::invoke(fn, *this, arg); });
 }
 
 template<typename SerFn, typename Iter>
@@ -408,12 +394,16 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
       [&](const auto& v) {
         if (len == 0xffffffffu)
           throw xdr_exception();
-        fn(buffer, v);
+          std::invoke(fn, buffer, v);
         ++len;
       });
 
   put_uint32(static_cast<std::uint32_t>(len));
   put_raw_bytes(buffer.data(), buffer.size());
+}
+
+inline void xdr_ostream::put_raw_data(const void* buf, std::size_t len) {
+  put_raw_bytes(buf, len);
 }
 
 inline void xdr_ostream::put_padding(std::size_t n) {
@@ -422,6 +412,11 @@ inline void xdr_ostream::put_padding(std::size_t n) {
   std::fill(pad.begin(), pad.end(), static_cast<std::uint8_t>(0u));
   put_raw_bytes(pad.data(), n);
 }
+
+
+inline xdr_exception::xdr_exception(const char* what)
+: what_(what)
+{}
 
 
 template<typename Alloc>
@@ -464,6 +459,11 @@ template<typename Alloc>
 inline auto xdr_bytevector_ostream<Alloc>::as_vector() const noexcept
 -> const vector_type& {
   return v_;
+}
+
+template<typename Alloc>
+inline void xdr_bytevector_ostream<Alloc>::copy_to(xdr_ostream& out) const {
+  out.put_raw_data(v_.data(), v_.size());
 }
 
 template<typename Alloc>

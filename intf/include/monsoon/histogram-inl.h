@@ -6,6 +6,11 @@
 namespace monsoon {
 
 
+constexpr histogram::range::range() noexcept
+: low_(0),
+  high_(0)
+{}
+
 constexpr histogram::range::range(std::double_t low, std::double_t high)
 : low_(low),
   high_(high)
@@ -71,6 +76,11 @@ inline histogram::histogram(histogram&& h) noexcept
 : elems_(std::move(h.elems_))
 {}
 
+inline histogram& histogram::operator=(histogram&& h) noexcept {
+  elems_ = std::move(h.elems_);
+  return *this;
+}
+
 template<typename Iter>
 histogram::histogram(Iter b, Iter e) {
   while (b != e)
@@ -78,22 +88,27 @@ histogram::histogram(Iter b, Iter e) {
   fixup_immed_unsorted_();
 }
 
+inline histogram::histogram(
+    std::initializer_list<std::pair<range, std::double_t>> il)
+: histogram(il.begin(), il.end())
+{}
+
 inline auto histogram::data() const noexcept -> const elems_vector& {
   return elems_;
 }
 
-inline auto histogram::min() const noexcept -> optional<std::double_t> {
-  if (empty()) return optional<std::double_t>();
+inline auto histogram::min() const noexcept -> std::optional<std::double_t> {
+  if (empty()) return {};
   return std::get<0>(elems_.front()).low();
 }
 
-inline auto histogram::max() const noexcept -> optional<std::double_t> {
-  if (empty()) return optional<std::double_t>();
+inline auto histogram::max() const noexcept -> std::optional<std::double_t> {
+  if (empty()) return {};
   return std::get<0>(elems_.back()).high();
 }
 
-inline auto histogram::avg() const noexcept -> optional<std::double_t> {
-  if (empty()) return optional<std::double_t>();
+inline auto histogram::avg() const noexcept -> std::optional<std::double_t> {
+  if (empty()) return {};
   return sum() / count();
 }
 

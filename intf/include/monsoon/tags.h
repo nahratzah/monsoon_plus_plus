@@ -3,7 +3,7 @@
 
 #include <monsoon/intf_export_.h>
 #include <monsoon/metric_value.h>
-#include <monsoon/optional.h>
+#include <optional>
 #include <cstddef>
 #include <functional>
 #include <iosfwd>
@@ -25,10 +25,13 @@ class monsoon_intf_export_ tags {
   tags& operator=(tags&&) noexcept;
 
   template<typename Iter> tags(Iter, Iter);
+  tags(map_type) noexcept;
+  tags(std::initializer_list<map_type::value_type>);
 
   bool empty() const noexcept;
   const map_type& get_map() const noexcept;
-  optional<const metric_value&> operator[](const std::string&) const noexcept;
+  auto operator[](const std::string&) const noexcept
+      -> std::optional<metric_value>;
 
   bool operator==(const tags&) const noexcept;
   bool operator!=(const tags&) const noexcept;
