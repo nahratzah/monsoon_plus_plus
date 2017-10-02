@@ -626,7 +626,19 @@ std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
         });
   };
 
-  update_presence(decode_mt(in, &xdr::xdr_istream::get_bool, callback));
+  { // Bools are stored in a second bitset.
+    auto bool_presence = decode_bitset(in);
+    auto bitset_iter = bool_presence.cbegin();
+    for (bool v : decode_bitset(in)) {
+      bitset_iter = std::find(bitset_iter, bool_presence.cend(), true);
+      if (bitset_iter == bool_presence.cend()) break; // Silent discard too many items.
+      auto index = bitset_iter - bool_presence.cbegin();
+      assert(index >= 0);
+      std::invoke(callback, index, v);
+      ++bitset_iter;
+    }
+    update_presence(std::move(bool_presence));
+  }
   update_presence(decode_mt(in, &xdr::xdr_istream::get_int16, callback));
   update_presence(decode_mt(in, &xdr::xdr_istream::get_int32, callback));
   update_presence(decode_mt(in, &xdr::xdr_istream::get_int64, callback));
@@ -658,7 +670,7 @@ std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
   return result;
 }
 
-template<typename T> struct mt {
+template<typename T> struct monsoon_dirhistory_local_ mt {
   std::vector<bool> presence;
   std::vector<T> value;
 
@@ -666,6 +678,16 @@ template<typename T> struct mt {
   void encode(xdr::xdr_ostream& out, SerFn fn) {
     encode_bitset(out, presence);
     out.put_collection(fn, value.begin(), value.end());
+  }
+};
+
+template<> struct monsoon_dirhistory_local_ mt<bool> {
+  std::vector<bool> presence;
+  std::vector<bool> value;
+
+  void encode(xdr::xdr_ostream& out) {
+    encode_bitset(out, presence);
+    encode_bitset(out, value);
   }
 };
 
@@ -751,7 +773,7 @@ void write_metric_table(xdr::xdr_ostream& out,
     }
   }
 
-  mt_bool.encode(out, &xdr::xdr_ostream::put_bool);
+  mt_bool.encode(out);
   mt_16bit.encode(out, &xdr::xdr_ostream::put_int16);
   mt_32bit.encode(out, &xdr::xdr_ostream::put_int32);
   mt_64bit.encode(out, &xdr::xdr_ostream::put_int64);
