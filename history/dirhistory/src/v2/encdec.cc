@@ -1,7 +1,9 @@
 #include "encdec.h"
 #include "../overload.h"
 #include "../raw_file_segment_reader.h"
+#include "../raw_file_segment_writer.h"
 #include <monsoon/xdr/xdr_stream.h>
+#include <monsoon/io/ptr_stream.h>
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/history/dir/hdir_exception.h>
 #include <stdexcept>
@@ -221,15 +223,18 @@ auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
           }));
 }
 
-void encode_record_metrics(xdr::xdr_ostream& out,
+file_segment_ptr encode_record_metrics(encdec_writer& out,
     const time_series_value::metric_map& metrics,
     dictionary_delta& dict) {
-  out.put_collection(
+  auto xdr = out.begin();
+  xdr.put_collection(
       [&dict](xdr::xdr_ostream& out, const auto& entry) {
         out.put_uint32(dict.pdd.encode(std::get<0>(entry).get_path()));
         encode_metric_value(out, std::get<1>(entry), dict.sdd);
       },
       metrics.begin(), metrics.end());
+  xdr.close();
+  return xdr.ptr();
 }
 
 auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
@@ -267,20 +272,22 @@ auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
   return result;
 }
 
-void encode_record_array(xdr::xdr_ostream& out,
-    const std::vector<std::pair<group_name, file_segment_ptr>>& groups,
-    dictionary_delta& dict) {
+file_segment_ptr encode_record_array(encdec_writer& out,
+    const time_series::tsv_set& groups, dictionary_delta& dict) {
   std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, file_segment_ptr>>
       mapping;
   std::for_each(
       groups.begin(), groups.end(),
-      [&mapping, &dict](const std::pair<group_name, file_segment_ptr>& entry) {
-        auto path_ref = dict.pdd.encode(entry.first.get_path().get_path());
-        auto tags_ref = dict.tdd.encode(entry.first.get_tags());
-        mapping[path_ref].emplace(tags_ref, entry.second);
+      [&out, &mapping, &dict](const time_series_value& entry) {
+        auto path_ref = dict.pdd.encode(entry.get_name().get_path().get_path());
+        auto tags_ref = dict.tdd.encode(entry.get_name().get_tags());
+        mapping[path_ref].emplace(
+            tags_ref,
+            encode_record_metrics(out, entry.get_metrics(), dict));
       });
 
-  out.put_collection(
+  auto xdr = out.begin();
+  xdr.put_collection(
       [](xdr::xdr_ostream& out, const auto& path_entry) {
         out.put_uint32(path_entry.first);
         out.put_collection(
@@ -291,6 +298,8 @@ void encode_record_array(xdr::xdr_ostream& out,
             path_entry.second.begin(), path_entry.second.end());
       },
       mapping.begin(), mapping.end());
+  xdr.close();
+  return xdr.ptr();
 }
 
 void dictionary_delta::decode_update(xdr::xdr_istream& in) {
@@ -389,6 +398,30 @@ auto decode_tsdata(xdr::xdr_istream& in, const encdec_ctx& ctx)
 
   return std::make_shared<tsdata_list>(
       ctx, ts, previous_ptr, dict_ptr, records_ptr, reserved);
+}
+
+auto encode_tsdata(encdec_writer& writer, const time_series& ts,
+    dictionary_delta dict, std::optional<file_segment_ptr> pred)
+-> file_segment_ptr {
+  file_segment_ptr records_ptr =
+      encode_record_array(writer, ts.get_data(), dict);
+
+  std::optional<file_segment_ptr> dict_ptr;
+  if (dict.update_pending()) {
+    auto xdr = writer.begin();
+    dict.encode_update(xdr);
+    xdr.close();
+    dict_ptr = xdr.ptr();
+  }
+
+  auto xdr = writer.begin(false);
+  encode_timestamp(xdr, ts.get_time());
+  xdr.put_optional(&encode_file_segment, pred);
+  xdr.put_optional(&encode_file_segment, dict_ptr);
+  encode_file_segment(xdr, records_ptr);
+  xdr.put_uint32(0u); // reserved
+  xdr.close();
+  return xdr.ptr();
 }
 
 
@@ -831,12 +864,11 @@ auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
   auto rd = io::make_ptr_reader<raw_file_segment_reader>(
       *fd_, ptr.offset(),
       ptr.size());
-  if (compression && this->compression() != compression_type::NONE)
-    rd = decompress_(std::move(rd), true);
+  if (compression) rd = decompress(std::move(rd), true);
   return xdr::xdr_stream_reader<io::ptr_stream_reader>(std::move(rd));
 }
 
-auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
+auto encdec_ctx::decompress(io::ptr_stream_reader&& rd, bool validate) const
 -> std::unique_ptr<io::stream_reader> {
   switch (compression()) {
     default:
@@ -847,6 +879,20 @@ auto encdec_ctx::decompress_(io::ptr_stream_reader&& rd, bool validate) const
       return std::move(rd).get();
     case compression_type::GZIP:
       return io::new_gzip_decompression(std::move(rd), validate);
+  }
+}
+
+auto encdec_ctx::compress(io::ptr_stream_writer&& wr) const
+-> std::unique_ptr<io::stream_writer> {
+  switch (compression()) {
+    default:
+    case compression_type::LZO_1X1: // XXX implement reader
+    case compression_type::SNAPPY: // XXX implement reader
+      throw std::logic_error("Unsupported compression");
+    case compression_type::NONE:
+      return std::move(wr).get();
+    case compression_type::GZIP:
+      return io::new_gzip_compression(std::move(wr));
   }
 }
 
@@ -882,6 +928,48 @@ tsfile_header::tsfile_header(xdr::xdr_istream& in,
 }
 
 tsfile_header::~tsfile_header() noexcept {}
+
+
+file_segment_ptr encdec_writer::commit(const std::uint8_t* buf,
+    std::size_t len, bool compress) {
+  const auto fd_ptr = ctx_.fd();
+
+  io::fd::size_type dlen, slen;
+  auto wr = io::make_ptr_writer<raw_file_segment_writer>(*fd_ptr, off_, &dlen, &slen);
+  if (compress) wr = ctx_.compress(std::move(wr));
+
+  while (len > 0) {
+    const auto wlen = wr.write(buf, len);
+    len -= wlen;
+    buf += wlen;
+  }
+
+  wr.close();
+  auto result = file_segment_ptr(off_, dlen);
+  off_ += slen;
+  return result;
+}
+
+encdec_writer::xdr_writer::~xdr_writer() noexcept {}
+
+void encdec_writer::xdr_writer::close() {
+  assert(ecw_ != nullptr);
+  assert(!closed_);
+  ptr_ = ecw_->commit(buffer_.data(), buffer_.size(), compress_);
+}
+
+file_segment_ptr encdec_writer::xdr_writer::ptr() const noexcept {
+  assert(ecw_ != nullptr);
+  assert(closed_);
+  return ptr_;
+}
+
+void encdec_writer::xdr_writer::put_raw_bytes(const void* buf,
+    std::size_t len) {
+  const std::uint8_t* buf_begin = reinterpret_cast<const std::uint8_t*>(buf);
+  const std::uint8_t* buf_end = buf_begin + len;
+  buffer_.insert(buffer_.end(), buf_begin, buf_end);
+}
 
 
 }}} /* namespace monsoon::history::v2 */

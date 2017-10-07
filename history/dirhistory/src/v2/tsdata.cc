@@ -194,6 +194,7 @@ void tsdata_v2::update_hdr(time_point lo, time_point hi,
   xdr.put_uint64(new_file_len); // file size
   encode_file_segment(xdr, fsp); // nullptr == empty
   xdr.close();
+  fd_ptr->flush();
 
   assert(data_len == HDR_LEN);
   assert(storage_len == CHECKSUMMED_HDR_LEN);

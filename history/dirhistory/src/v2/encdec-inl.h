@@ -10,6 +10,42 @@ namespace history {
 namespace v2 {
 
 
+inline encdec_writer::encdec_writer(const encdec_ctx& ctx,
+    io::fd::offset_type off)
+: off_(off),
+  ctx_(ctx)
+{}
+
+inline auto encdec_writer::begin(bool compress) -> xdr_writer {
+  return xdr_writer(*this, compress);
+}
+
+
+inline encdec_writer::xdr_writer::xdr_writer(xdr_writer&& o) noexcept
+: buffer_(std::move(o.buffer_)),
+  ecw_(std::exchange(o.ecw_, nullptr)),
+  compress_(o.compress_),
+  ptr_(o.ptr_),
+  closed_(o.closed_)
+{}
+
+inline auto encdec_writer::xdr_writer::operator=(xdr_writer&& o) noexcept
+-> xdr_writer& {
+  buffer_ = std::move(o.buffer_);
+  ecw_ = std::exchange(o.ecw_, nullptr);
+  compress_ = o.compress_;
+  ptr_ = o.ptr_;
+  closed_ = o.closed_;
+  return *this;
+}
+
+inline encdec_writer::xdr_writer::xdr_writer(encdec_writer& ecw, bool compress)
+  noexcept
+: ecw_(&ecw),
+  compress_(compress)
+{}
+
+
 inline file_segment_ptr::file_segment_ptr(offset_type off, size_type len)
     noexcept
 : off_(off),

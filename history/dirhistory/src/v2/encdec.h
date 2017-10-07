@@ -16,6 +16,7 @@
 #include <monsoon/group_name.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/time_series_value.h>
+#include <monsoon/time_series.h>
 #include <monsoon/io/fd.h>
 #include <monsoon/io/ptr_stream.h>
 #include <monsoon/io/stream.h>
@@ -67,8 +68,10 @@ class monsoon_dirhistory_local_ encdec_ctx {
   std::uint32_t flags() const noexcept { return hdr_flags_; }
   auto new_reader(const file_segment_ptr&, bool = true) const
       -> xdr::xdr_stream_reader<io::ptr_stream_reader>;
-  auto decompress_(io::ptr_stream_reader&&, bool) const
+  auto decompress(io::ptr_stream_reader&&, bool) const
       -> std::unique_ptr<io::stream_reader>;
+  auto compress(io::ptr_stream_writer&&) const
+      -> std::unique_ptr<io::stream_writer>;
 
   compression_type compression() const noexcept {
     return compression_type(hdr_flags_ & header_flags::COMPRESSION_MASK);
@@ -77,6 +80,51 @@ class monsoon_dirhistory_local_ encdec_ctx {
  private:
   std::shared_ptr<io::fd> fd_ = nullptr;
   std::uint32_t hdr_flags_ = 0;
+};
+
+class monsoon_dirhistory_local_ encdec_writer {
+ public:
+  class xdr_writer;
+
+  encdec_writer() = delete;
+  encdec_writer(const encdec_writer&) = delete;
+  encdec_writer& operator=(const encdec_writer&) = delete;
+  encdec_writer(const encdec_ctx&, io::fd::offset_type);
+
+  const encdec_ctx& ctx() const noexcept { return ctx_; }
+  xdr_writer begin(bool = true);
+  io::fd::offset_type offset() const noexcept { return off_; }
+
+ private:
+  file_segment_ptr commit(const std::uint8_t*, std::size_t, bool);
+
+  io::fd::offset_type off_;
+  encdec_ctx ctx_;
+};
+
+class monsoon_dirhistory_local_ encdec_writer::xdr_writer
+: public xdr::xdr_ostream
+{
+ public:
+  xdr_writer() = default;
+  xdr_writer(const xdr_writer&) = delete;
+  xdr_writer& operator=(const xdr_writer&) = delete;
+  xdr_writer(xdr_writer&&) noexcept;
+  xdr_writer& operator=(xdr_writer&&) noexcept;
+  xdr_writer(encdec_writer&, bool) noexcept;
+  ~xdr_writer() noexcept;
+
+  void close() override;
+  file_segment_ptr ptr() const noexcept;
+
+ private:
+  void put_raw_bytes(const void*, std::size_t) override;
+
+  std::vector<std::uint8_t> buffer_;
+  encdec_writer* ecw_ = nullptr;
+  bool compress_;
+  file_segment_ptr ptr_;
+  bool closed_ = false;
 };
 
 /*
@@ -275,7 +323,7 @@ monsoon_dirhistory_local_
 auto decode_record_metrics(xdr::xdr_istream&, const dictionary_delta&)
   -> std::shared_ptr<time_series_value::metric_map>;
 monsoon_dirhistory_local_
-void encode_record_metrics(xdr::xdr_ostream&,
+file_segment_ptr encode_record_metrics(encdec_writer&,
     const time_series_value::metric_map&,
     dictionary_delta&);
 
@@ -284,13 +332,16 @@ auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
   -> tsdata_list::record_array;
 monsoon_dirhistory_local_
-void encode_record_array(xdr::xdr_ostream&,
-    const std::vector<std::pair<group_name, file_segment_ptr>>&,
-    dictionary_delta&);
+file_segment_ptr encode_record_array(encdec_writer&,
+    const time_series::tsv_set&, dictionary_delta&);
 
 monsoon_dirhistory_local_
 auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
+monsoon_dirhistory_local_
+auto encode_tsdata(encdec_writer&, const time_series&, dictionary_delta,
+    std::optional<file_segment_ptr>)
+  -> file_segment_ptr;
 
 monsoon_dirhistory_local_
 auto decode_file_data_tables_block(xdr::xdr_istream&, const encdec_ctx&)
