@@ -27,6 +27,7 @@ class monsoon_dirhistory_local_ tsdata_v2
   virtual std::shared_ptr<io::fd> fd() const noexcept = 0;
   std::vector<time_series> read_all() const override final;
   std::tuple<std::uint16_t, std::uint16_t> version() const noexcept override;
+  auto time() const -> std::tuple<time_point, time_point> override;
 
  private:
   virtual std::vector<time_series> read_all_raw_() const = 0;

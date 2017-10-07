@@ -131,5 +131,9 @@ std::tuple<std::uint16_t, std::uint16_t> tsdata_v2::version() const noexcept {
   return std::make_tuple(MAJOR_VERSION, minor_version_);
 }
 
+auto tsdata_v2::time() const -> std::tuple<time_point, time_point> {
+  return std::make_tuple(first_, last_);
+}
+
 
 }}} /* namespace monsoon::history::v2 */

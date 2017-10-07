@@ -99,6 +99,14 @@ auto tsdata_v0::version() const noexcept
   return std::make_tuple(MAJOR, minor_version);
 }
 
+bool tsdata_v0::is_writable() const noexcept {
+  return file_.can_write() && !gzipped_;
+}
+
+auto tsdata_v0::time() const -> std::tuple<time_point, time_point> {
+  return std::make_tuple(tp_begin_, tp_end_);
+}
+
 auto tsdata_v0::make_xdr_istream(bool validate) const
 -> std::unique_ptr<xdr::xdr_istream> {
   if (gzipped_) {

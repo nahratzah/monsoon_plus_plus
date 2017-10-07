@@ -18,6 +18,10 @@ std::shared_ptr<io::fd> tsdata_v2_list::fd() const noexcept {
   return data_.ctx().fd();
 }
 
+bool tsdata_v2_list::is_writable() const noexcept {
+  return fd()->can_write();
+}
+
 std::vector<time_series> tsdata_v2_list::read_all_raw_() const {
   std::vector<time_series> result;
 

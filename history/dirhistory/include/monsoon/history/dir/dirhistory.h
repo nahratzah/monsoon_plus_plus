@@ -37,6 +37,7 @@ class monsoon_dirhistory_export_ dirhistory
 
   const filesystem::path dir_;
   std::vector<std::shared_ptr<tsdata>> files_;
+  std::shared_ptr<tsdata> write_file_; // May be null.
 };
 
 

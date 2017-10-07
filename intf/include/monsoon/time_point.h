@@ -24,6 +24,9 @@ class time_point {
   bool operator==(const time_point&) const noexcept;
   bool operator!=(const time_point&) const noexcept;
   bool operator<(const time_point&) const noexcept;
+  bool operator>(const time_point&) const noexcept;
+  bool operator<=(const time_point&) const noexcept;
+  bool operator>=(const time_point&) const noexcept;
 
   time_point& operator+=(const duration&) noexcept;
   time_point& operator-=(const duration&) noexcept;

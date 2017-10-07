@@ -29,6 +29,10 @@ std::shared_ptr<io::fd> tsdata_v2_tables::fd() const noexcept {
   return data_.ctx().fd();
 }
 
+bool tsdata_v2_tables::is_writable() const noexcept {
+  return false;
+}
+
 std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
   using namespace std::placeholders;
   using std::swap;

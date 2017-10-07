@@ -20,6 +20,7 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
       !(filesystem::status(dir_).permissions() & perms::owner_write))
     throw std::invalid_argument("dirhistory path is not writable");
 
+  // Scan directory for files to manage.
   std::for_each(
       filesystem::directory_iterator(dir_), filesystem::directory_iterator(),
       [this, open_for_write](const filesystem::path& fname) {
@@ -35,6 +36,19 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
             files_.push_back(tsdata::open(std::move(fd)));
         }
       });
+
+  if (open_for_write) { // Find a write candidate.
+    auto fiter = std::find_if(files_.begin(), files_.end(),
+        [](const auto& tsdata_ptr) { return tsdata_ptr->is_writable(); });
+    if (fiter != files_.end()) {
+      write_file_ = *fiter;
+
+      while (++fiter != files_.end()) {
+        if ((*fiter)->is_writable() && std::get<0>((*fiter)->time()) > std::get<0>(write_file_->time()))
+          write_file_ = *fiter;
+      }
+    }
+  }
 }
 
 dirhistory::~dirhistory() noexcept {}

@@ -24,6 +24,17 @@ inline bool time_point::operator<(const time_point& y) const noexcept {
   return millis_ < y.millis_;
 }
 
+inline bool time_point::operator>(const time_point& y) const noexcept {
+  return millis_ > y.millis_;
+}
+inline bool time_point::operator<=(const time_point& y) const noexcept {
+  return millis_ <= y.millis_;
+}
+
+inline bool time_point::operator>=(const time_point& y) const noexcept {
+  return millis_ >= y.millis_;
+}
+
 inline time_point& time_point::operator+=(const duration& d) noexcept {
   millis_ += d.millis();
   return *this;

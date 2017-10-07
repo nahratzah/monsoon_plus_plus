@@ -72,6 +72,8 @@ class monsoon_dirhistory_local_ tsdata_v1
       std::vector<time_series>&&, bool);
   auto version() const noexcept -> std::tuple<std::uint16_t, std::uint16_t>
       override;
+  bool is_writable() const noexcept override;
+  auto time() const -> std::tuple<time_point, time_point> override;
 
  private:
   auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;
