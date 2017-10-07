@@ -2,8 +2,7 @@ project (monsoon_dirhistory)
 
 find_path (STD_FILESYSTEM NAMES filesystem)
 mark_as_advanced (STD_FILESYSTEM)
-if (STD_FILESYSTEM)
-else ()
+if (NOT STD_FILESYSTEM)
   find_package (Boost COMPONENTS filesystem REQUIRED)
 endif ()
 
@@ -34,6 +33,7 @@ target_link_libraries (monsoon_dirhistory
   monsoon_history)
 if (NOT STD_FILESYSTEM)
   target_link_libraries (monsoon_dirhistory ${Boost_FILESYSTEM_LIBRARY})
+  target_link_libraries (monsoon_dirhistory ${Boost_SYSTEM_LIBRARY})
 endif ()
 set_property (TARGET monsoon_dirhistory PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_dirhistory PROPERTY SOVERSION "0.0")

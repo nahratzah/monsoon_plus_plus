@@ -7,9 +7,7 @@ find_package (ZLIB REQUIRED)
 
 find_path (STD_FILESYSTEM NAMES filesystem)
 mark_as_advanced (STD_FILESYSTEM)
-if (STD_FILESYSTEM)
-  add_definitions(-DHAS_CXX_FILESYSTEM)
-else ()
+if (NOT STD_FILESYSTEM)
   find_package (Boost COMPONENTS filesystem REQUIRED)
 endif ()
 

@@ -3,16 +3,21 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/history/collect_history.h>
-// XXX: create compiler cfg file...
-// #include <filesystem>
-#include <boost/filesystem.hpp>
+
+#if __has_include(<filesystem>)
+# include <filesystem>
+#else
+# include <boost/filesystem.hpp>
+#endif
 
 namespace monsoon {
 namespace dirhistory {
 
-// XXX: create compiler cfg file...
-// namespace filesystem = ::std::filesystem;
+#if __has_include(<filesystem>)
+namespace filesystem = ::std::filesystem;
+#else
 namespace filesystem = ::boost::filesystem;
+#endif
 
 
 class monsoon_dirhistory_export_ dirhistory

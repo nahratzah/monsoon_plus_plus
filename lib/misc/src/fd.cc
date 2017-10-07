@@ -1,6 +1,6 @@
 #include <monsoon/io/fd.h>
 
-#ifdef HAS_CXX_FILESYSTEM
+#if __has_include(<filesystem>)
 # include <filesystem>
 #else
 # include <boost/filesystem.hpp>
@@ -110,7 +110,7 @@ fd fd::create(const std::string& fname, open_mode mode) {
 }
 
 fd fd::tmpfile(const std::string& prefix) {
-#if HAS_CXX_FILESYSTEM
+#if  __has_include(<filesystem>)
   namespace filesystem = ::std::filesystem;
 #else
   namespace filesystem = ::boost::filesystem;
@@ -359,6 +359,18 @@ fd::fd(const std::string& fname, open_mode mode)
 
   handle_ = ::open(fname_.c_str(), fl);
   if (handle_ == -1) throw_errno_();
+
+  try {
+    struct stat sb;
+    auto fstat_rv = ::fstat(handle_, &sb);
+    if (fstat_rv != 0) throw_errno_();
+    if (!S_ISREG(sb.st_mode)) {
+      errno = EFTYPE;
+      throw_errno_();
+    }
+  } catch (...) {
+    ::close(handle_);
+  }
 }
 
 fd::~fd() noexcept {
@@ -395,7 +407,7 @@ fd fd::tmpfile(const std::string& prefix) {
   using namespace std::literals;
   static const std::string tmpl_replacement = "XXXXXX"s;
 
-#if HAS_CXX_FILESYSTEM
+#if  __has_include(<filesystem>)
   namespace filesystem = ::std::filesystem;
 #else
   namespace filesystem = ::boost::filesystem;
@@ -516,7 +528,7 @@ namespace io {
 
 
 std::string fd::normalize(const std::string& fname) {
-#if HAS_CXX_FILESYSTEM
+#if  __has_include(<filesystem>)
   namespace filesystem = ::std::filesystem;
 #else
   namespace filesystem = ::boost::filesystem;
