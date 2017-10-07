@@ -6,7 +6,6 @@
 #include <monsoon/io/fd.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/history/dir/dirhistory_export_.h>
-#include <boost/endian/conversion.hpp>
 #include <boost/crc.hpp>
 
 namespace monsoon {

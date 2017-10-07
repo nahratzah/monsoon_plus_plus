@@ -2,6 +2,7 @@
 #include <monsoon/history/dir/hdir_exception.h>
 #include <array>
 #include <cstring>
+#include <boost/endian/conversion.hpp>
 
 namespace monsoon {
 namespace history {

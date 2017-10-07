@@ -2,6 +2,8 @@
 #define V2_TSDATA_LIST_H
 
 #include <monsoon/history/dir/dirhistory_export_.h>
+#include <monsoon/xdr/xdr.h>
+#include <monsoon/time_point.h>
 #include "encdec.h"
 #include "tsdata.h"
 
@@ -19,6 +21,7 @@ class monsoon_dirhistory_local_ tsdata_v2_list
 
   std::shared_ptr<io::fd> fd() const noexcept override;
   bool is_writable() const noexcept override;
+  void push_back(const time_series&) override;
 
  private:
   std::vector<time_series> read_all_raw_() const override;

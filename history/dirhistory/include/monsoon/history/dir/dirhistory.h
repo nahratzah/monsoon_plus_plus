@@ -31,13 +31,21 @@ class monsoon_dirhistory_export_ dirhistory
   dirhistory(filesystem::path, bool = true);
   ~dirhistory() noexcept override;
 
+  void push_back(const time_series&) override;
+
  private:
   dirhistory(const dirhistory&&) = delete;
   dirhistory(dirhistory&&) = delete;
 
+  monsoon_dirhistory_local_
+  void maybe_start_new_file_(time_point);
+  monsoon_dirhistory_local_
+  static auto decide_fname_(time_point) -> filesystem::path;
+
   const filesystem::path dir_;
   std::vector<std::shared_ptr<tsdata>> files_;
   std::shared_ptr<tsdata> write_file_; // May be null.
+  const bool writable_;
 };
 
 

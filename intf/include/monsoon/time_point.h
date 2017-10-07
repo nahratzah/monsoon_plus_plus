@@ -31,6 +31,13 @@ class time_point {
   time_point& operator+=(const duration&) noexcept;
   time_point& operator-=(const duration&) noexcept;
 
+  monsoon_intf_export_ int year() const noexcept;
+  monsoon_intf_export_ int month() const noexcept;
+  monsoon_intf_export_ int day_of_month() const noexcept;
+  monsoon_intf_export_ int hour() const noexcept;
+  monsoon_intf_export_ int minute() const noexcept;
+  monsoon_intf_export_ int second() const noexcept;
+
  private:
   std::int64_t millis_;
 };

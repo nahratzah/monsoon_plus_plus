@@ -10,6 +10,7 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/xdr/xdr_stream.h>
 #include "../raw_file_segment_reader.h"
+#include "../raw_file_segment_writer.h"
 #include "../tsdata_mime.h"
 #include "../overload.h"
 #include "tsdata_tables.h"
@@ -54,6 +55,36 @@ std::shared_ptr<tsdata_v2> tsdata_v2::open(io::fd&& fd_) {
     fd_ = std::move(*fd);
     throw;
   }
+}
+
+std::shared_ptr<tsdata_v2> tsdata_v2::new_list_file(io::fd&& fd,
+    time_point tp) {
+  constexpr auto HDR_LEN =
+      tsfile_mimeheader::XDR_ENCODED_LEN + tsfile_header::XDR_SIZE;
+  constexpr auto CHECKSUMMED_HDR_LEN =
+      HDR_LEN + 4u;
+
+  const std::uint32_t fl = (header_flags::KIND_LIST
+      | header_flags::GZIP
+      | header_flags::SORTED // Empty files are always sorted.
+      | header_flags::DISTINCT); // Empty files are always distinct.
+
+  io::fd::size_type data_len, storage_len;
+  auto xdr = xdr::xdr_stream_writer<raw_file_segment_writer>(
+      raw_file_segment_writer(fd, 0, &data_len, &storage_len));
+  tsfile_mimeheader(MAJOR, MAX_MINOR).write(xdr);
+  encode_timestamp(xdr, tp); // first
+  encode_timestamp(xdr, tp); // last
+  xdr.put_uint32(fl); // flags
+  xdr.put_uint32(0u); // reserved
+  xdr.put_uint64(CHECKSUMMED_HDR_LEN); // file size
+  encode_file_segment(xdr, file_segment_ptr(0u, 0u)); // nullptr == empty
+  xdr.close();
+
+  assert(data_len == HDR_LEN);
+  assert(storage_len == CHECKSUMMED_HDR_LEN);
+
+  return open(std::move(fd));
 }
 
 tsdata_v2::tsdata_v2(const carg& arg)
@@ -128,11 +159,47 @@ std::vector<time_series> tsdata_v2::read_all() const {
 }
 
 std::tuple<std::uint16_t, std::uint16_t> tsdata_v2::version() const noexcept {
-  return std::make_tuple(MAJOR_VERSION, minor_version_);
+  return std::make_tuple(MAJOR, minor_version_);
 }
 
 auto tsdata_v2::time() const -> std::tuple<time_point, time_point> {
   return std::make_tuple(first_, last_);
+}
+
+void tsdata_v2::update_hdr(time_point lo, time_point hi,
+    const file_segment_ptr& fsp, io::fd::size_type new_file_len) {
+  constexpr auto HDR_LEN =
+      tsfile_mimeheader::XDR_ENCODED_LEN + tsfile_header::XDR_SIZE;
+  constexpr auto CHECKSUMMED_HDR_LEN =
+      HDR_LEN + 4u;
+  assert(lo <= hi);
+
+  const auto fd_ptr = fd();
+  if (lo < last_)
+    flags_ &= ~header_flags::SORTED;
+  if (lo <= last_)
+    flags_ &= ~header_flags::DISTINCT;
+
+  if (lo < first_) first_ = lo;
+  if (hi > last_) last_ = hi;
+
+  io::fd::size_type data_len, storage_len;
+  auto xdr = xdr::xdr_stream_writer<raw_file_segment_writer>(
+      raw_file_segment_writer(*fd_ptr, 0, &data_len, &storage_len));
+  tsfile_mimeheader(MAJOR, MAX_MINOR).write(xdr);
+  encode_timestamp(xdr, first_); // first
+  encode_timestamp(xdr, last_); // last
+  xdr.put_uint32(flags_); // flags
+  xdr.put_uint32(reserved_); // reserved
+  xdr.put_uint64(new_file_len); // file size
+  encode_file_segment(xdr, fsp); // nullptr == empty
+  xdr.close();
+
+  assert(data_len == HDR_LEN);
+  assert(storage_len == CHECKSUMMED_HDR_LEN);
+
+  file_size_ = new_file_len;
+  minor_version_ = MAX_MINOR;
 }
 
 

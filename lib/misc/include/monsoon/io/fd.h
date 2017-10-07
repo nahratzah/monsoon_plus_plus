@@ -48,6 +48,7 @@ class monsoon_misc_export_ fd
   static std::string normalize(const std::string&);
 
   void close() override;
+  void unlink();
   explicit operator bool() const noexcept;
   bool is_open() const noexcept { return static_cast<bool>(*this); }
   bool can_read() const noexcept;
@@ -57,6 +58,7 @@ class monsoon_misc_export_ fd
 
   void flush();
   size_type size() const;
+  void truncate(size_type);
 
   std::size_t read(void*, std::size_t) override;
   std::size_t write(const void*, std::size_t) override;

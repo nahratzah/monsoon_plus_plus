@@ -373,6 +373,10 @@ void dictionary_delta::encode_update(xdr::xdr_ostream& out) {
   pre_computed.copy_to(out);
 }
 
+bool dictionary_delta::update_pending() const noexcept {
+  return sdd.update_pending() || pdd.update_pending() || tdd.update_pending();
+}
+
 auto decode_tsdata(xdr::xdr_istream& in, const encdec_ctx& ctx)
 -> std::shared_ptr<tsdata_list> {
   using namespace std::placeholders;

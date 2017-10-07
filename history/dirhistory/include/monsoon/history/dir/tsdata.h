@@ -50,6 +50,8 @@ class monsoon_dirhistory_export_ tsdata {
    * Returns the range of timestamps (inclusive) this tsdata covers.
    */
   virtual auto time() const -> std::tuple<time_point, time_point> = 0;
+
+  virtual void push_back(const time_series&) = 0;
 };
 
 

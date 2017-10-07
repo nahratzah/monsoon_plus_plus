@@ -109,6 +109,36 @@ bool tsdata_v1::is_writable() const noexcept {
   return file_.can_write() && !gzipped_;
 }
 
+void tsdata_v1::push_back(const time_series& ts) {
+  if (gzipped_) throw std::runtime_error("not writable");
+
+  const time_point tp = ts.get_time();
+  const auto orig_size = file_.size();
+
+  try {
+    {
+      auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
+              file_, orig_size));
+      encode_time_series(w, ts, get_dict_());
+    }
+
+    bool update_hdr = false;
+    if (tp < tp_begin_)
+      std::tie(tp_begin_, update_hdr) = std::make_tuple(tp, true);
+    if (tp > tp_end_)
+      std::tie(tp_end_, update_hdr) = std::make_tuple(tp, true);
+    if (update_hdr) {
+      auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
+              file_, tsfile_mimeheader::XDR_ENCODED_LEN));
+      encode_tsfile_header(w, std::tie(tp_begin_, tp_end_));
+    }
+  } catch (...) {
+    dict_.reset(); // Since we may have modified it.
+    file_.truncate(orig_size);
+    throw;
+  }
+}
+
 auto tsdata_v1::time() const -> std::tuple<time_point, time_point> {
   return std::make_tuple(tp_begin_, tp_end_);
 }
@@ -122,6 +152,33 @@ auto tsdata_v1::make_xdr_istream(bool validate) const
     return std::make_unique<xdr::xdr_stream_reader<io::positional_reader>>(
         io::positional_reader(file_));
   }
+}
+
+auto tsdata_v1::get_dict_() const -> const dictionary_delta& {
+  fault_dict_();
+  return dict_.value();
+}
+
+auto tsdata_v1::get_dict_() -> dictionary_delta& {
+  fault_dict_();
+  return dict_.value();
+}
+
+void tsdata_v1::fault_dict_() const {
+  if (dict_.has_value()) return;
+
+  const auto r = make_xdr_istream(true);
+  auto hdr = tsfile_mimeheader(*r); // Decode and discard.
+  decode_tsfile_header(*r); // Decode and discard.
+
+  dictionary_delta dict;
+  std::vector<time_series> result;
+  while (!r->at_end())
+    decode_time_series(*r, dict); // Decode and discard, updates dictionary.
+  r->close();
+
+  assert(!dict.update_pending());
+  dict_ = std::move(dict);
 }
 
 

@@ -45,6 +45,30 @@ auto operator<<(std::ostream& out, time_point tp) -> std::ostream& {
   return out;
 }
 
+int time_point::year() const noexcept {
+  return (unix_epoch() + millisec(millis_since_posix_epoch())).date().year();
+}
+
+int time_point::month() const noexcept {
+  return (unix_epoch() + millisec(millis_since_posix_epoch())).date().month();
+}
+
+int time_point::day_of_month() const noexcept {
+  return (unix_epoch() + millisec(millis_since_posix_epoch())).date().day();
+}
+
+int time_point::hour() const noexcept {
+  return (unix_epoch() + millisec(millis_since_posix_epoch())).time_of_day().hours();
+}
+
+int time_point::minute() const noexcept {
+  return (unix_epoch() + millisec(millis_since_posix_epoch())).time_of_day().minutes();
+}
+
+int time_point::second() const noexcept {
+  return (unix_epoch() + millisec(millis_since_posix_epoch())).time_of_day().seconds();
+}
+
 
 inline namespace time_point_internals {
 

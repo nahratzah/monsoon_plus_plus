@@ -73,15 +73,20 @@ class monsoon_dirhistory_local_ tsdata_v1
   auto version() const noexcept -> std::tuple<std::uint16_t, std::uint16_t>
       override;
   bool is_writable() const noexcept override;
+  void push_back(const time_series&) override;
   auto time() const -> std::tuple<time_point, time_point> override;
 
  private:
   auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;
+  const dictionary_delta& get_dict_() const;
+  dictionary_delta& get_dict_();
+  void fault_dict_() const;
 
   io::fd file_;
   const bool gzipped_;
   time_point tp_begin_, tp_end_;
   std::uint16_t minor_version;
+  mutable std::optional<dictionary_delta> dict_;
 };
 
 

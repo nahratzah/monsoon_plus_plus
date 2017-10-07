@@ -65,6 +65,14 @@ std::shared_ptr<const T> file_segment<T>::get() const {
   return result;
 }
 
+template<typename T>
+void file_segment<T>::update_addr(file_segment_ptr ptr) noexcept {
+  std::lock_guard<std::mutex> lck{ lck_ };
+
+  ptr_ = ptr;
+  decode_result_ = std::weak_ptr<const T>(); // Invalidate cache
+}
+
 
 template<typename T, typename H>
 std::uint32_t dictionary<T, H>::encode(const T& v) {

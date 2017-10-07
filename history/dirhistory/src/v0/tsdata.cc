@@ -2,6 +2,7 @@
 #include "../tsdata_mime.h"
 #include "../overload.h"
 #include <algorithm>
+#include <stdexcept>
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -101,6 +102,35 @@ auto tsdata_v0::version() const noexcept
 
 bool tsdata_v0::is_writable() const noexcept {
   return file_.can_write() && !gzipped_;
+}
+
+void tsdata_v0::push_back(const time_series& ts) {
+  if (gzipped_) throw std::runtime_error("not writable");
+
+  const time_point tp = ts.get_time();
+  const auto orig_size = file_.size();
+
+  try {
+    {
+      auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
+              file_, orig_size));
+      encode_time_series(w, ts);
+    }
+
+    bool update_hdr = false;
+    if (tp < tp_begin_)
+      std::tie(tp_begin_, update_hdr) = std::make_tuple(tp, true);
+    if (tp > tp_end_)
+      std::tie(tp_end_, update_hdr) = std::make_tuple(tp, true);
+    if (update_hdr) {
+      auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
+              file_, tsfile_mimeheader::XDR_ENCODED_LEN));
+      encode_tsfile_header(w, std::tie(tp_begin_, tp_end_));
+    }
+  } catch (...) {
+    file_.truncate(orig_size);
+    throw;
+  }
 }
 
 auto tsdata_v0::time() const -> std::tuple<time_point, time_point> {

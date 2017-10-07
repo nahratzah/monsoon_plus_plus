@@ -402,6 +402,12 @@ inline auto xdr_ostream::put_collection(SerFn fn, Iter begin, Iter end)
   put_raw_bytes(buffer.data(), buffer.size());
 }
 
+template<typename SerFn, typename T>
+inline void xdr_ostream::put_optional(SerFn fn, const std::optional<T>& v) {
+  put_bool(v.has_value());
+  if (v.has_value()) std::invoke(fn, *this, v.value());
+}
+
 inline void xdr_ostream::put_raw_data(const void* buf, std::size_t len) {
   put_raw_bytes(buf, len);
 }

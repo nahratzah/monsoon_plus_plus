@@ -1,5 +1,6 @@
 #include "tsdata_list.h"
 #include <stack>
+#include "../raw_file_segment_writer.h"
 
 namespace monsoon {
 namespace history {
@@ -57,6 +58,33 @@ std::vector<time_series> tsdata_v2_list::read_all_raw_() const {
   }
 
   return result;
+}
+
+void tsdata_v2_list::push_back(const time_series& ts) {
+  std::uint64_t write_start = hdr_file_size();
+  const auto fd_ptr = fd();
+
+  dictionary_delta dict = *data_.get()->dictionary();
+  assert(!dict.update_pending());
+
+  std::optional<file_segment_ptr> tsdata_pred;
+  if (data_.file_ptr().offset() != 0u) tsdata_pred = data_.file_ptr();
+  std::optional<file_segment_ptr> tsdata_dict; // XXX fill in
+  file_segment_ptr tsdata_records; // XXX fill in
+
+  io::fd::size_type dlen, slen;
+  {
+    auto tsfile_xdr = xdr::xdr_stream_writer<raw_file_segment_writer>(raw_file_segment_writer(*fd_ptr, write_start, &dlen, &slen));
+    encode_timestamp(tsfile_xdr, ts.get_time());
+    tsfile_xdr.put_optional(&encode_file_segment, tsdata_pred);
+    tsfile_xdr.put_optional(&encode_file_segment, tsdata_dict);
+    encode_file_segment(tsfile_xdr, tsdata_records);
+    tsfile_xdr.put_uint32(0u); // reserved
+    tsfile_xdr.close();
+  }
+
+  update_hdr(ts.get_time(), ts.get_time(), file_segment_ptr(write_start, dlen), write_start + slen);
+  data_.update_addr(file_segment_ptr(write_start, dlen));
 }
 
 

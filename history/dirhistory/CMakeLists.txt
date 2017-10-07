@@ -15,6 +15,7 @@ if (NOT STD_FILESYSTEM)
 endif ()
 add_library (monsoon_dirhistory
   src/raw_file_segment_reader.cc
+  src/raw_file_segment_writer.cc
   src/hdir_exception.cc
   src/dirhistory.cc
   src/tsdata_mime.cc

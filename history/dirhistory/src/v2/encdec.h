@@ -1,6 +1,7 @@
 #ifndef V2_ENCDEC_H
 #define V2_ENCDEC_H
 
+#include "file_segment_ptr.h"
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -44,24 +45,6 @@ constexpr std::uint32_t /* KIND: indicate if the type of file data. */
 
 } /* namespace monsoon::history::v2::header_flags */
 
-
-class monsoon_dirhistory_local_ file_segment_ptr {
- public:
-  using offset_type = io::fd::offset_type;
-  using size_type = io::fd::size_type;
-
-  file_segment_ptr() = default;
-  file_segment_ptr(const file_segment_ptr&) = default;
-  file_segment_ptr& operator=(const file_segment_ptr&) = default;
-  file_segment_ptr(offset_type, size_type) noexcept;
-
-  offset_type offset() const noexcept { return off_; }
-  size_type size() const noexcept { return len_; }
-
- private:
-  offset_type off_;
-  size_type len_;
-};
 
 class monsoon_dirhistory_local_ encdec_ctx {
  public:
@@ -127,6 +110,7 @@ class monsoon_dirhistory_local_ file_segment {
   std::shared_ptr<const T> get() const;
   const encdec_ctx& ctx() const noexcept { return ctx_; }
   const file_segment_ptr& file_ptr() const { return ptr_; }
+  void update_addr(file_segment_ptr) noexcept;
 
  private:
   file_segment_ptr ptr_;
@@ -168,6 +152,7 @@ class monsoon_dirhistory_local_ dictionary_delta {
  public:
   void decode_update(xdr::xdr_istream&);
   void encode_update(xdr::xdr_ostream&);
+  bool update_pending() const noexcept;
 
   dictionary<std::string> sdd;
   dictionary<std::vector<std::string>, strvector_hasher> pdd;

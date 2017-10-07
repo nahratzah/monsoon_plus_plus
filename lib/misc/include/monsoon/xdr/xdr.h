@@ -126,6 +126,9 @@ class monsoon_misc_export_ xdr_ostream {
             typename std::iterator_traits<Iter>::iterator_category>::value,
           void>;
 
+  template<typename SerFn, typename T>
+      void put_optional(SerFn, const std::optional<T>&);
+
   void put_raw_data(const void*, std::size_t);
 
   virtual void close() = 0;

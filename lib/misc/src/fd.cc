@@ -20,10 +20,13 @@ namespace io {
 namespace {
 
 
-static void throw_last_error_() {
-  const DWORD dwErrVal = GetLastError();
+static void throw_last_error_(DWORD dwErrVal) {
   const std::error_code ec(dwErrVal, std::generic_category());
   throw std::system_error(ec, "File IO error");
+}
+
+static void throw_last_error_() {
+  throw_last_error_(GetLastError());
 }
 
 
@@ -182,6 +185,12 @@ void fd::close() {
   }
 }
 
+void fd::unlink() {
+  const auto opt_path = get_path();
+  if (!opt_path.has_value()) throw_last_error_(ERROR_INVALID_HANDLE);
+  if (!DeleteFile(opt_path.value().c_str())) throw_last_error_();
+}
+
 fd::operator bool() const noexcept {
   return handle_ != INVALID_HANDLE_VALUE;
 }
@@ -229,6 +238,13 @@ auto fd::size() const -> size_type {
   LARGE_INTEGER v;
   if (!GetFileSizeEx(handle_, &v)) throw_last_error_();
   return v;
+}
+
+void fd::truncate(size_type sz) {
+  FILE_END_OF_FILE_INFO v;
+  v.EndOfFile = sz;
+  if (!SetFileInformationByHandle(handle_, FileEndOfFileInfo, &v, sizeof(v)))
+    throw_last_error_();
 }
 
 auto fd::read(void* buf, std::size_t nbytes) -> std::size_t {
@@ -445,7 +461,7 @@ fd fd::tmpfile(const std::string& prefix) {
 
   new_fd.mode_ = READ_WRITE;
   assert(new_fd.fname_.substr(new_fd.fname_.length() - 6) != tmpl_replacement);
-  unlink(new_fd.fname_.c_str()); // Unchecked return
+  ::unlink(new_fd.fname_.c_str()); // Unchecked return
   return new_fd;
 }
 
@@ -454,6 +470,14 @@ void fd::close() {
     ::close(handle_);
     handle_ = -1;
   }
+}
+
+void fd::unlink() {
+  if (handle_ == -1) {
+    errno = EINVAL;
+    throw_errno_();
+  }
+  if (::unlink(fname_.c_str()) != 0) throw_errno_();
 }
 
 fd::operator bool() const noexcept {
@@ -481,6 +505,11 @@ auto fd::size() const -> size_type {
 
   if (fstat(handle_, &sb)) throw_errno_();
   return sb.st_size;
+}
+
+void fd::truncate(size_type sz) {
+  if (ftruncate(handle_, sz))
+    throw_errno_();
 }
 
 auto fd::read(void* buf, std::size_t nbytes) -> std::size_t {
