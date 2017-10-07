@@ -148,7 +148,7 @@ template<typename W>
 auto new_gzip_compression(W&& writer)
 -> std::enable_if_t<std::is_base_of_v<stream_writer, W> && !std::is_const_v<W>,
     std::unique_ptr<gzip_compress_writer<W>>> {
-  return std::make_unique<gzip_compress_writer<W>>(std::forward<W>>(writer));
+  return std::make_unique<gzip_compress_writer<W>>(std::forward<W>(writer));
 }
 
 template<typename R>

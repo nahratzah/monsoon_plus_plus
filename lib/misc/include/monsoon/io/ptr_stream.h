@@ -31,7 +31,7 @@ class monsoon_misc_export_ ptr_stream_reader
   std::unique_ptr<stream_reader> nested_;
 };
 
-class ptr_stream_writer
+class monsoon_misc_export_ ptr_stream_writer
 : public stream_writer
 {
  public:
