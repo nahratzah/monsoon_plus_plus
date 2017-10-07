@@ -28,6 +28,9 @@ class monsoon_dirhistory_export_ tsdata {
   monsoon_dirhistory_export_
   static bool is_tsdata(const io::fd&);
 
+  monsoon_dirhistory_export_
+  static auto new_file(io::fd&&, std::uint16_t) -> std::shared_ptr<tsdata>;
+
   /**
    * Return the file version.
    */

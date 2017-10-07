@@ -115,6 +115,7 @@ void tsdata_v0::push_back(const time_series& ts) {
       auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
               file_, orig_size));
       encode_time_series(w, ts);
+      file_.flush();
     }
 
     bool update_hdr = false;
@@ -126,6 +127,7 @@ void tsdata_v0::push_back(const time_series& ts) {
       auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
               file_, tsfile_mimeheader::XDR_ENCODED_LEN));
       encode_tsfile_header(w, std::tie(tp_begin_, tp_end_));
+      file_.flush();
     }
   } catch (...) {
     file_.truncate(orig_size);
@@ -135,6 +137,16 @@ void tsdata_v0::push_back(const time_series& ts) {
 
 auto tsdata_v0::time() const -> std::tuple<time_point, time_point> {
   return std::make_tuple(tp_begin_, tp_end_);
+}
+
+auto tsdata_v0::new_file(io::fd&& fd, time_point tp)
+-> std::shared_ptr<tsdata_v0> {
+  auto w = xdr::xdr_stream_writer<io::positional_writer>(io::positional_writer(
+          fd, 0u));
+  tsfile_mimeheader(MAJOR, MAX_MINOR).write(w);
+  encode_tsfile_header(w, std::tie(tp, tp));
+  fd.flush();
+  return std::make_shared<tsdata_v0>(std::move(fd));
 }
 
 auto tsdata_v0::make_xdr_istream(bool validate) const

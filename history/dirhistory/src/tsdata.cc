@@ -74,5 +74,19 @@ bool tsdata::is_tsdata(const io::fd& fd) {
   return opt_hdr.has_value();
 }
 
+auto tsdata::new_file(io::fd&& fd, std::uint16_t version)
+-> std::shared_ptr<tsdata> {
+  switch (version) {
+    default:
+      throw std::invalid_argument("version");
+    case 0u:
+      return v0::tsdata_v0::new_file(std::move(fd), time_point::now());
+    case 1u:
+      return v1::tsdata_v1::new_file(std::move(fd), time_point::now());
+    case 2u:
+      return v2::tsdata_v2::new_list_file(std::move(fd), time_point::now());
+  }
+}
+
 
 }} /* namespace monsoon::history */

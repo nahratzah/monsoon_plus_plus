@@ -42,6 +42,7 @@ std::size_t raw_file_segment_writer::write_padding_() {
 
   if (wlen_ % 4u == 0u) return 0u;
   const std::size_t padlen = 4u - wlen_ % 4u;
+  crc32_.process_bytes(buf.data(), padlen);
 
   const std::uint8_t* p = buf.data();
   std::size_t n = padlen;

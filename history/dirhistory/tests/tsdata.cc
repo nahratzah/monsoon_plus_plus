@@ -21,9 +21,29 @@ TEST(read_tsdata_v0) {
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
 }
 
+TEST(push_back_tsdata_v0) {
+  auto tsd = tsdata::new_file(monsoon::io::fd::tmpfile("monsoon_tsdata_test"), 0u);
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  for (const auto& x : tsdata_expected()) tsd->push_back(x);
+
+  CHECK_EQUAL(expect_version(0u, 1u), tsd->version());
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+}
+
 TEST(read_tsdata_v1) {
   auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v1.tsd");
   REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expect_version(1u, 0u), tsd->version());
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+}
+
+TEST(push_back_tsdata_v1) {
+  auto tsd = tsdata::new_file(monsoon::io::fd::tmpfile("monsoon_tsdata_test"), 1u);
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  for (const auto& x : tsdata_expected()) tsd->push_back(x);
 
   CHECK_EQUAL(expect_version(1u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
@@ -40,6 +60,16 @@ TEST(read_tsdata_v2_tables) {
 TEST(read_tsdata_v2_list) {
   auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v2_list.tsd");
   REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
+  CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+}
+
+TEST(push_back_tsdata_v2) {
+  auto tsd = tsdata::new_file(monsoon::io::fd::tmpfile("monsoon_tsdata_test"), 2u);
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  for (const auto& x : tsdata_expected()) tsd->push_back(x);
 
   CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());

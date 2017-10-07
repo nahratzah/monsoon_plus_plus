@@ -76,6 +76,8 @@ class monsoon_dirhistory_local_ tsdata_v1
   void push_back(const time_series&) override;
   auto time() const -> std::tuple<time_point, time_point> override;
 
+  static std::shared_ptr<tsdata_v1> new_file(io::fd&&, time_point tp);
+
  private:
   auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;
   const dictionary_delta& get_dict_() const;

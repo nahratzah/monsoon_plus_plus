@@ -956,6 +956,7 @@ void encdec_writer::xdr_writer::close() {
   assert(ecw_ != nullptr);
   assert(!closed_);
   ptr_ = ecw_->commit(buffer_.data(), buffer_.size(), compress_);
+  closed_ = true;
 }
 
 file_segment_ptr encdec_writer::xdr_writer::ptr() const noexcept {

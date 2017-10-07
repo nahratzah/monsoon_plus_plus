@@ -63,11 +63,13 @@ std::vector<time_series> tsdata_v2_list::read_all_raw_() const {
 void tsdata_v2_list::push_back(const time_series& ts) {
   encdec_writer out = encdec_writer(data_.ctx(), hdr_file_size());
 
-  dictionary_delta dict = *data_.get()->dictionary();
-  assert(!dict.update_pending());
-
+  dictionary_delta dict;
   std::optional<file_segment_ptr> tsdata_pred;
-  if (data_.file_ptr().offset() != 0u) tsdata_pred = data_.file_ptr();
+  if (data_.file_ptr().offset() != 0u) {
+    dict = *data_.get()->dictionary();
+    tsdata_pred = data_.file_ptr();
+  }
+  assert(!dict.update_pending());
 
   const file_segment_ptr tsfile_ptr =
       encode_tsdata(out, ts, std::move(dict), std::move(tsdata_pred));
