@@ -20,6 +20,13 @@ class monsoon_dirhistory_export_ tsdata {
   monsoon_dirhistory_export_
   static auto open(const std::string&, io::fd::open_mode = io::fd::READ_ONLY)
       -> std::shared_ptr<tsdata>;
+  monsoon_dirhistory_export_
+  static auto open(io::fd&&) -> std::shared_ptr<tsdata>;
+
+  monsoon_dirhistory_export_
+  static bool is_tsdata(const std::string&);
+  monsoon_dirhistory_export_
+  static bool is_tsdata(const io::fd&);
 
   virtual auto version() const noexcept
       -> std::tuple<std::uint16_t, std::uint16_t> = 0;

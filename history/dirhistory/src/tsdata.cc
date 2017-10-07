@@ -2,6 +2,7 @@
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/xdr/xdr_stream.h>
+#include <optional>
 #include "tsdata_mime.h"
 #include "v0/tsdata.h"
 #include "v1/tsdata.h"
@@ -12,21 +13,21 @@ namespace history {
 namespace {
 
 
-tsfile_mimeheader get_mimeheader_from_gzip(io::fd& fd) {
+std::optional<tsfile_mimeheader> get_mimeheader_from_gzip(const io::fd& fd) {
   using pos = io::positional_reader;
   using gzip = io::gzip_decompress_reader<pos>;
   using xdr = xdr::xdr_stream_reader<gzip>;
 
   auto r = xdr(gzip(pos(fd)));
-  return tsfile_mimeheader(r);
+  return tsfile_mimeheader::read(r);
 }
 
-tsfile_mimeheader get_mimeheader_from_plain(io::fd& fd) {
+std::optional<tsfile_mimeheader> get_mimeheader_from_plain(const io::fd& fd) {
   using pos = io::positional_reader;
   using xdr = xdr::xdr_stream_reader<pos>;
 
   auto r = xdr(pos(fd));
-  return tsfile_mimeheader(r);
+  return tsfile_mimeheader::read(r);
 }
 
 
@@ -37,12 +38,17 @@ tsdata::~tsdata() noexcept {}
 
 auto tsdata::open(const std::string& fname, io::fd::open_mode mode)
 -> std::shared_ptr<tsdata> {
-  auto fd = io::fd(fname, mode);
+  return open(io::fd(fname, mode));
+}
+
+auto tsdata::open(io::fd&& fd) -> std::shared_ptr<tsdata> {
   bool is_gzipped = io::is_gzip_file(io::positional_reader(fd));
 
-  const auto hdr = (is_gzipped
+  const auto opt_hdr = (is_gzipped
       ? get_mimeheader_from_gzip(fd)
       : get_mimeheader_from_plain(fd));
+  if (!opt_hdr.has_value()) return nullptr;
+  const auto& hdr = opt_hdr.value();
 
   switch (hdr.major_version) {
     case 0u:
@@ -53,6 +59,19 @@ auto tsdata::open(const std::string& fname, io::fd::open_mode mode)
       return v2::tsdata_v2::open(std::move(fd));
   }
   return nullptr; // XXX should not reach this
+}
+
+bool tsdata::is_tsdata(const std::string& fname) {
+  return is_tsdata(io::fd(fname, io::fd::READ_ONLY));
+}
+
+bool tsdata::is_tsdata(const io::fd& fd) {
+  bool is_gzipped = io::is_gzip_file(io::positional_reader(fd));
+
+  const auto opt_hdr = (is_gzipped
+      ? get_mimeheader_from_gzip(fd)
+      : get_mimeheader_from_plain(fd));
+  return opt_hdr.has_value();
 }
 
 
