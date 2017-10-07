@@ -9,3 +9,6 @@ if (UnitTest++_FOUND)
   target_link_libraries (test_tsdata UnitTest++)
   add_test (tsdata test_tsdata "${CMAKE_CURRENT_SOURCE_DIR}")
 endif ()
+
+add_executable (count count.cc)
+target_link_libraries (count monsoon_dirhistory)
