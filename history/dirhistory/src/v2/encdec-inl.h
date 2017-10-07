@@ -152,7 +152,7 @@ void dictionary<T, H>::decode_update(xdr::xdr_istream& in, SerFn fn) {
 
         decode_map_.push_back(v);
         try {
-          encode_map_.emplace(v, offset);
+          encode_map_.emplace(v, idx);
         } catch (...) {
           decode_map_.pop_back();
           throw;
