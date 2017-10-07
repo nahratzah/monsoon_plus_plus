@@ -3,7 +3,7 @@
 #include <utility>
 
 namespace monsoon {
-namespace dirhistory {
+namespace history {
 
 
 dirhistory::dirhistory(filesystem::path dir)
@@ -18,4 +18,4 @@ dirhistory::dirhistory(filesystem::path dir)
 dirhistory::~dirhistory() noexcept {}
 
 
-}} /* namespace monsoon::dirhistory */
+}} /* namespace monsoon::history */

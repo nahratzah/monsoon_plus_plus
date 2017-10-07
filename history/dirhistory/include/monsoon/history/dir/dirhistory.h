@@ -11,7 +11,7 @@
 #endif
 
 namespace monsoon {
-namespace dirhistory {
+namespace history {
 
 #if __has_include(<filesystem>)
 namespace filesystem = ::std::filesystem;
@@ -36,6 +36,6 @@ class monsoon_dirhistory_export_ dirhistory
 };
 
 
-}} /* namespace monsoon::dirhistory */
+}} /* namespace monsoon::history */
 
 #endif /* MONSOON_HISTORY_DIR_DIRHISTORY_H */
