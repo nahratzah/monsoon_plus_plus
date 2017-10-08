@@ -37,7 +37,7 @@ constexpr int GZIP_HEADER_TRAILER = 16;
 constexpr int DFL_MEMLEVEL = 8;
 constexpr std::size_t out_buffer_size = 128 * 1024;
 constexpr std::size_t in_buffer_size = 128 * 1024;
-constexpr std::size_t in_pending_size = 128 * 1024;
+constexpr std::size_t in_pending_size = 4;
 
 static void handle_zlib_error_(int ret) {
   if (ret > 0) return; // normal event
