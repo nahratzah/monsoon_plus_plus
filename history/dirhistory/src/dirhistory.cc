@@ -74,9 +74,15 @@ auto dirhistory::simple_groups(const time_range& tr) const
     std::tie(fbegin, fend) = file->time();
     if (fbegin <= tr.end() && fend >= tr.begin()) {
       auto fsubset = file->simple_groups();
-      result.insert(
-          std::make_move_iterator(fsubset.begin()),
-          std::make_move_iterator(fsubset.end()));
+#if __cplusplus >= 201703
+      if (result.get_allocator() == fsubset.get_allocator())
+        result.merge(std::move(fsubset));
+      else
+#else
+        result.insert(
+            std::make_move_iterator(fsubset.begin()),
+            std::make_move_iterator(fsubset.end()));
+#endif
     }
   }
 
@@ -92,9 +98,15 @@ auto dirhistory::group_names(const time_range& tr) const
     std::tie(fbegin, fend) = file->time();
     if (fbegin <= tr.end() && fend >= tr.begin()) {
       auto fsubset = file->group_names();
-      result.insert(
-          std::make_move_iterator(fsubset.begin()),
-          std::make_move_iterator(fsubset.end()));
+#if __cplusplus >= 201703
+      if (result.get_allocator() == fsubset.get_allocator())
+        result.merge(std::move(fsubset));
+      else
+#else
+        result.insert(
+            std::make_move_iterator(fsubset.begin()),
+            std::make_move_iterator(fsubset.end()));
+#endif
     }
   }
 
@@ -110,9 +122,15 @@ auto dirhistory::untagged_metrics(const monsoon::time_range& tr) const
     std::tie(fbegin, fend) = file->time();
     if (fbegin <= tr.end() && fend >= tr.begin()) {
       auto fsubset = file->untagged_metrics();
-      result.insert(
-          std::make_move_iterator(fsubset.begin()),
-          std::make_move_iterator(fsubset.end()));
+#if __cplusplus >= 201703
+      if (result.get_allocator() == fsubset.get_allocator())
+        result.merge(std::move(fsubset));
+      else
+#else
+        result.insert(
+            std::make_move_iterator(fsubset.begin()),
+            std::make_move_iterator(fsubset.end()));
+#endif
     }
   }
 
@@ -128,9 +146,15 @@ auto dirhistory::tagged_metrics(const monsoon::time_range& tr) const
     std::tie(fbegin, fend) = file->time();
     if (fbegin <= tr.end() && fend >= tr.begin()) {
       auto fsubset = file->tagged_metrics();
-      result.insert(
-          std::make_move_iterator(fsubset.begin()),
-          std::make_move_iterator(fsubset.end()));
+#if __cplusplus >= 201703
+      if (result.get_allocator() == fsubset.get_allocator())
+        result.merge(std::move(fsubset));
+      else
+#else
+        result.insert(
+            std::make_move_iterator(fsubset.begin()),
+            std::make_move_iterator(fsubset.end()));
+#endif
     }
   }
 
