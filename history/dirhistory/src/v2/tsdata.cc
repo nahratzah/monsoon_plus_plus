@@ -21,6 +21,10 @@ namespace history {
 namespace v2 {
 
 
+constexpr std::uint16_t tsdata_v2::MAJOR;
+constexpr std::uint16_t tsdata_v2::MAX_MINOR;
+
+
 struct monsoon_dirhistory_local_ tsdata_v2::carg {
   carg(const tsfile_mimeheader& mime, const tsfile_header& hdr)
   : mime(mime),

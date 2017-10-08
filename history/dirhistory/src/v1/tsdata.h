@@ -61,8 +61,8 @@ class monsoon_dirhistory_local_ tsdata_v1
   public std::enable_shared_from_this<tsdata_v1>
 {
  public:
-  static const std::uint16_t MAJOR;
-  static const std::uint16_t MAX_MINOR;
+  static constexpr std::uint16_t MAJOR = 1u;
+  static constexpr std::uint16_t MAX_MINOR = 0u;
 
   tsdata_v1(io::fd&& file);
   ~tsdata_v1() noexcept;

@@ -15,8 +15,8 @@ namespace history {
 namespace v1 {
 
 
-const std::uint16_t tsdata_v1::MAJOR = 1u;
-const std::uint16_t tsdata_v1::MAX_MINOR = 0u;
+constexpr std::uint16_t tsdata_v1::MAJOR;
+constexpr std::uint16_t tsdata_v1::MAX_MINOR;
 
 tsdata_v1::tsdata_v1(io::fd&& file)
 : file_(std::move(file)),

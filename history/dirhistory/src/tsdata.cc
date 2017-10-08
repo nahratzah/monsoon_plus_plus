@@ -51,11 +51,11 @@ auto tsdata::open(io::fd&& fd) -> std::shared_ptr<tsdata> {
   const auto& hdr = opt_hdr.value();
 
   switch (hdr.major_version) {
-    case 0u:
+    case v0::tsdata_v0::MAJOR:
       return std::make_shared<v0::tsdata_v0>(std::move(fd));
-    case 1u:
+    case v1::tsdata_v1::MAJOR:
       return std::make_shared<v1::tsdata_v1>(std::move(fd));
-    case 2u:
+    case v2::tsdata_v2::MAJOR:
       return v2::tsdata_v2::open(std::move(fd));
   }
   return nullptr; // XXX should not reach this
@@ -79,13 +79,17 @@ auto tsdata::new_file(io::fd&& fd, std::uint16_t version)
   switch (version) {
     default:
       throw std::invalid_argument("version");
-    case 0u:
+    case v0::tsdata_v0::MAJOR:
       return v0::tsdata_v0::new_file(std::move(fd), time_point::now());
-    case 1u:
+    case v1::tsdata_v1::MAJOR:
       return v1::tsdata_v1::new_file(std::move(fd), time_point::now());
-    case 2u:
+    case v2::tsdata_v2::MAJOR:
       return v2::tsdata_v2::new_list_file(std::move(fd), time_point::now());
   }
+}
+
+auto tsdata::new_file(io::fd&& fd) -> std::shared_ptr<tsdata> {
+  return new_file(std::move(fd), v2::tsdata_v2::MAJOR);
 }
 
 
