@@ -84,8 +84,9 @@ std::unordered_set<group_name> tsdata_v2_list::group_names() const {
   return result;
 }
 
-std::unordered_multimap<simple_group, metric_name> tsdata_v2_list::untagged_metrics() const {
-  std::unordered_multimap<simple_group, metric_name> result;
+auto tsdata_v2_list::untagged_metrics() const
+-> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> result;
   visit(
       [&result](const time_point& ts, std::shared_ptr<const tsdata_list::record_array> records) {
         std::for_each(records->begin(), records->end(),
@@ -102,8 +103,9 @@ std::unordered_multimap<simple_group, metric_name> tsdata_v2_list::untagged_metr
   return result;
 }
 
-std::unordered_multimap<group_name, metric_name> tsdata_v2_list::tagged_metrics() const {
-  std::unordered_multimap<group_name, metric_name> result;
+auto tsdata_v2_list::tagged_metrics() const
+-> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> result;
   visit(
       [&result](const time_point& ts, std::shared_ptr<const tsdata_list::record_array> records) {
         std::for_each(records->begin(), records->end(),

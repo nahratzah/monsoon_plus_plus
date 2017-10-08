@@ -38,9 +38,9 @@ class monsoon_dirhistory_export_ dirhistory
   auto group_names(const time_range&) const
       -> std::unordered_set<group_name> override;
   auto tagged_metrics(const time_range&) const
-      -> std::unordered_multimap<group_name, metric_name> override;
+      -> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> override;
   auto untagged_metrics(const time_range&) const
-      -> std::unordered_multimap<simple_group, metric_name> override;
+      -> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> override;
 
  private:
   dirhistory(const dirhistory&&) = delete;

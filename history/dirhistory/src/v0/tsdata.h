@@ -49,10 +49,10 @@ class monsoon_dirhistory_local_ tsdata_v0
 
   std::unordered_set<simple_group> simple_groups() const override;
   std::unordered_set<group_name> group_names() const override;
-  std::unordered_multimap<simple_group, metric_name> untagged_metrics() const
-      override;
-  std::unordered_multimap<group_name, metric_name> tagged_metrics() const
-      override;
+  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>
+      untagged_metrics() const override;
+  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
+      tagged_metrics() const override;
 
  private:
   auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;

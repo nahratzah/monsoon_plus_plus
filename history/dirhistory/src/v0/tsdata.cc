@@ -172,8 +172,8 @@ std::unordered_set<group_name> tsdata_v0::group_names() const {
 }
 
 auto tsdata_v0::untagged_metrics() const
--> std::unordered_multimap<simple_group, metric_name> {
-  std::unordered_multimap<simple_group, metric_name> result;
+-> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> result;
   visit(
       [&result](auto&& ts) {
         auto& data = ts.get_data();
@@ -192,8 +192,8 @@ auto tsdata_v0::untagged_metrics() const
 }
 
 auto tsdata_v0::tagged_metrics() const
--> std::unordered_multimap<group_name, metric_name> {
-  std::unordered_multimap<group_name, metric_name> result;
+-> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> result;
   visit(
       [&result](auto&& ts) {
         auto& data = ts.get_data();

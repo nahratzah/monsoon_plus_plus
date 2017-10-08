@@ -14,6 +14,13 @@ namespace monsoon {
 
 class monsoon_history_export_ collect_history {
  public:
+  struct metrics_hash {
+    std::size_t monsoon_history_export_ operator()(
+        const std::tuple<group_name, metric_name>&) const noexcept;
+    std::size_t monsoon_history_export_ operator()(
+        const std::tuple<simple_group, metric_name>&) const noexcept;
+  };
+
   collect_history() noexcept = default;
   virtual ~collect_history() noexcept;
 
@@ -24,9 +31,9 @@ class monsoon_history_export_ collect_history {
   virtual auto group_names(const time_range&) const
       -> std::unordered_set<group_name> = 0;
   virtual auto tagged_metrics(const time_range&) const
-      -> std::unordered_multimap<group_name, metric_name> = 0;
+      -> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> = 0;
   virtual auto untagged_metrics(const time_range&) const
-      -> std::unordered_multimap<simple_group, metric_name> = 0;
+      -> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> = 0;
 
  protected:
   collect_history(const collect_history&) noexcept = default;

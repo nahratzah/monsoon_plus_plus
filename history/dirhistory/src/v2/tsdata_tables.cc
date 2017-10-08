@@ -138,8 +138,9 @@ std::unordered_set<group_name> tsdata_v2_tables::group_names() const {
   return result;
 }
 
-std::unordered_multimap<simple_group, metric_name> tsdata_v2_tables::untagged_metrics() const {
-  std::unordered_multimap<simple_group, metric_name> result;
+auto tsdata_v2_tables::untagged_metrics() const
+-> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> result;
 
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();
@@ -160,8 +161,9 @@ std::unordered_multimap<simple_group, metric_name> tsdata_v2_tables::untagged_me
   return result;
 }
 
-std::unordered_multimap<group_name, metric_name> tsdata_v2_tables::tagged_metrics() const {
-  std::unordered_multimap<group_name, metric_name> result;
+auto tsdata_v2_tables::tagged_metrics() const
+-> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> result;
 
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();

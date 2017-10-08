@@ -102,8 +102,8 @@ auto dirhistory::group_names(const time_range& tr) const
 }
 
 auto dirhistory::untagged_metrics(const monsoon::time_range& tr) const
--> std::unordered_multimap<simple_group, metric_name> {
-  std::unordered_multimap<simple_group, metric_name> result;
+-> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> result;
 
   for (const auto& file : files_) {
     time_point fbegin, fend;
@@ -120,8 +120,8 @@ auto dirhistory::untagged_metrics(const monsoon::time_range& tr) const
 }
 
 auto dirhistory::tagged_metrics(const monsoon::time_range& tr) const
--> std::unordered_multimap<group_name, metric_name> {
-  std::unordered_multimap<group_name, metric_name> result;
+-> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> {
+  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> result;
 
   for (const auto& file : files_) {
     time_point fbegin, fend;
