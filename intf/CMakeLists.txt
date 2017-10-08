@@ -48,6 +48,8 @@ install (FILES
   include/monsoon/tags.h
   include/monsoon/time_point-inl.h
   include/monsoon/time_point.h
+  include/monsoon/time_range-inl.h
+  include/monsoon/time_range.h
   include/monsoon/time_series-inl.h
   include/monsoon/time_series.h
   include/monsoon/time_series_value-inl.h

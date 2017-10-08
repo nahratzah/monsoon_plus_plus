@@ -104,5 +104,83 @@ void tsdata_v2_tables::push_back(const time_series&) {
   throw std::runtime_error("unsupported");
 }
 
+std::unordered_set<simple_group> tsdata_v2_tables::simple_groups() const {
+  std::unordered_set<simple_group> result;
+
+  const std::shared_ptr<const file_data_tables> file_data_tables =
+      data_.get();
+  for (const file_data_tables_block& block : *file_data_tables) {
+    const std::shared_ptr<const tables> tbl = std::get<1>(block).get();
+    std::transform(tbl->begin(), tbl->end(),
+        std::inserter(result, result.end()),
+        [](const auto& tbl_entry) {
+          return std::get<0>(tbl_entry).get_path();
+        });
+  }
+
+  return result;
+}
+
+std::unordered_set<group_name> tsdata_v2_tables::group_names() const {
+  std::unordered_set<group_name> result;
+
+  const std::shared_ptr<const file_data_tables> file_data_tables =
+      data_.get();
+  for (const file_data_tables_block& block : *file_data_tables) {
+    const std::shared_ptr<const tables> tbl = std::get<1>(block).get();
+    std::transform(tbl->begin(), tbl->end(),
+        std::inserter(result, result.end()),
+        [](const auto& tbl_entry) {
+          return std::get<0>(tbl_entry);
+        });
+  }
+
+  return result;
+}
+
+std::unordered_multimap<simple_group, metric_name> tsdata_v2_tables::untagged_metrics() const {
+  std::unordered_multimap<simple_group, metric_name> result;
+
+  const std::shared_ptr<const file_data_tables> file_data_tables =
+      data_.get();
+  for (const file_data_tables_block& block : *file_data_tables) {
+    const std::shared_ptr<const tables> tbl = std::get<1>(block).get();
+    std::for_each(tbl->begin(), tbl->end(),
+        [&result](const auto& tbl_entry) {
+          const auto& name = std::get<0>(tbl_entry).get_path();
+          const auto grp_table = std::get<1>(tbl_entry).get();
+          std::transform(std::get<1>(*grp_table).begin(), std::get<1>(*grp_table).end(),
+              std::inserter(result, result.end()),
+              [&name](const auto& metric_tbl_entry) {
+                return std::make_pair(name, std::get<0>(metric_tbl_entry));
+              });
+        });
+  }
+
+  return result;
+}
+
+std::unordered_multimap<group_name, metric_name> tsdata_v2_tables::tagged_metrics() const {
+  std::unordered_multimap<group_name, metric_name> result;
+
+  const std::shared_ptr<const file_data_tables> file_data_tables =
+      data_.get();
+  for (const file_data_tables_block& block : *file_data_tables) {
+    const std::shared_ptr<const tables> tbl = std::get<1>(block).get();
+    std::for_each(tbl->begin(), tbl->end(),
+        [&result](const auto& tbl_entry) {
+          const auto& name = std::get<0>(tbl_entry);
+          const auto grp_table = std::get<1>(tbl_entry).get();
+          std::transform(std::get<1>(*grp_table).begin(), std::get<1>(*grp_table).end(),
+              std::inserter(result, result.end()),
+              [&name](const auto& metric_tbl_entry) {
+                return std::make_pair(name, std::get<0>(metric_tbl_entry));
+              });
+        });
+  }
+
+  return result;
+}
+
 
 }}} /* namespace monsoon::history::v2 */

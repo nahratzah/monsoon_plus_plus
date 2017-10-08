@@ -65,6 +65,78 @@ void dirhistory::push_back(const time_series& ts) {
   write_file_->push_back(ts);
 }
 
+auto dirhistory::simple_groups(const time_range& tr) const
+-> std::unordered_set<simple_group> {
+  std::unordered_set<simple_group> result;
+
+  for (const auto& file : files_) {
+    time_point fbegin, fend;
+    std::tie(fbegin, fend) = file->time();
+    if (fbegin <= tr.end() && fend >= tr.begin()) {
+      auto fsubset = file->simple_groups();
+      result.insert(
+          std::make_move_iterator(fsubset.begin()),
+          std::make_move_iterator(fsubset.end()));
+    }
+  }
+
+  return result;
+}
+
+auto dirhistory::group_names(const time_range& tr) const
+-> std::unordered_set<group_name> {
+  std::unordered_set<group_name> result;
+
+  for (const auto& file : files_) {
+    time_point fbegin, fend;
+    std::tie(fbegin, fend) = file->time();
+    if (fbegin <= tr.end() && fend >= tr.begin()) {
+      auto fsubset = file->group_names();
+      result.insert(
+          std::make_move_iterator(fsubset.begin()),
+          std::make_move_iterator(fsubset.end()));
+    }
+  }
+
+  return result;
+}
+
+auto dirhistory::untagged_metrics(const monsoon::time_range& tr) const
+-> std::unordered_multimap<simple_group, metric_name> {
+  std::unordered_multimap<simple_group, metric_name> result;
+
+  for (const auto& file : files_) {
+    time_point fbegin, fend;
+    std::tie(fbegin, fend) = file->time();
+    if (fbegin <= tr.end() && fend >= tr.begin()) {
+      auto fsubset = file->untagged_metrics();
+      result.insert(
+          std::make_move_iterator(fsubset.begin()),
+          std::make_move_iterator(fsubset.end()));
+    }
+  }
+
+  return result;
+}
+
+auto dirhistory::tagged_metrics(const monsoon::time_range& tr) const
+-> std::unordered_multimap<group_name, metric_name> {
+  std::unordered_multimap<group_name, metric_name> result;
+
+  for (const auto& file : files_) {
+    time_point fbegin, fend;
+    std::tie(fbegin, fend) = file->time();
+    if (fbegin <= tr.end() && fend >= tr.begin()) {
+      auto fsubset = file->tagged_metrics();
+      result.insert(
+          std::make_move_iterator(fsubset.begin()),
+          std::make_move_iterator(fsubset.end()));
+    }
+  }
+
+  return result;
+}
+
 void dirhistory::maybe_start_new_file_(time_point tp) {
   using std::to_string;
 

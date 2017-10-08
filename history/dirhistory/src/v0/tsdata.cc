@@ -34,14 +34,8 @@ tsdata_v0::tsdata_v0(io::fd&& file)
 tsdata_v0::~tsdata_v0() noexcept {}
 
 auto tsdata_v0::read_all() const -> std::vector<time_series> {
-  const auto r = make_xdr_istream(true);
-  auto hdr = tsfile_mimeheader(*r); // Decode and discard.
-  decode_tsfile_header(*r); // Decode and discard.
-
   std::vector<time_series> result;
-  while (!r->at_end())
-    result.push_back(decode_time_series(*r));
-  r->close();
+  visit([&result](auto&& ts) { result.push_back(std::move(ts)); });
   return result;
 }
 
@@ -147,6 +141,74 @@ auto tsdata_v0::new_file(io::fd&& fd, time_point tp)
   encode_tsfile_header(w, std::tie(tp, tp));
   fd.flush();
   return std::make_shared<tsdata_v0>(std::move(fd));
+}
+
+std::unordered_set<simple_group> tsdata_v0::simple_groups() const {
+  std::unordered_set<simple_group> result;
+  visit(
+      [&result](auto&& ts) {
+        auto& data = ts.get_data();
+        std::transform(data.begin(), data.end(),
+            std::inserter(result, result.end()),
+            [](const time_series_value& tsv) {
+              return tsv.get_name().get_path();
+            });
+      });
+  return result;
+}
+
+std::unordered_set<group_name> tsdata_v0::group_names() const {
+  std::unordered_set<group_name> result;
+  visit(
+      [&result](auto&& ts) {
+        auto& data = ts.get_data();
+        std::transform(data.begin(), data.end(),
+            std::inserter(result, result.end()),
+            [](const time_series_value& tsv) {
+              return tsv.get_name();
+            });
+      });
+  return result;
+}
+
+auto tsdata_v0::untagged_metrics() const
+-> std::unordered_multimap<simple_group, metric_name> {
+  std::unordered_multimap<simple_group, metric_name> result;
+  visit(
+      [&result](auto&& ts) {
+        auto& data = ts.get_data();
+        std::for_each(data.begin(), data.end(),
+            [&result](const time_series_value& tsv) {
+              const auto& metrics = tsv.get_metrics();
+              const auto& name = tsv.get_name().get_path();
+              std::transform(metrics.begin(), metrics.end(),
+                  std::inserter(result, result.end()),
+                  [&name](const auto& metric_entry) {
+                    return std::make_pair(name, metric_entry.first);
+                  });
+            });
+      });
+  return result;
+}
+
+auto tsdata_v0::tagged_metrics() const
+-> std::unordered_multimap<group_name, metric_name> {
+  std::unordered_multimap<group_name, metric_name> result;
+  visit(
+      [&result](auto&& ts) {
+        auto& data = ts.get_data();
+        std::for_each(data.begin(), data.end(),
+            [&result](const time_series_value& tsv) {
+              const auto& metrics = tsv.get_metrics();
+              const auto& name = tsv.get_name();
+              std::transform(metrics.begin(), metrics.end(),
+                  std::inserter(result, result.end()),
+                  [&name](const auto& metric_entry) {
+                    return std::make_pair(name, metric_entry.first);
+                  });
+            });
+      });
+  return result;
 }
 
 auto tsdata_v0::make_xdr_istream(bool validate) const

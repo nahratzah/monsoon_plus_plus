@@ -57,6 +57,11 @@ class monsoon_dirhistory_export_ tsdata {
   virtual auto time() const -> std::tuple<time_point, time_point> = 0;
 
   virtual void push_back(const time_series&) = 0;
+
+  virtual std::unordered_set<simple_group> simple_groups() const = 0;
+  virtual std::unordered_set<group_name> group_names() const = 0;
+  virtual std::unordered_multimap<simple_group, metric_name> untagged_metrics() const = 0;
+  virtual std::unordered_multimap<group_name, metric_name> tagged_metrics() const = 0;
 };
 
 

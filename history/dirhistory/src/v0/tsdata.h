@@ -47,8 +47,18 @@ class monsoon_dirhistory_local_ tsdata_v0
 
   static std::shared_ptr<tsdata_v0> new_file(io::fd&&, time_point tp);
 
+  std::unordered_set<simple_group> simple_groups() const override;
+  std::unordered_set<group_name> group_names() const override;
+  std::unordered_multimap<simple_group, metric_name> untagged_metrics() const
+      override;
+  std::unordered_multimap<group_name, metric_name> tagged_metrics() const
+      override;
+
  private:
   auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;
+
+  template<typename Fn>
+  void visit(Fn) const;
 
   io::fd file_;
   const bool gzipped_;
@@ -103,5 +113,7 @@ void encode_tags(monsoon::xdr::xdr_ostream&, const tags&);
 
 
 }}} /* namespace monsoon::history::v0 */
+
+#include "tsdata-inl.h"
 
 #endif /* V0_TSDATA_H */
