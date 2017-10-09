@@ -216,6 +216,72 @@ auto tsdata_v1::tagged_metrics() const
   return result;
 }
 
+void tsdata_v1::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& acceptor,
+    std::optional<time_point> tr_begin,
+    std::optional<time_point> tr_end,
+    const std::unordered_multimap<group_name, metric_name>& selector) const {
+  using vector_type = emit_acceptor<group_name, metric_name, metric_value>::vector_type;
+
+  visit(
+      [&tr_begin, &tr_end, &selector, &acceptor](auto&& ts) {
+        const time_point tp = ts.get_time();
+        if (tr_begin.has_value() && tp < tr_begin.value()) return;
+        if (tr_end.has_value() && tp > tr_end.value()) return;
+
+        vector_type values;
+        std::for_each(ts.data().begin(), ts.data().end(),
+            [&values, &selector](auto&& tsv) {
+              auto[b, e] = selector.equal_range(tsv.get_name());
+              std::for_each(b, e,
+                  [&tsv, &values](auto&& selector_entry) {
+                    auto opt_mv = tsv[std::get<1>(selector_entry)];
+                    if (opt_mv.has_value()) {
+                      values.emplace_back(
+                          tsv.get_name(),
+                          std::get<1>(selector_entry),
+                          opt_mv.value());
+                    }
+                  });
+            });
+
+        acceptor.accept(tp, std::move(values));
+      });
+}
+
+void tsdata_v1::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& acceptor,
+    std::optional<time_point> tr_begin,
+    std::optional<time_point> tr_end,
+    const std::unordered_multimap<simple_group, metric_name>& selector) const {
+  using vector_type = emit_acceptor<group_name, metric_name, metric_value>::vector_type;
+
+  visit(
+      [&tr_begin, &tr_end, &selector, &acceptor](auto&& ts) {
+        const time_point tp = ts.get_time();
+        if (tr_begin.has_value() && tp < tr_begin.value()) return;
+        if (tr_end.has_value() && tp > tr_end.value()) return;
+
+        vector_type values;
+        std::for_each(ts.data().begin(), ts.data().end(),
+            [&values, &selector](auto&& tsv) {
+              auto[b, e] = selector.equal_range(tsv.get_name().get_path());
+              std::for_each(b, e,
+                  [&tsv, &values](auto&& selector_entry) {
+                    auto opt_mv = tsv[std::get<1>(selector_entry)];
+                    if (opt_mv.has_value()) {
+                      values.emplace_back(
+                          tsv.get_name(),
+                          std::get<1>(selector_entry),
+                          opt_mv.value());
+                    }
+                  });
+            });
+
+        acceptor.accept(tp, std::move(values));
+      });
+}
+
 auto tsdata_v1::make_xdr_istream(bool validate) const
 -> std::unique_ptr<xdr::xdr_istream> {
   if (gzipped_) {

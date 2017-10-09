@@ -42,6 +42,27 @@ class monsoon_dirhistory_export_ dirhistory
   auto untagged_metrics(const time_range&) const
       -> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> override;
 
+  void emit(
+      acceptor<group_name, metric_name, metric_value>&,
+      time_range,
+      std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>,
+      time_point::duration = time_point::duration(0)) const override;
+  void emit(
+      acceptor<group_name, metric_name, metric_value>&,
+      time_range,
+      std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>,
+      time_point::duration = time_point::duration(0)) const override;
+  void emit(
+      acceptor<group_name>&,
+      time_range,
+      std::unordered_set<group_name>,
+      time_point::duration = time_point::duration(0)) const override;
+  void emit(
+      acceptor<simple_group, metric_name>&,
+      time_range,
+      std::unordered_set<simple_group>,
+      time_point::duration = time_point::duration(0)) const override;
+
  private:
   dirhistory(const dirhistory&&) = delete;
   dirhistory(dirhistory&&) = delete;

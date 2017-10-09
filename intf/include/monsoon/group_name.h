@@ -27,6 +27,10 @@ class monsoon_intf_export_ group_name {
 
   bool operator==(const group_name&) const noexcept;
   bool operator!=(const group_name&) const noexcept;
+  bool operator<(const group_name&) const noexcept;
+  bool operator>(const group_name&) const noexcept;
+  bool operator<=(const group_name&) const noexcept;
+  bool operator>=(const group_name&) const noexcept;
 
   std::string config_string() const;
 

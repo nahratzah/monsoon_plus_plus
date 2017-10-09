@@ -39,6 +39,21 @@ inline auto group_name::operator!=(const group_name& other) const noexcept
   return !(*this == other);
 }
 
+inline auto group_name::operator>(const group_name& other) const noexcept
+->  bool {
+  return other < *this;
+}
+
+inline auto group_name::operator<=(const group_name& other) const noexcept
+->  bool {
+  return !(other < *this);
+}
+
+inline auto group_name::operator>=(const group_name& other) const noexcept
+->  bool {
+  return !(*this < other);
+}
+
 
 } /* namespace monsoon */
 

@@ -17,6 +17,7 @@ namespace history {
 class monsoon_dirhistory_export_ tsdata {
  public:
   using metrics_hash = collect_history::metrics_hash;
+  template<typename...> class emit_acceptor;
 
   virtual ~tsdata() noexcept;
 
@@ -67,6 +68,27 @@ class monsoon_dirhistory_export_ tsdata {
       untagged_metrics() const = 0;
   virtual std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
       tagged_metrics() const = 0;
+
+  virtual void emit(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      const std::unordered_multimap<group_name, metric_name>&) const = 0;
+  virtual void emit(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      const std::unordered_multimap<simple_group, metric_name>&) const = 0;
+};
+
+template<typename... Types>
+class tsdata::emit_acceptor {
+ public:
+  using tuple_type = std::tuple<std::remove_cv_t<std::remove_reference_t<Types>>...>;
+  using vector_type = std::vector<tuple_type>;
+
+  virtual ~emit_acceptor() noexcept {}
+  virtual void accept(time_point, vector_type) = 0;
 };
 
 

@@ -2,9 +2,13 @@ project (monsoon_dirhistory)
 
 find_path (STD_FILESYSTEM NAMES filesystem)
 mark_as_advanced (STD_FILESYSTEM)
+
+list (APPEND Boost_required_components context)
+mark_as_advanced (Boost_required_components)
 if (NOT STD_FILESYSTEM)
-  find_package (Boost COMPONENTS filesystem REQUIRED)
+  list (APPEND Boost_required_components filesystem system)
 endif ()
+find_package (Boost COMPONENTS ${Boost_required_components} REQUIRED)
 
 include_directories (include)
 include_directories ($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
@@ -36,6 +40,8 @@ if (NOT STD_FILESYSTEM)
   target_link_libraries (monsoon_dirhistory ${Boost_FILESYSTEM_LIBRARY})
   target_link_libraries (monsoon_dirhistory ${Boost_SYSTEM_LIBRARY})
 endif ()
+target_link_libraries (monsoon_dirhistory ${Boost_CONTEXT_LIBRARY})
+target_link_libraries (monsoon_dirhistory ${Boost_COROUTINE2_LIBRARY})
 set_property (TARGET monsoon_dirhistory PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_dirhistory PROPERTY SOVERSION "0.0")
 

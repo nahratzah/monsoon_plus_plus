@@ -71,6 +71,9 @@ auto operator+(time_point, time_point::duration) noexcept
 auto operator-(time_point, time_point::duration) noexcept
 -> time_point;
 
+auto operator-(time_point, time_point) noexcept
+-> time_point::duration;
+
 monsoon_intf_export_
 std::string to_string(time_point);
 

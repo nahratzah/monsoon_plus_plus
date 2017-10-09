@@ -88,6 +88,11 @@ inline auto operator-(time_point x, time_point::duration y) noexcept
   return x -= y;
 }
 
+inline auto operator-(time_point x, time_point y) noexcept
+-> time_point::duration {
+  return time_point::duration(y, x);
+}
+
 
 } /* namespace monsoon */
 

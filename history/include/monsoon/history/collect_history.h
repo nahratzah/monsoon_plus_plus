@@ -7,6 +7,7 @@
 #include <monsoon/simple_group.h>
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
+#include <monsoon/acceptor.h>
 #include <unordered_set>
 
 namespace monsoon {
@@ -34,6 +35,27 @@ class monsoon_history_export_ collect_history {
       -> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> = 0;
   virtual auto untagged_metrics(const time_range&) const
       -> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> = 0;
+
+  virtual void emit(
+      acceptor<group_name, metric_name, metric_value>&,
+      time_range,
+      std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>,
+      time_point::duration = time_point::duration(0)) const = 0;
+  virtual void emit(
+      acceptor<group_name, metric_name, metric_value>&,
+      time_range,
+      std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>,
+      time_point::duration = time_point::duration(0)) const = 0;
+  virtual void emit(
+      acceptor<group_name>&,
+      time_range,
+      std::unordered_set<group_name>,
+      time_point::duration = time_point::duration(0)) const = 0;
+  virtual void emit(
+      acceptor<simple_group, metric_name>&,
+      time_range,
+      std::unordered_set<simple_group>,
+      time_point::duration = time_point::duration(0)) const = 0;
 
  protected:
   collect_history(const collect_history&) noexcept = default;

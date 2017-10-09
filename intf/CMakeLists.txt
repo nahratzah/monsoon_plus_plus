@@ -16,6 +16,7 @@ add_library (monsoon_intf
   src/time_series.cc
   src/push_processor.cc
   src/alert.cc
+  src/interpolate.cc
   src/histogram.cc
   src/config_support.cc
 )
@@ -29,6 +30,9 @@ set_property (TARGET monsoon_intf PROPERTY SOVERSION "0.0")
 install (TARGETS monsoon_intf DESTINATION lib)
 install (FILES
   include/monsoon/intf_export_.h
+  include/monsoon/interpolate.h
+  include/monsoon/acceptor.h
+  include/monsoon/acceptor-inl.h
   include/monsoon/alert-inl.h
   include/monsoon/alert.h
   include/monsoon/collector.h

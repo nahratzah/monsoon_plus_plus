@@ -29,6 +29,17 @@ class monsoon_dirhistory_local_ tsdata_v2_tables
   std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
       tagged_metrics() const override;
 
+  void emit(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      const std::unordered_multimap<group_name, metric_name>&) const override;
+  void emit(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      const std::unordered_multimap<simple_group, metric_name>&) const override;
+
  private:
   std::vector<time_series> read_all_raw_() const override;
 

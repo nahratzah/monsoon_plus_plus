@@ -11,6 +11,11 @@ auto group_name::operator==(const group_name& other) const noexcept -> bool {
   return path_ == other.path_ && tags_ == other.tags_;
 }
 
+auto group_name::operator<(const group_name& other) const noexcept -> bool {
+  return path_ < other.path_
+      || (path_ == other.path_ && tags_ < other.tags_);
+}
+
 auto group_name::config_string() const -> std::string {
   return (std::ostringstream() << *this).str();
 }
