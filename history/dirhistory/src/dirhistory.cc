@@ -59,7 +59,7 @@ class monsoon_dirhistory_local_ emit_visitor::impl {
       tsdata::emit_acceptor<group_name, metric_name, metric_value>::vector_type;
 
  private:
-  using co_arg_type = std::tuple<time_point, tsdata_vector_type>;
+  using co_arg_type = std::tuple<time_point, tsdata_vector_type&&>;
   using co_type = boost::coroutines2::coroutine<co_arg_type>;
 
   class yield_acceptor
@@ -79,12 +79,13 @@ class monsoon_dirhistory_local_ emit_visitor::impl {
   impl(std::shared_ptr<tsdata>, Selector&, std::optional<time_point>, std::optional<time_point>);
 
   explicit operator bool() const noexcept { return bool(co_); }
-  std::optional<time_point> next_timepoint() const noexcept;
+  time_point next_timepoint() const noexcept;
   std::tuple<time_point, tsdata_vector_type> get() const;
   void advance();
 
  private:
-  mutable co_type::pull_type co_;
+  co_type::pull_type co_;
+  std::optional<co_arg_type> val_;
 };
 
 template<typename Selector>
@@ -377,17 +378,16 @@ void emit_visitor::emit_with_interval_(acceptor_type& accept_fn, time_range tr,
       continue;
     }
 
-    assert(least.next_timepoint().has_value());
     assert(!tr.begin().has_value());
-    tr.begin(least.next_timepoint().value());
+    tr.begin(least.next_timepoint());
     std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
   }
 
   // Fill sequences.
   map_type map;
-  while (!visitors_.empty()
-      && !map.empty()
-      && (!tr.end().has_value() || tr.begin().value() <= tr.end().value())) {
+  while (tr.end().has_value()
+      ? tr.begin().value() <= tr.end().value()
+      : !visitors_.empty()) {
     // Erase all values before the low cutoff point.
     for (auto iter = map.begin(); iter != map.end(); ) {
       const auto sibling_iter = std::next(iter);
@@ -422,19 +422,18 @@ void emit_visitor::emit_with_interval_(acceptor_type& accept_fn, time_range tr,
         continue;
       }
 
-      if (least.next_timepoint().value() > cutoff) {
+      if (least.next_timepoint() > cutoff) {
         std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
         break;
       }
 
-      if (least.next_timepoint().value() >= tr.begin().value() - slack) {
+      if (least.next_timepoint() >= tr.begin().value() - slack) {
         // Add time points to set.
-        time_point tp;
-        impl::tsdata_vector_type entries;
-        std::tie(tp, entries) = least.get();
+        auto tp_and_entries = least.get();
+        const time_point& tp = std::get<0>(tp_and_entries);
         std::for_each(
-            std::make_move_iterator(entries.begin()),
-            std::make_move_iterator(entries.end()),
+            std::make_move_iterator(std::get<1>(tp_and_entries).begin()),
+            std::make_move_iterator(std::get<1>(tp_and_entries).end()),
             [&map, tp](auto&& v) {
               // Emplace after any items with same key.
               // Since timestamps are only incremented,
@@ -504,11 +503,9 @@ bool emit_visitor::impl_compare::operator()(const impl& x, const impl& y)
     const noexcept {
   // Compare empty optionals as greater, so they get erased from the
   // heap the earliest.
-  if (!x.next_timepoint().has_value())
-    return y.next_timepoint().has_value();
-  if (!y.next_timepoint().has_value())
-    return false;
-  return x.next_timepoint().value() > y.next_timepoint().value();
+  if (!x) return bool(y);
+  if (!y) return false;
+  return x.next_timepoint() > y.next_timepoint();
 }
 
 void emit_visitor::impl::yield_acceptor::accept(time_point tp, vector_type v) {
@@ -525,20 +522,26 @@ emit_visitor::impl::impl(std::shared_ptr<tsdata> tsdata_ptr,
         auto ya = yield_acceptor(yield);
         tsdata_ptr->emit(ya, sel_begin, sel_end, selector);
       })
-{}
+{
+  if (co_) val_ = co_.get();
+}
 
-auto emit_visitor::impl::next_timepoint() const noexcept -> std::optional<time_point> {
-  if (!co_) return {};
-  return std::get<0>(co_.get());
+auto emit_visitor::impl::next_timepoint() const noexcept -> time_point {
+  return std::get<0>(val_.value());
 }
 
 auto emit_visitor::impl::get() const
 -> std::tuple<time_point, tsdata_vector_type> {
-  return co_.get();
+  return val_.value();
 }
 
 void emit_visitor::impl::advance() {
   co_();
+
+  if (co_)
+    val_ = co_.get();
+  else
+    val_.reset();
 }
 
 
