@@ -44,7 +44,7 @@ class monsoon_dirhistory_local_ emit_visitor {
 
  private:
   void emit_with_interval_(acceptor_type&, time_range, time_point::duration);
-  void emit_without_interval_(acceptor_type&, time_range, time_point::duration);
+  void emit_without_interval_(acceptor_type&, time_range);
 
   static auto select_files_(const std::vector<std::shared_ptr<tsdata>>&,
       std::optional<time_point>, std::optional<time_point>)
@@ -358,10 +358,11 @@ void emit_visitor::operator()(acceptor_type& accept_fn, time_range tr,
   if (tr.interval().has_value())
     emit_with_interval_(accept_fn, std::move(tr), std::move(slack));
   else
-    emit_without_interval_(accept_fn, std::move(tr), slack);
+    emit_without_interval_(accept_fn, std::move(tr));
 }
 
-void emit_visitor::emit_with_interval_(acceptor_type& accept_fn, time_range tr,
+void emit_visitor::emit_with_interval_(acceptor_type& accept_fn,
+    time_range tr,
     time_point::duration slack) {
   using key_type = std::tuple<group_name, metric_name>;
   using value_type = std::tuple<time_point, metric_value>;
@@ -495,6 +496,181 @@ void emit_visitor::emit_with_interval_(acceptor_type& accept_fn, time_range tr,
       tr.begin(tr.end().value());
     else
       tr.begin(tr.begin().value() + tr.interval().value());
+  }
+}
+
+void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
+    time_range tr) {
+  using key_type = std::tuple<group_name, metric_name>;
+  using value_type = std::tuple<time_point, metric_value>;
+  struct key_hash {
+    std::size_t operator()(const key_type& k) const noexcept {
+      return 53 * std::hash<group_name>()(std::get<0>(k))
+          ^ std::hash<metric_name>()(std::get<1>(k));
+    }
+  };
+  using map_type = std::unordered_map<key_type, value_type, key_hash>;
+
+  if (tr.end().has_value() && tr.end().value() < tr.begin().value())
+    return;
+
+  if (tr.begin().has_value()) { // Emit the before_map.
+    map_type before_map;
+    while (!visitors_.empty()
+        && (!visitors_.front()
+            || visitors_.front().next_timepoint() <= tr.begin().value())) {
+      std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
+
+      auto& least = visitors_.back();
+      if (!least) {
+        visitors_.pop_back();
+        continue;
+      }
+      auto least_val = least.get();
+      const auto& tp = std::get<0>(least_val);
+      std::for_each(
+          std::make_move_iterator(std::get<1>(least_val).begin()),
+          std::make_move_iterator(std::get<1>(least_val).end()),
+          [tp, &before_map](auto&& entry) {
+            auto key = std::forward_as_tuple(
+                std::get<0>(std::move(entry)),
+                std::get<1>(std::move(entry)));
+            auto value = std::forward_as_tuple(
+                tp,
+                std::get<2>(std::move(entry)));
+            before_map[key] = value; // Replace with newer value.
+          });
+
+      least.advance();
+      std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+    }
+
+    // Build emit map.
+    std::map<time_point, impl::tsdata_vector_type> emit_map;
+    std::for_each(
+        std::make_move_iterator(before_map.begin()),
+        std::make_move_iterator(before_map.end()),
+        [&emit_map](auto&& entry) {
+          emit_map[std::get<0>(std::move(entry.second))].emplace_back(
+              std::get<0>(std::move(entry.first)),
+              std::get<1>(std::move(entry.first)),
+              std::get<1>(std::move(entry.second)));
+        });
+
+    // Emit everything in emit map.
+    std::for_each(
+        std::make_move_iterator(emit_map.begin()),
+        std::make_move_iterator(emit_map.end()),
+        [&accept_fn](auto&& entry) {
+          accept_fn.accept(std::move(entry.first), std::move(entry.second));
+        });
+  }
+
+  // Predicate comparing the (group, metric) combination
+  // in a (group, metric, value) tuple.
+  static const auto CMP =
+      [](
+          const std::tuple<group_name, metric_name, metric_value>& x,
+          const std::tuple<group_name, metric_name, metric_value>& y) {
+        return std::tie(std::get<0>(x), std::get<1>(x))
+            < std::tie(std::get<0>(y), std::get<1>(y));
+      };
+  time_point emit_ts;
+  impl::tsdata_vector_type emit_data;
+  while (tr.end().has_value()
+      ? (!visitors_.front()
+          || visitors_.front().next_timepoint() < tr.end().value())
+      : !visitors_.empty()) {
+    auto& least = visitors_.back();
+    if (!least) {
+      visitors_.pop_back();
+      continue;
+    }
+
+    auto least_val = least.get();
+    if (!emit_data.empty() && std::get<0>(least_val) != emit_ts) {
+      // Remove duplicate (group, metric) tuples.
+      std::sort(emit_data.begin(), emit_data.end(), CMP);
+      emit_data.erase(
+          std::unique(emit_data.begin(), emit_data.end(), CMP),
+          emit_data.end());
+
+      // Emit to acceptor.
+      accept_fn.accept(std::move(emit_ts), std::move(emit_data));
+
+      // Prepar for next emit.
+      emit_ts = std::get<0>(least_val);
+      emit_data.clear();
+    }
+    emit_data.insert(emit_data.cend(),
+        std::make_move_iterator(std::get<1>(least_val).begin()),
+        std::make_move_iterator(std::get<1>(least_val).end()));
+
+    least.advance();
+    std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+  }
+  if (!emit_data.empty()) {
+    // Remove duplicate (group, metric) tuples.
+    std::sort(emit_data.begin(), emit_data.end(), CMP);
+    emit_data.erase(
+        std::unique(emit_data.begin(), emit_data.end(), CMP),
+        emit_data.end());
+
+    // Emit to acceptor.
+    accept_fn.accept(std::move(emit_ts), std::move(emit_data));
+    emit_data.clear();
+  }
+
+  if (tr.end().has_value()) {
+    map_type after_map;
+    while (!visitors_.empty()
+        && (!visitors_.front()
+            || visitors_.front().next_timepoint() <= tr.begin().value())) {
+      std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
+
+      auto& least = visitors_.back();
+      if (!least) {
+        visitors_.pop_back();
+        continue;
+      }
+      auto least_val = least.get();
+      const auto& tp = std::get<0>(least_val);
+      std::for_each(
+          std::make_move_iterator(std::get<1>(least_val).begin()),
+          std::make_move_iterator(std::get<1>(least_val).end()),
+          [tp, &after_map](auto&& entry) {
+            auto key = std::forward_as_tuple(
+                std::get<0>(std::move(entry)),
+                std::get<1>(std::move(entry)));
+            auto value = std::forward_as_tuple(
+                tp,
+                std::get<2>(std::move(entry)));
+            after_map.emplace(key, value); // Only insert if not present.
+          });
+
+      least.advance();
+      std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+    }
+
+    // Build emit map.
+    std::map<time_point, impl::tsdata_vector_type> emit_map;
+    std::for_each(
+        std::make_move_iterator(after_map.begin()),
+        std::make_move_iterator(after_map.end()),
+        [&emit_map](auto&& entry) {
+          emit_map[std::get<0>(std::move(entry.second))].emplace_back(
+              std::get<0>(std::move(entry.first)),
+              std::get<1>(std::move(entry.first)),
+              std::get<1>(std::move(entry.second)));
+        });
+
+    // Emit everything in emit map.
+    std::for_each(
+        std::make_move_iterator(emit_map.begin()),
+        std::make_move_iterator(emit_map.end()),
+        [&accept_fn](auto&& entry) {
+          accept_fn.accept(std::move(entry.first), std::move(entry.second));
+        });
   }
 }
 
