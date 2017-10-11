@@ -27,6 +27,7 @@ class monsoon_history_export_ collect_history {
 
   virtual void push_back(const time_series&) = 0;
 
+  virtual auto time() const -> std::tuple<time_point, time_point> = 0;
   virtual auto simple_groups(const time_range&) const
       -> std::unordered_set<simple_group> = 0;
   virtual auto group_names(const time_range&) const

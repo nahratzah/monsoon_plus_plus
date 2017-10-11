@@ -19,6 +19,7 @@ TEST(read_tsdata_v0) {
 
   CHECK_EQUAL(expect_version(0u, 1u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+  CHECK_EQUAL(tsdata_expected_time, tsd->time());
 }
 
 TEST(push_back_tsdata_v0) {
@@ -37,6 +38,7 @@ TEST(read_tsdata_v1) {
 
   CHECK_EQUAL(expect_version(1u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+  CHECK_EQUAL(tsdata_expected_time, tsd->time());
 }
 
 TEST(push_back_tsdata_v1) {
@@ -55,6 +57,7 @@ TEST(read_tsdata_v2_tables) {
 
   CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+  CHECK_EQUAL(tsdata_expected_time, tsd->time());
 }
 
 TEST(read_tsdata_v2_list) {
@@ -63,6 +66,7 @@ TEST(read_tsdata_v2_list) {
 
   CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
+  CHECK_EQUAL(tsdata_expected_time, tsd->time());
 }
 
 TEST(push_back_tsdata_v2) {

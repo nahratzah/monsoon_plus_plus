@@ -1,6 +1,3 @@
-#ifndef TSDATA_CPP_H
-#define TSDATA_CPP_H
-
 #include "tsdata_cpp.h"
 #include <monsoon/group_name.h>
 #include <monsoon/histogram.h>
@@ -11,6 +8,11 @@
 #include <monsoon/time_series.h>
 #include <monsoon/time_series_value.h>
 #include <vector>
+
+const std::tuple<monsoon::time_point, monsoon::time_point> tsdata_expected_time =
+    std::make_tuple(
+        monsoon::time_point("1980-01-01T08:00:00.000Z"),
+        monsoon::time_point("1990-01-01T09:00:00.000Z"));
 
 std::vector<monsoon::time_series> tsdata_expected() {
   using namespace std::literals;
@@ -143,5 +145,3 @@ std::vector<monsoon::time_series> tsdata_expected() {
  *                .create_file(new File("/tmp/tsdata_v2_list.tsd").toPath(), tsdata);
  *
  */
-
-#endif /* TSDATA_CPP_H */

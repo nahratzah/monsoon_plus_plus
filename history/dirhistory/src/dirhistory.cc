@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <vector>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include "v2/tsdata.h"
 #include <boost/coroutine2/coroutine.hpp>
@@ -159,6 +160,38 @@ dirhistory::~dirhistory() noexcept {}
 void dirhistory::push_back(const time_series& ts) {
   maybe_start_new_file_(ts.get_time());
   write_file_->push_back(ts);
+}
+
+auto dirhistory::time() const -> std::tuple<time_point, time_point> {
+  if (files_.empty()) {
+    auto rv = time_point::now();
+    return std::make_tuple(rv, rv);
+  }
+
+#if __cplusplus >= 201703
+  return std::transform_reduce(
+      std::next(files_.begin()), files_.end(),
+      files_.front()->time(),
+      [](const auto& x, const auto& y) {
+        return std::make_tuple(
+            std::min(std::get<0>(x.value()), std::get<0>(y.value())),
+            std::max(std::get<1>(x.value()), std::get<1>(y.value())));
+      },
+      [](const auto& f) {
+        return f->time();
+      });
+#else
+  auto iter = files_.begin();
+  auto result = (*iter)->time();
+  ++iter;
+  while (iter != files_.end()) {
+    auto ft = (*iter)->time();
+    result = std::make_tuple(
+        std::min(std::get<0>(result), std::get<0>(ft)),
+        std::max(std::get<1>(result), std::get<1>(ft)));
+  }
+  return result;
+#endif
 }
 
 auto dirhistory::simple_groups(const time_range& tr) const
