@@ -66,7 +66,7 @@ inline std::int32_t xdr_istream::get_int32() {
 
 inline std::uint32_t xdr_istream::get_uint32() {
   std::uint32_t i;
-  get_raw_bytes(&i, sizeof(i));
+  get_raw_bytes_(&i, sizeof(i));
   return boost::endian::big_to_native(i);
 }
 
@@ -82,7 +82,7 @@ inline std::int64_t xdr_istream::get_int64() {
 
 inline std::uint64_t xdr_istream::get_uint64() {
   std::uint64_t i;
-  get_raw_bytes(&i, sizeof(i));
+  get_raw_bytes_(&i, sizeof(i));
   return boost::endian::big_to_native(i);
 }
 
@@ -123,7 +123,7 @@ inline auto xdr_istream::get_string(const Alloc& alloc)
 
 #if __cplusplus >= 201703L
   result.resize(rounded_len);
-  get_raw_bytes(result.data(), rounded_len);
+  get_raw_bytes_(result.data(), rounded_len);
   // Verify padding of zeroes.
   if (std::any_of(result.begin() + len, result.end(),
           [](char c) { return c != '\0'; }))
@@ -132,7 +132,7 @@ inline auto xdr_istream::get_string(const Alloc& alloc)
 #else // std::basic_string::data() is not (safely) modifiable before C++17.
   result.reserve(len);
   auto tmp = std::vector<char, Alloc>(rounded_len, alloc);
-  get_raw_bytes(tmp.data(), rounded_len);
+  get_raw_bytes_(tmp.data(), rounded_len);
   // Verify padding of zeroes.
   if (std::any_of(tmp.begin() + len, tmp.end(),
           [](char c) { return c != '\0'; }))
@@ -154,7 +154,7 @@ inline auto xdr_istream::get_opaque_n(std::size_t len, const Alloc& alloc)
       ((static_cast<std::size_t>(len) + 3u) / 4u) * 4u;
 
   result.resize(rounded_len);
-  get_raw_bytes(result.data(), rounded_len);
+  get_raw_bytes_(result.data(), rounded_len);
   // Verify padding of zeroes.
   if (std::any_of(result.begin() + len, result.end(),
           [](std::uint8_t c) { return c != 0u; }))
@@ -172,17 +172,17 @@ inline auto xdr_istream::get_opaque(const Alloc& alloc)
 template<std::size_t Len>
 inline auto xdr_istream::get_array(std::array<std::uint8_t, Len>& arr)
 -> std::enable_if_t<Len % 4u == 0u, std::array<std::uint8_t, Len>&> {
-  get_raw_bytes(arr.data(), arr.size());
+  get_raw_bytes_(arr.data(), arr.size());
   return arr;
 }
 
 template<std::size_t Len>
 inline auto xdr_istream::get_array(std::array<std::uint8_t, Len>& arr)
 -> std::enable_if_t<Len % 4u != 0u, std::array<std::uint8_t, Len>&> {
-  get_raw_bytes(arr.data(), arr.size());
+  get_raw_bytes_(arr.data(), arr.size());
 
   std::array<std::uint8_t, 4u - Len % 4u> padding;
-  get_raw_bytes(padding.data(), padding.size());
+  get_raw_bytes_(padding.data(), padding.size());
   if (std::any_of(padding.begin(), padding.end(),
           [](std::uint8_t c) { return c != 0u; }))
     throw xdr_exception();

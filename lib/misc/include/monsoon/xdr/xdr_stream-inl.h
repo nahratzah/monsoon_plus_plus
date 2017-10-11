@@ -24,13 +24,13 @@ template<typename Reader>
 auto xdr_stream_reader<Reader>::operator=(xdr_stream_reader&& o)
 noexcept(std::is_nothrow_move_constructible<Reader>())
 -> xdr_stream_reader& {
-  static_cast<xdr_istream&>(*this) = std::move(o);
+  xdr_istream::operator=(std::move(o));
   r_ = std::move(o.r_);
   return *this;
 }
 
 template<typename Reader>
-bool xdr_stream_reader<Reader>::at_end() const {
+bool xdr_stream_reader<Reader>::at_end_() const {
   return r_.at_end();
 }
 
@@ -40,14 +40,9 @@ void xdr_stream_reader<Reader>::close() {
 }
 
 template<typename Reader>
-void xdr_stream_reader<Reader>::get_raw_bytes(void* buf, std::size_t len) {
-  while (len > 0) {
-    const std::size_t rlen = r_.read(buf, len);
-    if (rlen == 0 && r_.at_end()) throw xdr_stream_end();
-
-    len -= rlen;
-    buf = reinterpret_cast<std::uint8_t*>(buf) + rlen;
-  }
+std::size_t xdr_stream_reader<Reader>::get_raw_bytes(
+    void* buf, std::size_t len) {
+  return r_.read(buf, len);
 }
 
 

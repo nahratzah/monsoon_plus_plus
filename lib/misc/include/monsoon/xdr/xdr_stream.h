@@ -24,11 +24,11 @@ class xdr_stream_reader
   xdr_stream_reader& operator=(xdr_stream_reader&& o)
       noexcept(std::is_nothrow_move_constructible<Reader>());
 
-  bool at_end() const override;
   void close() override;
 
  private:
-  void get_raw_bytes(void*, std::size_t) override;
+  bool at_end_() const override;
+  std::size_t get_raw_bytes(void*, std::size_t) override;
 
   Reader r_;
 };

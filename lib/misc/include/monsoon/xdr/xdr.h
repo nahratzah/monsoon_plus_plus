@@ -18,6 +18,16 @@ namespace xdr {
 
 
 class monsoon_misc_export_ xdr_istream {
+ private:
+  static const std::size_t BUFFER_SIZE;
+
+ protected:
+  xdr_istream() = default;
+  xdr_istream(const xdr_istream&) = delete;
+  xdr_istream& operator=(const xdr_istream&) = delete;
+  xdr_istream(xdr_istream&&) noexcept;
+  xdr_istream& operator=(xdr_istream&&) noexcept;
+
  public:
   virtual ~xdr_istream() noexcept;
 
@@ -75,11 +85,16 @@ class monsoon_misc_export_ xdr_istream {
       -> std::optional<decltype(
           std::invoke(std::declval<SerFn>(), std::declval<xdr_istream&>()))>;
 
-  virtual bool at_end() const = 0;
+  bool at_end() const;
   virtual void close() = 0;
 
  private:
-  virtual void get_raw_bytes(void*, std::size_t) = 0;
+  virtual std::size_t get_raw_bytes(void*, std::size_t) = 0;
+  virtual bool at_end_() const = 0;
+  void get_raw_bytes_(void*, std::size_t);
+
+  std::vector<std::uint8_t> buffer_;
+  std::vector<std::uint8_t>::size_type buffer_off_ = 0u;
 };
 
 class monsoon_misc_export_ xdr_ostream {
