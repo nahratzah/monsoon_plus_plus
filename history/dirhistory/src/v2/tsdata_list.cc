@@ -122,5 +122,95 @@ auto tsdata_v2_list::tagged_metrics() const
   return result;
 }
 
+void tsdata_v2_list::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    const std::unordered_multimap<group_name, metric_name>& filter) const {
+  struct group_metric_hash {
+    std::size_t operator()(const std::tuple<group_name, metric_name>& t) const {
+      return std::hash<group_name>()(std::get<group_name>(t))
+          ^ std::hash<metric_name>()(std::get<metric_name>(t));
+    }
+  };
+  std::unordered_set<std::tuple<group_name, metric_name>, group_metric_hash>
+      metric_filter;
+  std::copy(filter.begin(), filter.end(),
+      std::inserter(metric_filter, metric_filter.end()));
+
+  emit_(
+      accept_fn, tr_begin, tr_end,
+      [&filter](const group_name& gn) {
+        return filter.find(gn) != filter.end();
+      },
+      [&metric_filter](const group_name& gn, const metric_name& mn) {
+        return metric_filter.find(std::tie(gn, mn)) != metric_filter.end();
+      });
+}
+
+void tsdata_v2_list::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    const std::unordered_multimap<simple_group, metric_name>& filter) const {
+  struct group_metric_hash {
+    std::size_t operator()(const std::tuple<simple_group, metric_name>& t) const {
+      return std::hash<simple_group>()(std::get<simple_group>(t))
+          ^ std::hash<metric_name>()(std::get<metric_name>(t));
+    }
+  };
+  std::unordered_set<std::tuple<simple_group, metric_name>, group_metric_hash>
+      metric_filter;
+  std::copy(filter.begin(), filter.end(),
+      std::inserter(metric_filter, metric_filter.end()));
+
+  emit_(
+      accept_fn, tr_begin, tr_end,
+      [&filter](const group_name& gn) {
+        return filter.find(gn.get_path()) != filter.end();
+      },
+      [&metric_filter](const group_name& gn, const metric_name& mn) {
+        return (metric_filter.find(std::tie(gn.get_path(), mn))
+            != metric_filter.end());
+      });
+}
+
+void tsdata_v2_list::emit_(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    std::function<bool(const group_name&)> group_filter,
+    std::function<bool(const group_name&, const metric_name&)> filter) const {
+  using vector_type =
+      emit_acceptor<group_name, metric_name, metric_value>::vector_type;
+
+  visit(
+      [&accept_fn, &group_filter, &filter](const time_point& ts,
+          std::shared_ptr<const tsdata_list::record_array> records) {
+        vector_type emit_data;
+
+        std::for_each(records->begin(), records->end(),
+            [&emit_data, &group_filter, &filter](const auto& group_entry) {
+              const auto& group_name = std::get<0>(group_entry);
+
+              if (group_filter(group_name)) {
+                const auto metrics = std::get<1>(group_entry).get();
+                std::for_each(metrics->begin(), metrics->end(),
+                    [&group_name, &emit_data, &filter](
+                        const auto& metric_entry) {
+                      const auto& metric_name = std::get<0>(metric_entry);
+                      const auto& metric_value = std::get<1>(metric_entry);
+
+                      if (filter(group_name, metric_name)) {
+                        emit_data.emplace_back(
+                            group_name,
+                            metric_name,
+                            metric_value);
+                      }
+                    });
+              }
+            });
+
+        accept_fn.accept(ts, std::move(emit_data));
+      });
+}
+
 
 }}} /* namespace monsoon::history::v2 */
