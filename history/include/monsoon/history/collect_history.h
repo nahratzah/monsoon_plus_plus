@@ -46,16 +46,6 @@ class monsoon_history_export_ collect_history {
       time_range,
       std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>,
       time_point::duration = time_point::duration(0)) const = 0;
-  virtual void emit(
-      acceptor<group_name>&,
-      time_range,
-      std::unordered_set<group_name>,
-      time_point::duration = time_point::duration(0)) const = 0;
-  virtual void emit(
-      acceptor<simple_group, metric_name>&,
-      time_range,
-      std::unordered_set<simple_group>,
-      time_point::duration = time_point::duration(0)) const = 0;
 
  protected:
   collect_history(const collect_history&) noexcept = default;
