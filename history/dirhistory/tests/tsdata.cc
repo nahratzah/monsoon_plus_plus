@@ -22,6 +22,16 @@ TEST(read_tsdata_v0) {
   CHECK_EQUAL(tsdata_expected_time, tsd->time());
 }
 
+TEST(names_tsdata_v0) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v0.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expected_simple_groups(), tsd->simple_groups());
+  CHECK_EQUAL(expected_groups(), tsd->group_names());
+  CHECK_EQUAL(expected_tagged_metrics(), tsd->tagged_metrics());
+  CHECK_EQUAL(expected_untagged_metrics(), tsd->untagged_metrics());
+}
+
 TEST(push_back_tsdata_v0) {
   auto tsd = tsdata::new_file(monsoon::io::fd::tmpfile("monsoon_tsdata_test"), 0u);
   REQUIRE CHECK_EQUAL(true, tsd != nullptr);
@@ -39,6 +49,16 @@ TEST(read_tsdata_v1) {
   CHECK_EQUAL(expect_version(1u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
   CHECK_EQUAL(tsdata_expected_time, tsd->time());
+}
+
+TEST(names_tsdata_v1) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v1.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expected_simple_groups(), tsd->simple_groups());
+  CHECK_EQUAL(expected_groups(), tsd->group_names());
+  CHECK_EQUAL(expected_tagged_metrics(), tsd->tagged_metrics());
+  CHECK_EQUAL(expected_untagged_metrics(), tsd->untagged_metrics());
 }
 
 TEST(push_back_tsdata_v1) {
@@ -60,6 +80,16 @@ TEST(read_tsdata_v2_tables) {
   CHECK_EQUAL(tsdata_expected_time, tsd->time());
 }
 
+TEST(names_tsdata_v2_tables) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v2_tables.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expected_simple_groups(), tsd->simple_groups());
+  CHECK_EQUAL(expected_groups(), tsd->group_names());
+  CHECK_EQUAL(expected_tagged_metrics(), tsd->tagged_metrics());
+  CHECK_EQUAL(expected_untagged_metrics(), tsd->untagged_metrics());
+}
+
 TEST(read_tsdata_v2_list) {
   auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v2_list.tsd");
   REQUIRE CHECK_EQUAL(true, tsd != nullptr);
@@ -67,6 +97,16 @@ TEST(read_tsdata_v2_list) {
   CHECK_EQUAL(expect_version(2u, 0u), tsd->version());
   CHECK_EQUAL(tsdata_expected(), tsd->read_all());
   CHECK_EQUAL(tsdata_expected_time, tsd->time());
+}
+
+TEST(names_tsdata_v2_list) {
+  auto tsd = tsdata::open(SAMPLE_DATA_DIR + "/tsdata_v2_list.tsd");
+  REQUIRE CHECK_EQUAL(true, tsd != nullptr);
+
+  CHECK_EQUAL(expected_simple_groups(), tsd->simple_groups());
+  CHECK_EQUAL(expected_groups(), tsd->group_names());
+  CHECK_EQUAL(expected_tagged_metrics(), tsd->tagged_metrics());
+  CHECK_EQUAL(expected_untagged_metrics(), tsd->untagged_metrics());
 }
 
 TEST(push_back_tsdata_v2) {

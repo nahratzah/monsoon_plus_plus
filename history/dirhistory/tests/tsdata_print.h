@@ -14,7 +14,9 @@ namespace std {
 template<typename C>
 auto operator<< (ostream& out, const C& c)
 -> std::enable_if_t<std::is_same<monsoon::time_series, typename C::value_type>::value
-                 || std::is_same<monsoon::time_series_value, typename C::value_type>::value,
+                 || std::is_same<monsoon::time_series_value, typename C::value_type>::value
+                 || std::is_same<monsoon::group_name, typename C::value_type>::value
+                 || std::is_same<monsoon::simple_group, typename C::value_type>::value,
                     ostream&>
 {
   auto i = c.begin();
@@ -23,6 +25,29 @@ auto operator<< (ostream& out, const C& c)
   out << "[";
   if (i != e) out << " " << *i++;
   while (i != e) out << ", " << *i++;
+  out << (c.empty() ? "]" : " ]");
+  return out;
+}
+
+// HACK: print collection of time series.
+template<typename C>
+auto operator<< (ostream& out, const C& c)
+-> std::enable_if_t<std::is_same<std::tuple<monsoon::group_name, monsoon::metric_name>, typename C::value_type>::value
+                 || std::is_same<std::tuple<monsoon::simple_group, monsoon::metric_name>, typename C::value_type>::value,
+                    ostream&>
+{
+  auto i = c.begin();
+  auto e = c.end();
+
+  out << "[";
+  if (i != e) {
+    auto v = *i++;
+    out << " " << std::get<0>(v) << "::" << std::get<1>(v);
+  }
+  while (i != e) {
+    auto v = *i++;
+    out << ", " << std::get<0>(v) << "::" << std::get<1>(v);
+  }
   out << (c.empty() ? "]" : " ]");
   return out;
 }

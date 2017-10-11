@@ -69,6 +69,54 @@ std::vector<monsoon::time_series> tsdata_expected() {
   };
 }
 
+std::unordered_set<monsoon::group_name> expected_groups() {
+  std::unordered_set<monsoon::group_name> result;
+
+  for (const auto& ts : tsdata_expected()) {
+    for (const auto& tsv : ts.get_data())
+      result.insert(tsv.get_name());
+  }
+  return result;
+}
+
+std::unordered_set<monsoon::simple_group> expected_simple_groups() {
+  std::unordered_set<monsoon::simple_group> result;
+
+  for (const auto& g : expected_groups())
+    result.insert(g.get_path());
+  return result;
+}
+
+auto expected_tagged_metrics()
+-> std::unordered_set<
+    std::tuple<monsoon::group_name, monsoon::metric_name>,
+    monsoon::history::tsdata::metrics_hash> {
+  auto result = std::unordered_set<
+      std::tuple<monsoon::group_name, monsoon::metric_name>,
+      monsoon::history::tsdata::metrics_hash>();
+
+  for (const auto& ts : tsdata_expected()) {
+    for (const auto& tsv : ts.get_data())
+      for (const auto& mm : tsv.get_metrics()) {
+        result.emplace(tsv.get_name(), mm.first);
+      }
+  }
+  return result;
+}
+
+auto expected_untagged_metrics()
+-> std::unordered_set<
+    std::tuple<monsoon::simple_group, monsoon::metric_name>,
+    monsoon::history::tsdata::metrics_hash> {
+  auto result = std::unordered_set<
+      std::tuple<monsoon::simple_group, monsoon::metric_name>,
+      monsoon::history::tsdata::metrics_hash>();
+
+  for (const auto& entry : expected_tagged_metrics())
+    result.emplace(std::get<0>(entry).get_path(), std::get<1>(entry));
+  return result;
+}
+
 /*
  *        final List<TimeSeriesCollection> tsdata = Stream.<TimeSeriesCollection>builder()
  *                .add(new SimpleTimeSeriesCollection(
