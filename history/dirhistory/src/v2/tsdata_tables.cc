@@ -11,6 +11,10 @@
 #include <functional>
 #include <utility>
 #include <iterator>
+#include <type_traits>
+#include <algorithm>
+#include <boost/coroutine2/coroutine.hpp>
+#include <boost/coroutine2/protected_fixedsize_stack.hpp>
 
 namespace monsoon {
 namespace history {
@@ -182,6 +186,265 @@ auto tsdata_v2_tables::tagged_metrics() const
   }
 
   return result;
+}
+
+class monsoon_dirhistory_local_ metric_iteration {
+ public:
+  metric_iteration() = default;
+  metric_iteration(const metric_iteration&) = default;
+  metric_iteration& operator=(const metric_iteration&) = default;
+
+  metric_iteration(metric_iteration&& o) noexcept
+  : group(std::move(o.group)),
+    metric(std::move(o.metric)),
+    table(std::move(o.table)),
+    b_(std::move(o.b_)),
+    e_(std::move(o.e_))
+  {}
+
+  metric_iteration& operator=(metric_iteration&& o) noexcept {
+    group = std::move(o.group);
+    metric = std::move(o.metric);
+    table = std::move(o.table);
+    b_ = std::move(o.b_);
+    e_ = std::move(o.e_);
+    return *this;
+  }
+
+  metric_iteration(
+      std::shared_ptr<const group_name> group,
+      std::shared_ptr<const metric_name> metric,
+      std::shared_ptr<const metric_table> table)
+  : group(std::move(group)),
+    metric(std::move(metric)),
+    table(std::move(table))
+  {
+    if (table != nullptr)
+      std::tie(b_, e_) = std::forward_as_tuple(table->begin(), table->end());
+  }
+
+  std::shared_ptr<const group_name> group;
+  std::shared_ptr<const metric_name> metric;
+  std::shared_ptr<const metric_table> table;
+
+  explicit operator bool() const noexcept {
+    return table != nullptr && b_ != e_;
+  }
+
+  auto next()
+  -> std::optional<std::tuple<const group_name&, const metric_name&, const metric_value&>> {
+    assert(group != nullptr && metric != nullptr && table != nullptr);
+    assert(b_ != e_);
+    const std::optional<metric_value> opt_mv = *b_++;
+    if (!opt_mv.has_value()) return {};
+    return std::tie(*group, *metric, opt_mv.value());
+  }
+
+ private:
+  metric_table::const_iterator b_, e_;
+};
+
+void monsoon_dirhistory_local_ emit_fdtblock(
+    std::shared_ptr<const file_data_tables_block> block,
+    std::function<void(time_point,
+        tsdata_v2_tables::emit_acceptor<group_name, metric_name, metric_value>::vector_type&&)> cb,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    std::function<bool(const group_name&)> group_filter,
+    std::function<bool(const group_name&, const metric_name&)> metric_filter) {
+  auto timestamps = std::get<0>(*block);
+  std::vector<metric_iteration> data;
+
+  // Build parallel iterators per each selected metric.
+  const std::shared_ptr<const tables> tbl_ptr = std::get<1>(*block).get();
+  std::for_each(tbl_ptr->begin(), tbl_ptr->end(),
+      [&data, &tbl_ptr, &group_filter, &metric_filter](const auto& tbl_entry) {
+        if (!group_filter(std::get<0>(tbl_entry)))
+          return; // SKIP
+
+        const std::shared_ptr<const group_name> group_ptr =
+            std::shared_ptr<const group_name>(tbl_ptr, &std::get<0>(tbl_entry));
+        std::shared_ptr<const group_table> gr_tbl = std::get<1>(tbl_entry).get();
+        const auto metric_map =
+            std::shared_ptr<std::tuple_element_t<1, const group_table>>(
+                gr_tbl,
+                &std::get<1>(*gr_tbl));
+
+        std::for_each(metric_map->begin(), metric_map->end(),
+            [&data, &group_ptr, &metric_map, &metric_filter](
+                const auto& metric_map_entry) {
+              if (!metric_filter(*group_ptr, metric_map_entry.first))
+                return; // SKIP
+
+              const std::shared_ptr<const metric_name> metric_ptr =
+                  std::shared_ptr<const metric_name>(
+                      metric_map,
+                      &metric_map_entry.first);
+
+              data.emplace_back(
+                  group_ptr,
+                  metric_ptr,
+                  metric_map_entry.second.get());
+            });
+      });
+
+  // Emit timestamps and parallel iterators.
+  auto emit = tsdata_v2_tables::emit_acceptor<group_name, metric_name, metric_value>::vector_type();
+  for (const time_point& tp : timestamps) {
+    emit.clear();
+    emit.reserve(data.size());
+
+    std::for_each(data.begin(), data.end(),
+        [&emit](auto& iter) {
+          if (!iter) {
+            auto opt_tpl = iter.next();
+            if (opt_tpl.has_value())
+              emit.push_back(std::move(opt_tpl).value());
+          }
+        });
+
+    if ((!tr_begin.has_value() || tp >= tr_begin)
+        || (!tr_end.has_value() || tp <= tr_end))
+      cb(tp, std::move(emit));
+  }
+}
+
+void tsdata_v2_tables::emit_(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    std::function<bool(const group_name&)> group_filter,
+    std::function<bool(const group_name&, const metric_name&)> metric_filter)
+    const {
+  const std::shared_ptr<const file_data_tables> file_data_tables =
+      data_.get();
+
+  if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
+    using namespace std::placeholders;
+
+    for (const file_data_tables_block& block : *file_data_tables) {
+      emit_fdtblock(
+          std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
+          std::bind(
+              &emit_acceptor<group_name, metric_name, metric_value>::accept,
+              std::ref(accept_fn), _1, _2),
+          tr_begin, tr_end, group_filter, metric_filter);
+    }
+  } else { // parallel iteration of blocks.
+    // Declare parallel iteration
+    class iterators_value_type {
+     public:
+      using co_arg_type = std::tuple<
+          time_point,
+          emit_acceptor<group_name, metric_name, metric_value>::vector_type&&>;
+      using co_type = boost::coroutines2::coroutine<co_arg_type>;
+
+      iterators_value_type() = default;
+
+      iterators_value_type(iterators_value_type&& o) noexcept
+      : val_(std::move(o.val_)),
+        co_(std::move(o.co_))
+      {}
+
+      iterators_value_type& operator=(iterators_value_type&& o) noexcept {
+        val_ = std::move(o.val_);
+        co_ = std::move(o.co_);
+        return *this;
+      }
+
+      iterators_value_type(
+          std::shared_ptr<const file_data_tables_block> block,
+          std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+          const std::function<bool(const group_name&)>& group_filter,
+          const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
+      : co_(boost::coroutines2::protected_fixedsize_stack(8192),
+          [block, tr_begin, tr_end, &group_filter, &metric_filter](
+              co_type::push_type& yield) {
+            emit_fdtblock(
+                block,
+                [&yield](
+                    time_point tp,
+                    emit_acceptor<group_name, metric_name, metric_value>::vector_type&& v) {
+                  yield(co_arg_type(std::move(tp), std::move(v)));
+                },
+                tr_begin, tr_end, group_filter, metric_filter);
+          })
+      {
+        if (co_) val_ = co_.get();
+      }
+
+      explicit operator bool() const noexcept {
+        return bool(co_);
+      }
+
+      const co_arg_type& get() const {
+        assert(val_.has_value());
+        return val_.value();
+      }
+
+      time_point ts() const {
+        return std::get<0>(get());
+      }
+
+      void advance() {
+        co_();
+        if (co_)
+          val_ = co_.get();
+        else
+          val_ = {};
+      }
+
+     private:
+      std::optional<co_arg_type> val_;
+      mutable co_type::pull_type co_;
+    };
+    struct iterators_cmp {
+      bool operator()(const iterators_value_type& x,
+          const iterators_value_type& y) const {
+        if (!x) return !y;
+        if (!y) return false;
+        return x.ts() > y.ts();
+      }
+    };
+    auto iterators = std::vector<iterators_value_type>();
+    iterators.reserve(file_data_tables->size());
+
+    // Build parallel iteration.
+    for (const file_data_tables_block& block : *file_data_tables) {
+      iterators.emplace_back(
+          std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
+          tr_begin, tr_end, group_filter, metric_filter);
+    }
+    std::make_heap(iterators.begin(), iterators.end(), iterators_cmp());
+
+    // Traverse iteration.
+    time_point last_ts;
+    emit_acceptor<group_name, metric_name, metric_value>::vector_type last_val;
+    while (!iterators.empty()) {
+      std::pop_heap(iterators.begin(), iterators.end(), iterators_cmp());
+      auto& top = iterators.back();
+      if (!top) {
+        iterators.pop_back();
+        continue;
+      }
+
+      // Handle argument.
+      auto& arg = top.get();
+      if (last_val.empty()) { // First iteration.
+        std::tie(last_ts, last_val) = arg;
+      } else if (std::get<0>(arg) == last_ts) { // Merge with same-time entry.
+        last_val.insert(last_val.begin(),
+            std::make_move_iterator(std::get<1>(arg).begin()),
+            std::make_move_iterator(std::get<1>(arg).end()));
+      } else { // Emit previous and make current the 'last' value.
+        accept_fn.accept(std::move(last_ts), std::move(last_val));
+        std::tie(last_ts, last_val) = arg;
+      }
+
+      top.advance(); // Advance co routine
+      std::push_heap(iterators.begin(), iterators.end(), iterators_cmp());
+    }
+    if (!last_val.empty()) // Push last unpushed value
+      accept_fn.accept(std::move(last_ts), std::move(last_val));
+  }
 }
 
 
