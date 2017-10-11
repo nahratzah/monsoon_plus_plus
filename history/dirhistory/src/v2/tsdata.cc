@@ -207,5 +207,40 @@ void tsdata_v2::update_hdr(time_point lo, time_point hi,
   minor_version_ = MAX_MINOR;
 }
 
+void tsdata_v2::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    const std::unordered_multimap<group_name, metric_name>& filter) const {
+  emit_(
+      accept_fn, tr_begin, tr_end,
+      [&filter](const group_name& gn) {
+        return filter.find(gn) != filter.end();
+      },
+      [&filter](const group_name& gn, const metric_name& mn) {
+        auto range = filter.equal_range(gn);
+        return (std::find_if(range.first, range.second,
+		[mn](const auto& entry) { return std::get<1>(entry) == mn; })
+            != range.second);
+      });
+}
+
+void tsdata_v2::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+    const std::unordered_multimap<simple_group, metric_name>& filter) const {
+  emit_(
+      accept_fn, tr_begin, tr_end,
+      [&filter](const group_name& gn) {
+        return filter.find(gn.get_path()) != filter.end();
+      },
+      [&filter](const group_name& gn, const metric_name& mn) {
+        const simple_group& gp = gn.get_path();
+        auto range = filter.equal_range(gp);
+        return (std::find_if(range.first, range.second,
+		[mn](const auto& entry) { return std::get<1>(entry) == mn; })
+            != range.second);
+      });
+}
+
 
 }}} /* namespace monsoon::history::v2 */

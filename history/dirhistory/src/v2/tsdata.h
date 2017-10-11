@@ -33,6 +33,17 @@ class monsoon_dirhistory_local_ tsdata_v2
   std::tuple<std::uint16_t, std::uint16_t> version() const noexcept override;
   auto time() const -> std::tuple<time_point, time_point> override;
 
+  void emit(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      const std::unordered_multimap<group_name, metric_name>&) const override;
+  void emit(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      const std::unordered_multimap<simple_group, metric_name>&) const override;
+
  protected:
   inline auto hdr_file_size() const noexcept { return file_size_; }
   void update_hdr(time_point, time_point, const file_segment_ptr&,
@@ -40,6 +51,12 @@ class monsoon_dirhistory_local_ tsdata_v2
 
  private:
   virtual std::vector<time_series> read_all_raw_() const = 0;
+  virtual void emit_(
+      emit_acceptor<group_name, metric_name, metric_value>&,
+      std::optional<time_point>,
+      std::optional<time_point>,
+      std::function<bool(const group_name&)>,
+      std::function<bool(const group_name&, const metric_name&)>) const = 0;
 
   time_point first_, last_;
   std::uint32_t flags_, reserved_;

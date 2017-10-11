@@ -48,7 +48,7 @@ class monsoon_dirhistory_local_ tsdata_v2_list
       std::optional<time_point>,
       std::optional<time_point>,
       std::function<bool(const group_name&)>,
-      std::function<bool(const group_name&, const metric_name&)>) const;
+      std::function<bool(const group_name&, const metric_name&)>) const override;
 
   template<typename Fn>
   void visit(Fn) const;

@@ -122,45 +122,6 @@ auto tsdata_v2_list::tagged_metrics() const
   return result;
 }
 
-void tsdata_v2_list::emit(
-    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
-    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    const std::unordered_multimap<group_name, metric_name>& filter) const {
-  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
-      metric_filter;
-  std::copy(filter.begin(), filter.end(),
-      std::inserter(metric_filter, metric_filter.end()));
-
-  emit_(
-      accept_fn, tr_begin, tr_end,
-      [&filter](const group_name& gn) {
-        return filter.find(gn) != filter.end();
-      },
-      [&metric_filter](const group_name& gn, const metric_name& mn) {
-        return metric_filter.find(std::tie(gn, mn)) != metric_filter.end();
-      });
-}
-
-void tsdata_v2_list::emit(
-    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
-    std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    const std::unordered_multimap<simple_group, metric_name>& filter) const {
-  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>
-      metric_filter;
-  std::copy(filter.begin(), filter.end(),
-      std::inserter(metric_filter, metric_filter.end()));
-
-  emit_(
-      accept_fn, tr_begin, tr_end,
-      [&filter](const group_name& gn) {
-        return filter.find(gn.get_path()) != filter.end();
-      },
-      [&metric_filter](const group_name& gn, const metric_name& mn) {
-        return (metric_filter.find(std::tie(gn.get_path(), mn))
-            != metric_filter.end());
-      });
-}
-
 void tsdata_v2_list::emit_(
     emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
