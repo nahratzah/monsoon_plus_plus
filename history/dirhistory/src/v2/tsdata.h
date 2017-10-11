@@ -48,6 +48,8 @@ class monsoon_dirhistory_local_ tsdata_v2
   inline auto hdr_file_size() const noexcept { return file_size_; }
   void update_hdr(time_point, time_point, const file_segment_ptr&,
       io::fd::size_type);
+  bool is_distinct() const noexcept;
+  bool is_sorted() const noexcept;
 
  private:
   virtual std::vector<time_series> read_all_raw_() const = 0;

@@ -127,11 +127,26 @@ void tsdata_v2_list::emit_(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     std::function<bool(const group_name&)> group_filter,
     std::function<bool(const group_name&, const metric_name&)> filter) const {
+  using std::swap;
   using vector_type =
       emit_acceptor<group_name, metric_name, metric_value>::vector_type;
 
+  // Reorder map, used to deal with non-distinct/non-sorted file.
+  // The reorder map contains:
+  // - 0 elements, if is_sorted() && is_distinct()
+  // - 1 elements, if is_sorted() && !is_distinct()
+  // - * elements, if !is_sorted()
+  std::vector<std::tuple<time_point, vector_type>> reorder_map;
+  static const auto CMP = [](
+      const std::tuple<group_name, metric_name, metric_value>& x,
+      const std::tuple<group_name, metric_name, metric_value>& y) {
+    return std::tie(std::get<0>(x), std::get<1>(x))
+        < std::tie(std::get<0>(y), std::get<1>(y));
+  };
+
   visit(
-      [&accept_fn, &group_filter, &filter](const time_point& ts,
+      [&accept_fn, &group_filter, &filter, &reorder_map, this](
+          const time_point& ts,
           std::shared_ptr<const tsdata_list::record_array> records) {
         vector_type emit_data;
 
@@ -157,8 +172,105 @@ void tsdata_v2_list::emit_(
               }
             });
 
-        accept_fn.accept(ts, std::move(emit_data));
+        if (!is_sorted()) { // Collect everything and bulk handle at end.
+          reorder_map.emplace_back(ts, std::move(emit_data));
+        } else if (!is_distinct()) {
+          // Sorted, but not distinct. Keep trailing element in reorder_map
+          // and emit/merge appropriately.
+          if (reorder_map.empty()) {
+            reorder_map.emplace_back(ts, std::move(emit_data));
+          } else {
+            assert(reorder_map.size() == 1u);
+            auto& reorder_ts = std::get<0>(reorder_map.back());
+            auto& reorder_data = std::get<1>(reorder_map.back());
+
+            if (reorder_ts == ts) {
+              // Add elements in emit_data,
+              // maintain invariant: reverse encounter order.
+              // NOTE: swap followed by insert-at-end
+              // is effectively the same as intert-at-begin.
+              swap(reorder_data, emit_data);
+              reorder_data.insert(
+                  reorder_data.end(),
+                  std::make_move_iterator(emit_data.begin()),
+                  std::make_move_iterator(emit_data.end()));
+            } else {
+              // Erase duplicates.
+              // std::unique will keep first element and erase
+              // subsequent elements. With the reverse encounter
+              // order invariant, this will maintain the last element.
+              std::stable_sort(
+                  reorder_data.begin(),
+                  reorder_data.end(),
+                  CMP);
+              reorder_data.erase(
+                  std::unique(reorder_data.begin(), reorder_data.end(), CMP),
+                  reorder_data.end());
+
+              // Emit old data, now that it is cleaned up.
+              accept_fn.accept(
+                  reorder_ts,
+                  std::move(reorder_data));
+              // Store new data into reorder_map.
+              std::tie(reorder_ts, reorder_data) =
+                  std::forward_as_tuple(ts, std::move(emit_data));
+            }
+          }
+        } else {
+          // Sorted and unique, emit directly.
+          accept_fn.accept(ts, std::move(emit_data));
+        }
       });
+
+  if (!is_sorted()) {
+    // Stable sort, to maintain encounter order.
+    std::stable_sort(reorder_map.begin(), reorder_map.end(),
+        [](const auto& x, const auto& y) {
+          return std::get<0>(x) < std::get<0>(y);
+        });
+    // Reverse, so we can use it as a stack.
+    // NOTE: we can't use > in the sort function, as that would
+    // not reverse encounter order.
+    std::reverse(reorder_map.begin(), reorder_map.end());
+  } else {
+    assert(reorder_map.size() <= 1u);
+  }
+
+  while (!reorder_map.empty()) {
+    time_point ts;
+    vector_type emit_data;
+    std::tie(ts, emit_data) = std::move(reorder_map.back());
+    reorder_map.pop_back();
+
+    if (!is_distinct()) {
+      bool cleanup_required = false;
+      while (!reorder_map.empty() && std::get<0>(reorder_map.back()) == ts) {
+        cleanup_required = true; // We may have duplicates.
+
+        // Keep later encountered data before earlier data,
+        // so that stable_sort, unique can erase overwritten data.
+        // NOTE: swap followed by insert-at-end
+        // is effectively the same as intert-at-begin.
+        swap(emit_data, std::get<1>(reorder_map.back()));
+        emit_data.insert(emit_data.end(),
+            std::make_move_iterator(std::get<1>(reorder_map.back()).begin()),
+            std::make_move_iterator(std::get<1>(reorder_map.back()).end()));
+        reorder_map.pop_back();
+      }
+
+      if (cleanup_required) { // Erase duplicates.
+        std::stable_sort(
+            emit_data.begin(),
+            emit_data.end(),
+            CMP);
+        emit_data.erase(
+            std::unique(emit_data.begin(), emit_data.end(), CMP),
+            emit_data.end());
+      }
+    }
+
+    accept_fn.accept(ts, std::move(emit_data));
+  }
 }
 
 

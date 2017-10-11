@@ -107,7 +107,7 @@ std::vector<time_series> tsdata_v2::read_all() const {
   std::vector<time_series> result = read_all_raw_();
 
   // only sort if flag sorted is false
-  if ((flags_ & header_flags::SORTED) == 0u) {
+  if (!is_sorted()) {
     std::stable_sort(result.begin(), result.end(),
         std::bind(std::less<time_point>(),
             std::bind(&time_series::get_time, _1),
@@ -115,7 +115,7 @@ std::vector<time_series> tsdata_v2::read_all() const {
   }
 
   // only merge if flag distinct is false
-  if ((flags_ & header_flags::DISTINCT) == 0u) {
+  if (!is_distinct()) {
     // Merge successors with same timestamp together.
     auto result_back_iter = result.begin();
     auto result_end = result.end(); // New end of result.
@@ -205,6 +205,14 @@ void tsdata_v2::update_hdr(time_point lo, time_point hi,
 
   file_size_ = new_file_len;
   minor_version_ = MAX_MINOR;
+}
+
+bool tsdata_v2::is_distinct() const noexcept {
+  return (flags_ & header_flags::DISTINCT) != 0u;
+}
+
+bool tsdata_v2::is_sorted() const noexcept {
+  return (flags_ & header_flags::SORTED) != 0u;
 }
 
 void tsdata_v2::emit(
