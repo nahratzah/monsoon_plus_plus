@@ -1,5 +1,6 @@
 #include <monsoon/history/dir/dirhistory.h>
 #include <monsoon/history/dir/tsdata.h>
+#include <monsoon/history/collect_history.h>
 #include <monsoon/interpolate.h>
 #include <stdexcept>
 #include <utility>
@@ -503,12 +504,7 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
     time_range tr) {
   using key_type = std::tuple<group_name, metric_name>;
   using value_type = std::tuple<time_point, metric_value>;
-  struct key_hash {
-    std::size_t operator()(const key_type& k) const noexcept {
-      return 53 * std::hash<group_name>()(std::get<0>(k))
-          ^ std::hash<metric_name>()(std::get<1>(k));
-    }
-  };
+  using key_hash = typename collect_history::metrics_hash;
   using map_type = std::unordered_map<key_type, value_type, key_hash>;
 
   if (tr.end().has_value() && tr.end().value() < tr.begin().value())

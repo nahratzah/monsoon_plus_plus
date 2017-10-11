@@ -126,13 +126,7 @@ void tsdata_v2_list::emit(
     emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const std::unordered_multimap<group_name, metric_name>& filter) const {
-  struct group_metric_hash {
-    std::size_t operator()(const std::tuple<group_name, metric_name>& t) const {
-      return std::hash<group_name>()(std::get<group_name>(t))
-          ^ std::hash<metric_name>()(std::get<metric_name>(t));
-    }
-  };
-  std::unordered_set<std::tuple<group_name, metric_name>, group_metric_hash>
+  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
       metric_filter;
   std::copy(filter.begin(), filter.end(),
       std::inserter(metric_filter, metric_filter.end()));
@@ -151,13 +145,7 @@ void tsdata_v2_list::emit(
     emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const std::unordered_multimap<simple_group, metric_name>& filter) const {
-  struct group_metric_hash {
-    std::size_t operator()(const std::tuple<simple_group, metric_name>& t) const {
-      return std::hash<simple_group>()(std::get<simple_group>(t))
-          ^ std::hash<metric_name>()(std::get<metric_name>(t));
-    }
-  };
-  std::unordered_set<std::tuple<simple_group, metric_name>, group_metric_hash>
+  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>
       metric_filter;
   std::copy(filter.begin(), filter.end(),
       std::inserter(metric_filter, metric_filter.end()));
