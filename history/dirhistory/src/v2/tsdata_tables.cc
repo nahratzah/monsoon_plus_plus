@@ -303,7 +303,7 @@ void monsoon_dirhistory_local_ emit_fdtblock(
         });
 
     if ((!tr_begin.has_value() || tp >= tr_begin)
-        || (!tr_end.has_value() || tp <= tr_end))
+        && (!tr_end.has_value() || tp <= tr_end))
       cb(tp, std::move(emit));
   }
 }
