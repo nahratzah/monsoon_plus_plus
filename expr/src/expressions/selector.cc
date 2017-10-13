@@ -433,7 +433,7 @@ void selector_without_tags::do_ostream(std::ostream& out) const {
 void selector_accept_wrapper::accept_speculative(time_point tp,
     const group_name& group, const metric_name& metric,
     const metric_value& value) {
-  accept_.accept_speculative(tp,
+  accept_.accept_speculative(std::move(tp),
       emit_type(std::make_tuple(group.get_tags(), value)));
 }
 
@@ -450,7 +450,7 @@ void selector_accept_wrapper::accept(time_point tp,
                 std::get<2>(std::move(v))));
       });
 
-  accept_.accept(tp, std::move(converted_values));
+  accept_.accept(std::move(tp), std::move(converted_values));
 }
 
 
