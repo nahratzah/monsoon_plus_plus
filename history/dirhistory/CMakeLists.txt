@@ -31,6 +31,10 @@ add_library (monsoon_dirhistory
   src/v2/tsdata_list.cc
   src/tsdata.cc
 )
+target_include_directories(monsoon_history PUBLIC include)
+if (NOT STD_FILESYSTEM)
+  target_include_directories(monsoon_history PUBLIC ${Boost_INCLUDE_DIR})
+endif()
 target_link_libraries (monsoon_dirhistory ${extra_libs})
 target_link_libraries (monsoon_dirhistory
   monsoon_intf

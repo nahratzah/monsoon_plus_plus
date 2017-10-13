@@ -6,6 +6,7 @@ include (CheckCXXCompilerFlag)
 
 enable_testing()
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
+option(BUILD_EXAMPLES "Build example binaries" ON)
 
 # Declare list variables.
 list (APPEND extra_libs)  # Libs against which to link all libraries.
@@ -86,3 +87,7 @@ add_subdirectory (intf)
 add_subdirectory (engine)
 add_subdirectory (history)
 add_subdirectory (expr)
+
+if (BUILD_EXAMPLES)
+  add_subdirectory (examples)
+endif()
