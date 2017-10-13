@@ -2,6 +2,8 @@
 #include "../overload.h"
 #include <ostream>
 #include <iterator>
+#include <sstream>
+#include <monsoon/config_support.h>
 
 namespace monsoon {
 namespace expressions {
@@ -73,6 +75,136 @@ bool path_matcher::operator()(const simple_group& g) const {
 
 bool path_matcher::operator()(const metric_name& m) const {
   return do_match(matcher_.begin(), matcher_.end(), m.begin(), m.end());
+}
+
+void path_matcher::push_back_literal(literal&& lit) {
+  matcher_.emplace_back(std::in_place_type<literal>, std::move(lit));
+}
+
+void path_matcher::push_back_literal(std::string_view lit) {
+  matcher_.emplace_back(std::in_place_type<literal>, lit);
+}
+
+void path_matcher::push_back_wildcard() {
+  if (!matcher_.empty() &&
+      std::holds_alternative<double_wildcard>(matcher_.back())) {
+    matcher_.emplace(std::prev(matcher_.end()), std::in_place_type<wildcard>);
+  } else {
+    matcher_.emplace_back(std::in_place_type<wildcard>);
+  }
+}
+
+void path_matcher::push_back_double_wildcard() {
+  if (matcher_.empty() ||
+      !std::holds_alternative<double_wildcard>(matcher_.back())) {
+    matcher_.emplace_back(std::in_place_type<double_wildcard>);
+  }
+}
+
+
+tag_matcher::tag_matcher(const tag_matcher& o)
+: matcher_(o.matcher_)
+{}
+
+auto tag_matcher::operator=(const tag_matcher& o) -> tag_matcher& {
+  matcher_ = o.matcher_;
+  return *this;
+}
+
+tag_matcher::~tag_matcher() noexcept {}
+
+bool tag_matcher::operator()(const tags& t) const {
+  for (const auto& m : matcher_) {
+    const bool cmp = std::visit(
+        overload(
+            [&t, &m](const presence_match&) {
+              return t[m.first].has_value();
+            },
+            [&t, &m](const absence_match&) {
+              return !t[m.first].has_value();
+            },
+            [&t, &m](const comparison_match& cmp) {
+              auto opt_mv = t[m.first];
+              if (!opt_mv) return false;
+
+              metric_value mv;
+              switch (std::get<0>(cmp)) {
+                case eq:
+                  mv = equal(opt_mv.value(), std::get<1>(cmp));
+                  break;
+                case ne:
+                  mv = unequal(opt_mv.value(), std::get<1>(cmp));
+                  break;
+                case lt:
+                  mv = less(opt_mv.value(), std::get<1>(cmp));
+                  break;
+                case gt:
+                  mv = greater(opt_mv.value(), std::get<1>(cmp));
+                  break;
+                case le:
+                  mv = less_equal(opt_mv.value(), std::get<1>(cmp));
+                  break;
+                case ge:
+                  mv = greater_equal(opt_mv.value(), std::get<1>(cmp));
+                  break;
+              }
+              return mv.as_bool().value_or(false);
+            }),
+        m.second);
+
+    if (!cmp) return false;
+  }
+  return true;
+}
+
+void tag_matcher::check_comparison(std::string&& tagname, comparison cmp,
+    metric_value&& tagvalue) {
+  matcher_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(std::move(tagname)),
+      std::forward_as_tuple(
+          std::in_place_type<comparison_match>,
+          std::move(cmp),
+          std::move(tagvalue)));
+}
+
+void tag_matcher::check_comparison(std::string_view tagname, comparison cmp,
+    const metric_value& tagvalue) {
+  matcher_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(tagname),
+      std::forward_as_tuple(
+          std::in_place_type<comparison_match>,
+          std::move(cmp),
+          tagvalue));
+}
+
+void tag_matcher::check_presence(std::string&& tagname) {
+  matcher_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(std::move(tagname)),
+      std::forward_as_tuple(std::in_place_type<presence_match>));
+}
+
+void tag_matcher::check_presence(std::string_view tagname) {
+  matcher_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(tagname),
+      std::forward_as_tuple(std::in_place_type<presence_match>));
+}
+
+void tag_matcher::check_absence(std::string&& tagname) {
+  matcher_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(std::move(tagname)),
+      std::forward_as_tuple(std::in_place_type<absence_match>));
+}
+
+void tag_matcher::check_absence(std::string_view tagname) {
+  matcher_.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(tagname),
+      std::forward_as_tuple(std::in_place_type<absence_match>));
 }
 
 
@@ -159,6 +291,35 @@ auto selector(path_matcher g, std::optional<tag_matcher> t, path_matcher m)
   return (t.has_value()
       ? selector(std::move(g), std::move(t).value(), std::move(m))
       : selector(std::move(g), std::move(m)));
+}
+
+
+auto operator<<(std::ostream& out, const path_matcher& pm) -> std::ostream& {
+  using literal = path_matcher::literal;
+  using wildcard = path_matcher::wildcard;
+  using double_wildcard = path_matcher::double_wildcard;
+
+  bool first = true;
+  for (const auto& v : pm) {
+    if (!std::exchange(first, false)) out << ".";
+    std::visit(
+        overload(
+            [&out](const literal& lit) {
+              out << maybe_quote_identifier(lit);
+            },
+            [&out](const wildcard&) {
+              out << "*";
+            },
+            [&out](const double_wildcard&) {
+              out << "**";
+            }),
+        v);
+  }
+  return out;
+}
+
+std::string to_string(const path_matcher& pm) {
+  return (std::ostringstream() << pm).str();
 }
 
 
