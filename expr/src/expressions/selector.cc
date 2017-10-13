@@ -1,8 +1,79 @@
 #include <monsoon/expressions/selector.h>
+#include "../overload.h"
 #include <ostream>
+#include <iterator>
 
 namespace monsoon {
 namespace expressions {
+
+
+template<typename MatchIter, typename ValIter>
+bool monsoon_expr_local_ do_match(
+    MatchIter m_b, MatchIter m_e,
+    ValIter val_b, ValIter val_e) {
+  using literal = path_matcher::literal;
+  using wildcard = path_matcher::wildcard;
+  using double_wildcard = path_matcher::double_wildcard;
+
+  while (m_b != m_e) {
+    // Visitor tests if the *m_b element matches.
+    // False indicates the ValIter range cannot possibly
+    // match.
+    // True indicates that val_b is matched with m_b.
+    const bool continue_search = std::visit(
+        overload(
+            [&val_b, &val_e](const literal& lit) {
+              if (val_b != val_e && lit == *val_b) {
+                ++val_b;
+                return true;
+              } else {
+                return false;
+              }
+            },
+            [&val_b, &val_e](const wildcard&) {
+              if (val_b != val_e) {
+                ++val_b;
+                return true;
+              } else {
+                return false;
+              }
+            },
+            [&val_b, &val_e, m_b, m_e](const double_wildcard&) { // Use recursion.
+              auto greedy_val_b = val_e;
+              while (greedy_val_b-- != val_b) {
+                if (do_match(std::next(m_b), m_e, greedy_val_b, val_e)) {
+                  val_b = val_e;
+                  return true;
+                }
+              }
+              return false;
+            }),
+        *m_b++);
+
+    if (!continue_search) return false;
+  }
+
+  return val_b == val_e;
+}
+
+path_matcher::path_matcher(const path_matcher& o)
+: matcher_(o.matcher_)
+{}
+
+auto path_matcher::operator=(const path_matcher& o) -> path_matcher& {
+  matcher_ = o.matcher_;
+  return *this;
+}
+
+path_matcher::~path_matcher() noexcept {}
+
+bool path_matcher::operator()(const simple_group& g) const {
+  return do_match(matcher_.begin(), matcher_.end(), g.begin(), g.end());
+}
+
+bool path_matcher::operator()(const metric_name& m) const {
+  return do_match(matcher_.begin(), matcher_.end(), m.begin(), m.end());
+}
 
 
 class monsoon_expr_local_ selector_accept_wrapper

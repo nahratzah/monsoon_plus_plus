@@ -15,6 +15,8 @@ namespace monsoon {
 class monsoon_intf_export_ metric_name {
  public:
   using path_type = std::vector<std::string>;
+  using iterator = path_type::iterator;
+  using const_iterator = path_type::const_iterator;
 
   metric_name() = default;
   metric_name(const metric_name&) = default;
@@ -29,6 +31,12 @@ class monsoon_intf_export_ metric_name {
   template<typename Iter> metric_name(Iter, Iter);
 
   const path_type& get_path() const noexcept;
+  iterator begin();
+  iterator end();
+  const_iterator begin() const;
+  const_iterator end() const;
+  const_iterator cbegin() const;
+  const_iterator cend() const;
 
   bool operator==(const metric_name&) const noexcept;
   bool operator!=(const metric_name&) const noexcept;

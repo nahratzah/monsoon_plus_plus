@@ -41,6 +41,30 @@ inline auto metric_name::get_path() const noexcept -> const path_type& {
   return path_;
 }
 
+inline auto metric_name::begin() -> iterator {
+  return path_.begin();
+}
+
+inline auto metric_name::end() -> iterator {
+  return path_.end();
+}
+
+inline auto metric_name::begin() const -> const_iterator {
+  return path_.begin();
+}
+
+inline auto metric_name::end() const -> const_iterator {
+  return path_.end();
+}
+
+inline auto metric_name::cbegin() const -> const_iterator {
+  return path_.begin();
+}
+
+inline auto metric_name::cend() const -> const_iterator {
+  return path_.end();
+}
+
 inline auto metric_name::operator!=(const metric_name& other) const noexcept
 ->  bool {
   return !(*this == other);
