@@ -43,7 +43,7 @@ void xdr_istream::get_raw_bytes_(void* dst_ptr, std::size_t len) {
         buffer_off_ = 0u;
         buffer_.resize(BUFFER_SIZE);
         const std::size_t rlen = get_raw_bytes(buffer_.data(), buffer_.size());
-        assert(rlen <= buffer.size());
+        assert(rlen <= buffer_.size());
         buffer_.resize(rlen);
         if (rlen == 0u && at_end_()) throw xdr_stream_end();
       }
