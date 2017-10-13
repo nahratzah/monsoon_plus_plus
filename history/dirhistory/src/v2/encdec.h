@@ -330,7 +330,7 @@ file_segment_ptr encode_record_metrics(encdec_writer&,
 monsoon_dirhistory_local_
 auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
-  -> tsdata_list::record_array;
+  -> std::shared_ptr<tsdata_list::record_array>;
 monsoon_dirhistory_local_
 file_segment_ptr encode_record_array(encdec_writer&,
     const time_series::tsv_set&, dictionary_delta&);

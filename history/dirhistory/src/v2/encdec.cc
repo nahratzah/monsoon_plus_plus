@@ -239,11 +239,10 @@ file_segment_ptr encode_record_metrics(encdec_writer& out,
 
 auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
     const dictionary_delta& dict)
--> tsdata_list::record_array {
+-> std::shared_ptr<tsdata_list::record_array> {
   using namespace std::placeholders;
 
-  std::unordered_map<group_name, file_segment<time_series_value::metric_map>>
-      result;
+  auto result = std::make_shared<tsdata_list::record_array>();
 
   in.accept_collection(
       [](xdr::xdr_istream& in) {
@@ -257,7 +256,7 @@ auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
       [&dict, &ctx, &result](auto&& group_list) {
         std::transform(
             group_list.begin(), group_list.end(),
-            std::inserter(result, result.end()),
+            std::inserter(*result, result->end()),
             [&dict, &ctx](const auto& group_tuple) {
               group_name key = group_name(
                   simple_group(dict.pdd.decode(std::get<0>(group_tuple))),
@@ -265,7 +264,7 @@ auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
               auto fs = file_segment<time_series_value::metric_map>(
                   ctx,
                   std::get<2>(group_tuple),
-                  std::bind(&decode_record_metrics, _1, dict));
+                  std::bind(&decode_record_metrics, _1, std::cref(dict)));
               return std::make_pair(std::move(key), std::move(fs));
             });
       });
@@ -471,7 +470,7 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   std::shared_ptr<tsdata_list::record_array> result = cached_records_.lock();
   if (result == nullptr) {
     auto xdr = ctx_.new_reader(records_);
-    result = std::make_shared<record_array>(decode_record_array(xdr, ctx_, dict));
+    result = decode_record_array(xdr, ctx_, dict);
     xdr.close();
     cached_records_ = result;
   }
