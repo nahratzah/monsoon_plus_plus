@@ -10,6 +10,7 @@ add_library (monsoon_intf
   src/metric_name.cc
   src/metric_value.cc
   src/simple_group.cc
+  src/metric_source.cc
   src/tags.cc
   src/time_point.cc
   src/time_series_value.cc
@@ -31,6 +32,7 @@ install (TARGETS monsoon_intf DESTINATION lib)
 install (FILES
   include/monsoon/intf_export_.h
   include/monsoon/interpolate.h
+  include/monsoon/metric_source.h
   include/monsoon/acceptor.h
   include/monsoon/acceptor-inl.h
   include/monsoon/alert-inl.h
