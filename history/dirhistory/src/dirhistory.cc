@@ -17,6 +17,8 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <queue>
+#include <iostream>
 #include "v2/tsdata.h"
 #include <boost/coroutine2/coroutine.hpp>
 #include <boost/coroutine2/protected_fixedsize_stack.hpp>
@@ -27,7 +29,41 @@ namespace history {
 
 class monsoon_dirhistory_local_ emit_visitor {
  private:
-  class impl;
+  class monsoon_dirhistory_local_ impl {
+   public:
+    using tsdata_vector_type =
+        tsdata::emit_acceptor<group_name, metric_name, metric_value>::vector_type;
+
+   private:
+    using co_arg_type = std::tuple<time_point, tsdata_vector_type>;
+    using co_type = boost::coroutines2::coroutine<co_arg_type>;
+
+    class yield_acceptor
+    : public tsdata::emit_acceptor<group_name, metric_name, metric_value>
+    {
+     public:
+      explicit yield_acceptor(co_type::push_type& impl) noexcept : impl_(impl) {}
+      ~yield_acceptor() noexcept {}
+      void accept(time_point, vector_type) override;
+
+     private:
+      co_type::push_type& impl_;
+    };
+
+   public:
+    template<typename Selector>
+    impl(std::shared_ptr<tsdata>, Selector&, std::optional<time_point>, std::optional<time_point>);
+
+    explicit operator bool() const noexcept { return bool(co_); }
+    time_point next_timepoint() const noexcept;
+    std::tuple<time_point, tsdata_vector_type>& get();
+    void advance();
+
+   private:
+    co_type::pull_type co_;
+    std::optional<co_arg_type> val_;
+  };
+
   struct impl_compare {
     monsoon_dirhistory_local_ bool operator()(const impl&, const impl&)
         const noexcept;
@@ -45,6 +81,7 @@ class monsoon_dirhistory_local_ emit_visitor {
   void operator()(acceptor_type&, time_range, time_point::duration);
 
  private:
+  void fixup_visitors_();
   void emit_with_interval_(acceptor_type&, time_range, time_point::duration);
   void emit_without_interval_(acceptor_type&, time_range);
 
@@ -52,42 +89,20 @@ class monsoon_dirhistory_local_ emit_visitor {
       std::optional<time_point>, std::optional<time_point>)
       -> std::vector<std::shared_ptr<tsdata>>;
 
-  std::vector<impl> visitors_;
-};
-
-class monsoon_dirhistory_local_ emit_visitor::impl {
- public:
-  using tsdata_vector_type =
-      tsdata::emit_acceptor<group_name, metric_name, metric_value>::vector_type;
-
- private:
-  using co_arg_type = std::tuple<time_point, tsdata_vector_type>;
-  using co_type = boost::coroutines2::coroutine<co_arg_type>;
-
-  class yield_acceptor
-  : public tsdata::emit_acceptor<group_name, metric_name, metric_value>
-  {
-   public:
-    explicit yield_acceptor(co_type::push_type& impl) noexcept : impl_(impl) {}
-    ~yield_acceptor() noexcept {}
-    void accept(time_point, vector_type) override;
-
-   private:
-    co_type::push_type& impl_;
+  struct tsdata_cmp {
+    bool operator()(const std::shared_ptr<tsdata>& x,
+        const std::shared_ptr<tsdata>& y) const {
+      assert(x != nullptr && y != nullptr);
+      return std::get<0>(x->time()) > std::get<0>(y->time());
+    }
   };
 
- public:
-  template<typename Selector>
-  impl(std::shared_ptr<tsdata>, Selector&, std::optional<time_point>, std::optional<time_point>);
-
-  explicit operator bool() const noexcept { return bool(co_); }
-  time_point next_timepoint() const noexcept;
-  std::tuple<time_point, tsdata_vector_type>& get();
-  void advance();
-
- private:
-  co_type::pull_type co_;
-  std::optional<co_arg_type> val_;
+  std::vector<impl> visitors_;
+  std::priority_queue<
+      std::shared_ptr<tsdata>,
+      std::vector<std::shared_ptr<tsdata>>,
+      tsdata_cmp> selected_files_;
+  std::function<impl(std::shared_ptr<tsdata>)> transformer_;
 };
 
 template<typename Selector>
@@ -97,15 +112,17 @@ emit_visitor::emit_visitor(const std::vector<std::shared_ptr<tsdata>>& files,
   if (tr.begin().has_value()) sel_begin = tr.begin().value() - slack;
   if (tr.end().has_value()) sel_end = tr.end().value() + slack;
 
-  auto file_sel = select_files_(files, sel_begin, sel_end);
-  std::transform(
-      std::make_move_iterator(file_sel.begin()),
-      std::make_move_iterator(file_sel.end()),
-      std::back_inserter(visitors_),
-      [&selector, &sel_begin, &sel_end](auto&& ptr) {
-        return impl(std::move(ptr), selector, sel_begin, sel_end);
-      });
-  std::make_heap(visitors_.begin(), visitors_.end(), impl_compare());
+  for (auto f : select_files_(files, sel_begin, sel_end))
+    selected_files_.push(f);
+
+  transformer_ = [&selector, &sel_begin, &sel_end](auto&& ptr) {
+    std::clog << "Starting emitting file "
+        << std::get<0>(ptr->time())
+        << " - "
+        << std::get<1>(ptr->time())
+        << std::endl;
+    return impl(std::move(ptr), selector, sel_begin, sel_end);
+  };
 }
 
 
@@ -395,6 +412,34 @@ void emit_visitor::operator()(acceptor_type& accept_fn, time_range tr,
     emit_without_interval_(accept_fn, std::move(tr));
 }
 
+void emit_visitor::fixup_visitors_() {
+  for (;;) {
+    // Load next file if visitors is empty.
+    if (visitors_.empty() && !selected_files_.empty()) {
+      visitors_.push_back(transformer_(selected_files_.top())); // Single element is a heap
+      selected_files_.pop();
+    }
+
+    // Erase visitor if it has been drained.
+    if (!visitors_.front()) {
+      std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
+      visitors_.pop_back();
+      continue;
+    }
+
+    // Load any files that should be before visitors_.top.
+    while (!selected_files_.empty() &&
+        std::get<0>(selected_files_.top()->time()) <= visitors_.front().next_timepoint()) {
+      visitors_.push_back(transformer_(selected_files_.top()));
+      if (visitors_.back())
+        std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+      else
+        visitors_.pop_back(); // Empty file.
+      selected_files_.pop();
+    }
+  }
+}
+
 void emit_visitor::emit_with_interval_(acceptor_type& accept_fn,
     time_range tr,
     time_point::duration slack) {
@@ -405,24 +450,17 @@ void emit_visitor::emit_with_interval_(acceptor_type& accept_fn,
   using map_type = std::multimap<key_type, value_type>;
 
   // Find a begin timestamp, if none was supplied.
-  while (!tr.begin().has_value() && !visitors_.empty()) {
-    std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
-    auto& least = visitors_.back();
-    if (!least) {
-      visitors_.pop_back();
-      continue;
-    }
-
-    assert(!tr.begin().has_value());
-    tr.begin(least.next_timepoint());
-    std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+  if (!tr.begin().has_value()
+      && !(visitors_.empty() && selected_files_.empty())) {
+    fixup_visitors_();
+    tr.begin(visitors_.front().next_timepoint());
   }
 
   // Fill sequences.
   map_type map;
   while (tr.end().has_value()
       ? tr.begin().value() <= tr.end().value()
-      : !visitors_.empty()) {
+      : !(visitors_.empty() && !selected_files_.empty())) {
     // Erase all values before the low cutoff point.
     for (auto iter = map.begin(); iter != map.end(); ) {
       const auto sibling_iter = std::next(iter);
@@ -449,7 +487,9 @@ void emit_visitor::emit_with_interval_(acceptor_type& accept_fn,
 
     // Load all values up to and including the cutoff timepoint.
     const auto cutoff = tr.begin().value() + slack;
-    while (!visitors_.empty()) {
+    while (!(visitors_.empty() && selected_files_.empty())) {
+      fixup_visitors_();
+
       std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
       auto& least = visitors_.back();
       if (!least) {
@@ -543,6 +583,7 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
   if (tr.end().has_value() && tr.end().value() < tr.begin().value())
     return;
 
+  fixup_visitors_();
   if (tr.begin().has_value()) { // Emit the before_map.
     map_type before_map;
     while (!visitors_.empty()
@@ -572,6 +613,8 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
 
       least.advance();
       std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+
+      fixup_visitors_();
     }
 
     // Build emit map.
@@ -604,6 +647,7 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
         return std::tie(std::get<0>(x), std::get<1>(x))
             < std::tie(std::get<0>(y), std::get<1>(y));
       };
+  assert(!visitors_.empty() || selected_files_.empty());
   time_point emit_ts;
   impl::tsdata_vector_type emit_data;
   while (tr.end().has_value()
@@ -611,10 +655,7 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
           || visitors_.front().next_timepoint() < tr.end().value())
       : !visitors_.empty()) {
     auto& least = visitors_.back();
-    if (!least) {
-      visitors_.pop_back();
-      continue;
-    }
+    assert(least);
 
     auto least_val = least.get();
     if (!emit_data.empty() && std::get<0>(least_val) != emit_ts) {
@@ -637,6 +678,8 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
 
     least.advance();
     std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+
+    fixup_visitors_();
   }
   if (!emit_data.empty()) {
     // Remove duplicate (group, metric) tuples.
@@ -650,6 +693,7 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
     emit_data.clear();
   }
 
+  assert(!visitors_.empty() || selected_files_.empty());
   if (tr.end().has_value()) {
     map_type after_map;
     while (!visitors_.empty()
@@ -658,10 +702,8 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
       std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
 
       auto& least = visitors_.back();
-      if (!least) {
-        visitors_.pop_back();
-        continue;
-      }
+      assert(least);
+
       auto least_val = least.get();
       const auto& tp = std::get<0>(least_val);
       std::for_each(
@@ -679,6 +721,8 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
 
       least.advance();
       std::push_heap(visitors_.begin(), visitors_.end(), impl_compare());
+
+      fixup_visitors_();
     }
 
     // Build emit map.
