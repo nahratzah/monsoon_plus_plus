@@ -13,6 +13,8 @@
 #include <monsoon/time_point.h>
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace monsoon {
 namespace history {

@@ -61,7 +61,7 @@ class monsoon_dirhistory_local_ emit_visitor::impl {
       tsdata::emit_acceptor<group_name, metric_name, metric_value>::vector_type;
 
  private:
-  using co_arg_type = std::tuple<time_point, tsdata_vector_type&&>;
+  using co_arg_type = std::tuple<time_point, tsdata_vector_type>;
   using co_type = boost::coroutines2::coroutine<co_arg_type>;
 
   class yield_acceptor
@@ -82,7 +82,7 @@ class monsoon_dirhistory_local_ emit_visitor::impl {
 
   explicit operator bool() const noexcept { return bool(co_); }
   time_point next_timepoint() const noexcept;
-  std::tuple<time_point, tsdata_vector_type> get() const;
+  std::tuple<time_point, tsdata_vector_type>& get();
   void advance();
 
  private:
@@ -722,7 +722,7 @@ emit_visitor::impl::impl(std::shared_ptr<tsdata> tsdata_ptr,
     Selector& selector,
     std::optional<time_point> sel_begin,
     std::optional<time_point> sel_end)
-: co_(boost::coroutines2::protected_fixedsize_stack(8192),
+: co_(boost::coroutines2::protected_fixedsize_stack(),
       [tsdata_ptr, &selector, sel_begin, sel_end](co_type::push_type& yield) {
         auto ya = yield_acceptor(yield);
         tsdata_ptr->emit(ya, sel_begin, sel_end, selector);
@@ -735,8 +735,8 @@ auto emit_visitor::impl::next_timepoint() const noexcept -> time_point {
   return std::get<0>(val_.value());
 }
 
-auto emit_visitor::impl::get() const
--> std::tuple<time_point, tsdata_vector_type> {
+auto emit_visitor::impl::get()
+-> std::tuple<time_point, tsdata_vector_type>& {
   return val_.value();
 }
 

@@ -334,7 +334,7 @@ void tsdata_v2_tables::emit_(
      public:
       using co_arg_type = std::tuple<
           time_point,
-          emit_acceptor<group_name, metric_name, metric_value>::vector_type&&>;
+          emit_acceptor<group_name, metric_name, metric_value>::vector_type>;
       using co_type = boost::coroutines2::coroutine<co_arg_type>;
 
       iterators_value_type() = default;
@@ -355,7 +355,7 @@ void tsdata_v2_tables::emit_(
           std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
           const std::function<bool(const group_name&)>& group_filter,
           const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
-      : co_(boost::coroutines2::protected_fixedsize_stack(8192),
+      : co_(boost::coroutines2::protected_fixedsize_stack(),
           [block, tr_begin, tr_end, &group_filter, &metric_filter](
               co_type::push_type& yield) {
             emit_fdtblock(
@@ -375,13 +375,14 @@ void tsdata_v2_tables::emit_(
         return bool(co_);
       }
 
-      const co_arg_type& get() const {
+      co_arg_type& get() {
         assert(val_.has_value());
         return val_.value();
       }
 
       time_point ts() const {
-        return std::get<0>(get());
+        assert(val_.has_value());
+        return std::get<0>(val_.value());
       }
 
       void advance() {
