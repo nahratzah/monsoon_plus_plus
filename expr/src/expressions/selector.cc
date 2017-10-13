@@ -318,8 +318,62 @@ auto operator<<(std::ostream& out, const path_matcher& pm) -> std::ostream& {
   return out;
 }
 
+auto operator<<(std::ostream& out, const tag_matcher& tm) -> std::ostream& {
+  using namespace std::placeholders;
+  using comparison = tag_matcher::comparison;
+  using comparison_match = tag_matcher::comparison_match;
+  using presence_match = tag_matcher::presence_match;
+  using absence_match = tag_matcher::absence_match;
+
+  bool first = true;
+  for (const auto& v : tm) {
+    if (!std::exchange(first, false)) out << ", ";
+    std::visit(
+        std::bind(
+            overload(
+                [&out](std::string_view qname, const presence_match&) {
+                  out << qname;
+                },
+                [&out](std::string_view qname, const absence_match&) {
+                  out << "!" << qname;
+                },
+                [&out](std::string_view qname, const comparison_match& cmp) {
+                  std::string_view cmp_str;
+                  switch (std::get<0>(cmp)) {
+                    case tag_matcher::eq:
+                      cmp_str = "=";
+                      break;
+                    case tag_matcher::ne:
+                      cmp_str = "!=";
+                      break;
+                    case tag_matcher::lt:
+                      cmp_str = "<";
+                      break;
+                    case tag_matcher::gt:
+                      cmp_str = ">";
+                      break;
+                    case tag_matcher::le:
+                      cmp_str = "<=";
+                      break;
+                    case tag_matcher::ge:
+                      cmp_str = ">=";
+                      break;
+                  }
+                  out << qname << cmp_str << std::get<1>(cmp);
+                }
+            ),
+            maybe_quote_identifier(v.first), _1),
+        v.second);
+  }
+  return out;
+}
+
 std::string to_string(const path_matcher& pm) {
   return (std::ostringstream() << pm).str();
+}
+
+std::string to_string(const tag_matcher& tm) {
+  return (std::ostringstream() << tm).str();
 }
 
 

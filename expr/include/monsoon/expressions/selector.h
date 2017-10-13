@@ -7,6 +7,7 @@
 #include <iosfwd>
 #include <string>
 #include <variant>
+#include <unordered_map>
 
 namespace monsoon {
 namespace expressions {
@@ -70,7 +71,7 @@ class monsoon_expr_export_ tag_matcher {
       std::variant<absence_match, presence_match, comparison_match>;
 
  private:
-  using matcher_map = std::multimap<std::string, match_element>;
+  using matcher_map = std::unordered_multimap<std::string, match_element>;
 
  public:
   using const_iterator = matcher_map::const_iterator;
@@ -114,9 +115,13 @@ auto selector(path_matcher, std::optional<tag_matcher>, path_matcher)
 
 monsoon_expr_export_
 std::ostream& operator<<(std::ostream&, const path_matcher&);
+monsoon_expr_export_
+std::ostream& operator<<(std::ostream&, const tag_matcher&);
 
 monsoon_expr_export_
 std::string to_string(const path_matcher&);
+monsoon_expr_export_
+std::string to_string(const tag_matcher&);
 
 
 }} /* namespace monsoon::expressions */
