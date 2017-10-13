@@ -413,7 +413,7 @@ void emit_visitor::operator()(acceptor_type& accept_fn, time_range tr,
 }
 
 void emit_visitor::fixup_visitors_() {
-  for (;;) {
+  while (!(visitors_.empty() && selected_files_.empty())) {
     // Load next file if visitors is empty.
     if (visitors_.empty() && !selected_files_.empty()) {
       visitors_.push_back(transformer_(selected_files_.top())); // Single element is a heap
@@ -428,7 +428,7 @@ void emit_visitor::fixup_visitors_() {
     }
 
     // Load any files that should be before visitors_.top.
-    while (!selected_files_.empty() &&
+    if (!selected_files_.empty() &&
         std::get<0>(selected_files_.top()->time()) <= visitors_.front().next_timepoint()) {
       visitors_.push_back(transformer_(selected_files_.top()));
       if (visitors_.back())
@@ -436,7 +436,11 @@ void emit_visitor::fixup_visitors_() {
       else
         visitors_.pop_back(); // Empty file.
       selected_files_.pop();
+
+      continue;
     }
+
+    break;
   }
 }
 
