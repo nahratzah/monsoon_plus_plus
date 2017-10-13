@@ -14,8 +14,8 @@ inline namespace time_point_internals {
 
 
 monsoon_intf_local_ auto unix_epoch() -> ptime;
-monsoon_intf_local_ void imbue_tp_out_format(std::basic_ios<char>& out);
-monsoon_intf_local_ void imbue_tp_in_format(std::basic_ios<char>& out);
+monsoon_intf_local_ std::locale imbue_tp_out_format(std::basic_ios<char>& out);
+monsoon_intf_local_ std::locale imbue_tp_in_format(std::basic_ios<char>& out);
 monsoon_intf_local_ auto parse_as_msec_since_posix_epoch(const std::string&)
     -> std::int64_t;
 
@@ -41,7 +41,9 @@ std::string to_string(time_point tp) {
 }
 
 auto operator<<(std::ostream& out, time_point tp) -> std::ostream& {
+  auto loc = imbue_tp_out_format(out);
   out << (unix_epoch() + millisec(tp.millis_since_posix_epoch()));
+  out.imbue(loc);
   return out;
 }
 
@@ -75,16 +77,16 @@ inline namespace time_point_internals {
 
 const auto FORMAT = "%Y-%m-%dT%H:%M:%S%FZ";
 
-void imbue_tp_out_format(std::basic_ios<char>& out) {
+std::locale imbue_tp_out_format(std::basic_ios<char>& out) {
   auto fmt = std::make_unique<time_facet>();
   fmt->format(FORMAT);
-  out.imbue(std::locale(std::locale::classic(), fmt.release()));
+  return out.imbue(std::locale(std::locale::classic(), fmt.release()));
 }
 
-void imbue_tp_in_format(std::basic_ios<char>& out) {
+std::locale imbue_tp_in_format(std::basic_ios<char>& out) {
   auto fmt = std::make_unique<time_input_facet>();
   fmt->format(FORMAT);
-  out.imbue(std::locale(std::locale::classic(), fmt.release()));
+  return out.imbue(std::locale(std::locale::classic(), fmt.release()));
 }
 
 auto unix_epoch() -> ptime {
