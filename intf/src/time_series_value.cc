@@ -29,8 +29,7 @@ auto std::hash<monsoon::time_series_value>::operator()(
     const monsoon::time_series_value& v)
     const noexcept
 ->  size_t {
-  return std::hash<monsoon::group_name>()(v.get_name()) ^
-         monsoon::map_to_hash(v.get_metrics());
+  return std::hash<monsoon::group_name>()(v.get_name());
 }
 
 
