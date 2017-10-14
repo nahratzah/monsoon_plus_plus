@@ -54,7 +54,7 @@ class monsoon_dirhistory_local_ emit_visitor {
     template<typename Selector>
     impl(std::shared_ptr<tsdata>, Selector&, std::optional<time_point>, std::optional<time_point>);
 
-    explicit operator bool() const noexcept { return bool(co_); }
+    explicit operator bool() const noexcept { return val_.has_value(); }
     time_point next_timepoint() const noexcept;
     std::tuple<time_point, tsdata_vector_type>& get();
     void advance();
@@ -116,11 +116,6 @@ emit_visitor::emit_visitor(const std::vector<std::shared_ptr<tsdata>>& files,
     selected_files_.push(f);
 
   transformer_ = [&selector, &sel_begin, &sel_end](auto&& ptr) {
-    std::clog << "Starting emitting file "
-        << std::get<0>(ptr->time())
-        << " - "
-        << std::get<1>(ptr->time())
-        << std::endl;
     return impl(std::move(ptr), selector, sel_begin, sel_end);
   };
 }
@@ -266,7 +261,8 @@ auto dirhistory::untagged_metrics(const monsoon::time_range& tr) const
   for (const auto& file : files_) {
     time_point fbegin, fend;
     std::tie(fbegin, fend) = file->time();
-    if (fbegin <= tr.end() && fend >= tr.begin()) {
+    if ((!tr.end().has_value() || fbegin <= tr.end().value())
+        && (!tr.begin().has_value() || fend >= tr.begin().value())) {
       auto fsubset = file->untagged_metrics();
 #if __cplusplus >= 201703
       if (result.get_allocator() == fsubset.get_allocator())
@@ -594,12 +590,9 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
         && (!visitors_.front()
             || visitors_.front().next_timepoint() <= tr.begin().value())) {
       std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
-
       auto& least = visitors_.back();
-      if (!least) {
-        visitors_.pop_back();
-        continue;
-      }
+      assert(least);
+
       auto least_val = least.get();
       const auto& tp = std::get<0>(least_val);
       std::for_each(
@@ -654,10 +647,10 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
   assert(!visitors_.empty() || selected_files_.empty());
   time_point emit_ts;
   impl::tsdata_vector_type emit_data;
-  while (tr.end().has_value()
-      ? (!visitors_.front()
-          || visitors_.front().next_timepoint() < tr.end().value())
-      : !visitors_.empty()) {
+  while (!visitors_.empty()
+      && (!tr.end().has_value()
+          || visitors_.front().next_timepoint() < tr.end().value())) {
+    std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
     auto& least = visitors_.back();
     assert(least);
 
@@ -704,7 +697,6 @@ void emit_visitor::emit_without_interval_(acceptor_type& accept_fn,
         && (!visitors_.front()
             || visitors_.front().next_timepoint() <= tr.begin().value())) {
       std::pop_heap(visitors_.begin(), visitors_.end(), impl_compare());
-
       auto& least = visitors_.back();
       assert(least);
 
