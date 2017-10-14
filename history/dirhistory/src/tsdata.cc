@@ -92,5 +92,27 @@ auto tsdata::new_file(io::fd&& fd) -> std::shared_ptr<tsdata> {
   return new_file(std::move(fd), v2::tsdata_v2::MAJOR);
 }
 
+void tsdata::emit(
+    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    std::optional<time_point> tr_begin,
+    std::optional<time_point> tr_end,
+    const std::function<bool(const simple_group&)>& group_filter,
+    const std::function<bool(const simple_group&, const metric_name&)>& metric_filter)
+    const {
+  using namespace std::placeholders;
+
+  std::function<bool(const group_name&)> wrapped_group_filter =
+      std::bind(std::ref(group_filter), std::bind(&group_name::get_path, _1));
+  std::function<bool(const group_name&, const metric_name&)> wrapped_metric_filter =
+      std::bind(std::ref(metric_filter), std::bind(&group_name::get_path, _1), _2);
+
+  emit(
+      accept_fn,
+      std::move(tr_begin),
+      std::move(tr_end),
+      std::move(wrapped_group_filter),
+      std::move(wrapped_metric_filter));
+}
+
 
 }} /* namespace monsoon::history */

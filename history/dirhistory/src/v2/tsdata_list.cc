@@ -122,11 +122,11 @@ auto tsdata_v2_list::tagged_metrics() const
   return result;
 }
 
-void tsdata_v2_list::emit_(
+void tsdata_v2_list::emit(
     emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    std::function<bool(const group_name&)> group_filter,
-    std::function<bool(const group_name&, const metric_name&)> filter) const {
+    const std::function<bool(const group_name&)>& group_filter,
+    const std::function<bool(const group_name&, const metric_name&)>& filter) const {
   using std::swap;
   using vector_type =
       emit_acceptor<group_name, metric_name, metric_value>::vector_type;

@@ -30,14 +30,16 @@ class monsoon_dirhistory_local_ tsdata_v2_list
   std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
       tagged_metrics() const override;
 
- private:
-  std::vector<time_series> read_all_raw_() const override;
-  void emit_(
+  void emit(
       emit_acceptor<group_name, metric_name, metric_value>&,
       std::optional<time_point>,
       std::optional<time_point>,
-      std::function<bool(const group_name&)>,
-      std::function<bool(const group_name&, const metric_name&)>) const override;
+      const std::function<bool(const group_name&)>&,
+      const std::function<bool(const group_name&, const metric_name&)>&)
+      const override;
+
+ private:
+  std::vector<time_series> read_all_raw_() const override;
 
   template<typename Fn>
   void visit(Fn) const;

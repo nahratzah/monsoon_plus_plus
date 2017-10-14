@@ -35,7 +35,10 @@ int main(int argc, char** argv) {
   const auto tr = monsoon::time_range();
 
   scrape_counter counter;
-  history->emit(counter, tr, history->untagged_metrics(tr));
+  history->emit(
+      counter, tr,
+      [](const monsoon::simple_group&) { return true; },
+      [](const monsoon::simple_group&, const monsoon::metric_name&) { return true; });
   std::cout << counter.count << " scrapes\n";
   return 0;
 }

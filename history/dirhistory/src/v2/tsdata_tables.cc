@@ -249,8 +249,8 @@ void monsoon_dirhistory_local_ emit_fdtblock(
     std::function<void(time_point,
         tsdata_v2_tables::emit_acceptor<group_name, metric_name, metric_value>::vector_type&&)> cb,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    std::function<bool(const group_name&)> group_filter,
-    std::function<bool(const group_name&, const metric_name&)> metric_filter) {
+    const std::function<bool(const group_name&)>& group_filter,
+    const std::function<bool(const group_name&, const metric_name&)>& metric_filter) {
   auto timestamps = std::get<0>(*block);
   std::vector<metric_iteration> data;
 
@@ -308,11 +308,11 @@ void monsoon_dirhistory_local_ emit_fdtblock(
   }
 }
 
-void tsdata_v2_tables::emit_(
+void tsdata_v2_tables::emit(
     emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    std::function<bool(const group_name&)> group_filter,
-    std::function<bool(const group_name&, const metric_name&)> metric_filter)
+    const std::function<bool(const group_name&)>& group_filter,
+    const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
     const {
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();

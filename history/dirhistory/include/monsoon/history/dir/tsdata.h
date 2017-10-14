@@ -73,12 +73,16 @@ class monsoon_dirhistory_export_ tsdata {
       emit_acceptor<group_name, metric_name, metric_value>&,
       std::optional<time_point>,
       std::optional<time_point>,
-      const std::unordered_multimap<group_name, metric_name>&) const = 0;
+      const std::function<bool(const group_name&)>&,
+      const std::function<bool(const group_name&, const metric_name&)>&)
+      const = 0;
   virtual void emit(
       emit_acceptor<group_name, metric_name, metric_value>&,
       std::optional<time_point>,
       std::optional<time_point>,
-      const std::unordered_multimap<simple_group, metric_name>&) const = 0;
+      const std::function<bool(const simple_group&)>&,
+      const std::function<bool(const simple_group&, const metric_name&)>&)
+      const;
 };
 
 template<typename... Types>

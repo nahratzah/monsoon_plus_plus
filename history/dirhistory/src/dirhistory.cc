@@ -50,9 +50,18 @@ class monsoon_dirhistory_local_ emit_visitor {
       co_type::push_type& impl_;
     };
 
+   private:
+    impl(co_type::pull_type&& co);
+
    public:
-    template<typename Selector>
-    impl(std::shared_ptr<tsdata>, Selector&, std::optional<time_point>, std::optional<time_point>);
+    impl(std::shared_ptr<tsdata>,
+        const std::function<bool(const group_name&)>&,
+        const std::function<bool(const group_name&, const metric_name&)>&,
+        std::optional<time_point>, std::optional<time_point>);
+    impl(std::shared_ptr<tsdata>,
+        const std::function<bool(const simple_group&)>&,
+        const std::function<bool(const simple_group&, const metric_name&)>&,
+        std::optional<time_point>, std::optional<time_point>);
 
     explicit operator bool() const noexcept { return val_.has_value(); }
     time_point next_timepoint() const noexcept;
@@ -69,12 +78,38 @@ class monsoon_dirhistory_local_ emit_visitor {
         const noexcept;
   };
 
+  struct tsdata_cmp {
+    bool operator()(const std::shared_ptr<tsdata>& x,
+        const std::shared_ptr<tsdata>& y) const {
+      assert(x != nullptr && y != nullptr);
+      return std::get<0>(x->time()) > std::get<0>(y->time());
+    }
+  };
+
+  using selected_files_heap = std::priority_queue<
+      std::shared_ptr<tsdata>,
+      std::vector<std::shared_ptr<tsdata>>,
+      tsdata_cmp>;
+
+  using filter_variant = std::variant<
+      std::tuple<
+          const std::function<bool(const group_name&)>&,
+          const std::function<bool(const group_name&, const metric_name&)>&>,
+      std::tuple<
+          const std::function<bool(const simple_group&)>&,
+          const std::function<bool(const simple_group&, const metric_name&)>&>>;
+
  public:
   using acceptor_type = acceptor<group_name, metric_name, metric_value>;
   using acceptor_vector = acceptor_type::vector_type;
 
-  template<typename Selector>
-  emit_visitor(const std::vector<std::shared_ptr<tsdata>>&, Selector&,
+  emit_visitor(const std::vector<std::shared_ptr<tsdata>>&,
+      const std::function<bool(const group_name&)>& group_filter,
+      const std::function<bool(const group_name&, const metric_name&)>& metric_filter,
+      time_range, time_point::duration);
+  emit_visitor(const std::vector<std::shared_ptr<tsdata>>&,
+      const std::function<bool(const simple_group&)>& group_filter,
+      const std::function<bool(const simple_group&, const metric_name&)>& metric_filter,
       time_range, time_point::duration);
   ~emit_visitor() noexcept;
 
@@ -87,38 +122,15 @@ class monsoon_dirhistory_local_ emit_visitor {
 
   static auto select_files_(const std::vector<std::shared_ptr<tsdata>>&,
       std::optional<time_point>, std::optional<time_point>)
-      -> std::vector<std::shared_ptr<tsdata>>;
+      -> selected_files_heap;
 
-  struct tsdata_cmp {
-    bool operator()(const std::shared_ptr<tsdata>& x,
-        const std::shared_ptr<tsdata>& y) const {
-      assert(x != nullptr && y != nullptr);
-      return std::get<0>(x->time()) > std::get<0>(y->time());
-    }
-  };
+  auto transformer_(std::shared_ptr<tsdata>) const -> impl;
 
   std::vector<impl> visitors_;
-  std::priority_queue<
-      std::shared_ptr<tsdata>,
-      std::vector<std::shared_ptr<tsdata>>,
-      tsdata_cmp> selected_files_;
-  std::function<impl(std::shared_ptr<tsdata>)> transformer_;
+  filter_variant filter_;
+  std::optional<time_point> sel_begin_, sel_end_;
+  selected_files_heap selected_files_;
 };
-
-template<typename Selector>
-emit_visitor::emit_visitor(const std::vector<std::shared_ptr<tsdata>>& files,
-    Selector& selector, time_range tr, time_point::duration slack) {
-  std::optional<time_point> sel_begin, sel_end;
-  if (tr.begin().has_value()) sel_begin = tr.begin().value() - slack;
-  if (tr.end().has_value()) sel_end = tr.end().value() + slack;
-
-  for (auto f : select_files_(files, sel_begin, sel_end))
-    selected_files_.push(f);
-
-  transformer_ = [&selector, &sel_begin, &sel_end](auto&& ptr) {
-    return impl(std::move(ptr), selector, sel_begin, sel_end);
-  };
-}
 
 
 dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
@@ -306,30 +318,20 @@ auto dirhistory::tagged_metrics(const monsoon::time_range& tr) const
 void dirhistory::emit(
     acceptor<group_name, metric_name, metric_value>& accept_fn,
     time_range tr,
-    std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> selector_arg,
+    std::function<bool(const group_name&)> group_filter,
+    std::function<bool(const group_name&, const metric_name&)> metric_filter,
     time_point::duration slack) const {
-  std::unordered_multimap<group_name, metric_name> selector;
-  std::copy(
-      std::make_move_iterator(selector_arg.begin()),
-      std::make_move_iterator(selector_arg.end()),
-      std::inserter(selector, selector.end()));
-
-  auto visitor = emit_visitor(files_, selector, tr, slack);
+  auto visitor = emit_visitor(files_, group_filter, metric_filter, tr, slack);
   visitor(accept_fn, tr, slack);
 }
 
 void dirhistory::emit(
     acceptor<group_name, metric_name, metric_value>& accept_fn,
     time_range tr,
-    std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> selector_arg,
+    std::function<bool(const simple_group&)> group_filter,
+    std::function<bool(const simple_group&, const metric_name&)> metric_filter,
     time_point::duration slack) const {
-  std::unordered_multimap<simple_group, metric_name> selector;
-  std::copy(
-      std::make_move_iterator(selector_arg.begin()),
-      std::make_move_iterator(selector_arg.end()),
-      std::inserter(selector, selector.end()));
-
-  auto visitor = emit_visitor(files_, selector, tr, slack);
+  auto visitor = emit_visitor(files_, group_filter, metric_filter, tr, slack);
   visitor(accept_fn, tr, slack);
 }
 
@@ -383,17 +385,48 @@ auto dirhistory::decide_fname_(time_point tp) -> filesystem::path {
 }
 
 
+emit_visitor::emit_visitor(const std::vector<std::shared_ptr<tsdata>>& files,
+    const std::function<bool(const group_name&)>& group_filter,
+    const std::function<bool(const group_name&, const metric_name&)>& metric_filter,
+    time_range tr, time_point::duration slack)
+: filter_(std::in_place_index<0>, group_filter, metric_filter),
+  sel_begin_(tr.begin().has_value() ? std::make_optional(tr.begin().value() - slack) : std::optional<time_point>()),
+  sel_end_(tr.end().has_value() ? std::make_optional(tr.end().value() + slack) : std::optional<time_point>()),
+  selected_files_(select_files_(files, sel_begin_, sel_end_))
+{}
+
+emit_visitor::emit_visitor(const std::vector<std::shared_ptr<tsdata>>& files,
+    const std::function<bool(const simple_group&)>& group_filter,
+    const std::function<bool(const simple_group&, const metric_name&)>& metric_filter,
+    time_range tr, time_point::duration slack)
+: filter_(std::in_place_index<1>, group_filter, metric_filter),
+  sel_begin_(tr.begin().has_value() ? std::make_optional(tr.begin().value() - slack) : std::optional<time_point>()),
+  sel_end_(tr.end().has_value() ? std::make_optional(tr.end().value() + slack) : std::optional<time_point>()),
+  selected_files_(select_files_(files, sel_begin_, sel_end_))
+{}
+
+auto emit_visitor::transformer_(std::shared_ptr<tsdata> ptr) const -> impl {
+  return std::visit(
+      [this, &ptr](const auto& filter) {
+        return impl(std::move(ptr), std::get<0>(filter), std::get<1>(filter),
+            sel_begin_, sel_end_);
+      },
+      filter_);
+}
+
 auto emit_visitor::select_files_(
     const std::vector<std::shared_ptr<tsdata>>& files,
     std::optional<time_point> sel_begin,
     std::optional<time_point> sel_end)
--> std::vector<std::shared_ptr<tsdata>> {
-  std::vector<std::shared_ptr<tsdata>> file_sel;
-  std::copy_if(files.begin(), files.end(), std::back_inserter(file_sel),
-      [&sel_begin, &sel_end](const std::shared_ptr<tsdata>& file_ptr) {
+-> selected_files_heap {
+  selected_files_heap file_sel;
+  std::for_each(files.begin(), files.end(),
+      [&sel_begin, &sel_end, &file_sel](
+          const std::shared_ptr<tsdata>& file_ptr) {
         auto[fbegin, fend] = file_ptr->time();
-        return (!sel_end.has_value() || fbegin <= sel_end.value())
-            && (!sel_begin.has_value() || fend >= sel_begin.value());
+        if ((!sel_end.has_value() || fbegin <= sel_end.value())
+            && (!sel_begin.has_value() || fend >= sel_begin.value()))
+          file_sel.push(file_ptr);
       });
   return file_sel;
 }
@@ -757,19 +790,36 @@ void emit_visitor::impl::yield_acceptor::accept(time_point tp, vector_type v) {
   impl_(std::make_tuple(std::move(tp), std::move(v)));
 }
 
-template<typename Selector>
+emit_visitor::impl::impl(co_type::pull_type&& co)
+: co_(std::move(co)),
+  val_(co_ ? std::make_optional(co_.get()) : std::optional<co_arg_type>())
+{}
+
 emit_visitor::impl::impl(std::shared_ptr<tsdata> tsdata_ptr,
-    Selector& selector,
+    const std::function<bool(const group_name&)>& group_filter,
+    const std::function<bool(const group_name&, const metric_name&)>& metric_filter,
     std::optional<time_point> sel_begin,
     std::optional<time_point> sel_end)
-: co_(boost::coroutines2::protected_fixedsize_stack(),
-      [tsdata_ptr, &selector, sel_begin, sel_end](co_type::push_type& yield) {
-        auto ya = yield_acceptor(yield);
-        tsdata_ptr->emit(ya, sel_begin, sel_end, selector);
-      })
-{
-  if (co_) val_ = co_.get();
-}
+: impl(co_type::pull_type(
+        boost::coroutines2::protected_fixedsize_stack(),
+        [tsdata_ptr, &group_filter, &metric_filter, sel_begin, sel_end](co_type::push_type& yield) {
+          auto ya = yield_acceptor(yield);
+          tsdata_ptr->emit(ya, sel_begin, sel_end, group_filter, metric_filter);
+        }))
+{}
+
+emit_visitor::impl::impl(std::shared_ptr<tsdata> tsdata_ptr,
+    const std::function<bool(const simple_group&)>& group_filter,
+    const std::function<bool(const simple_group&, const metric_name&)>& metric_filter,
+    std::optional<time_point> sel_begin,
+    std::optional<time_point> sel_end)
+: impl(co_type::pull_type(
+        boost::coroutines2::protected_fixedsize_stack(),
+        [tsdata_ptr, &group_filter, &metric_filter, sel_begin, sel_end](co_type::push_type& yield) {
+          auto ya = yield_acceptor(yield);
+          tsdata_ptr->emit(ya, sel_begin, sel_end, group_filter, metric_filter);
+        }))
+{}
 
 auto emit_visitor::impl::next_timepoint() const noexcept -> time_point {
   return std::get<0>(val_.value());

@@ -220,61 +220,32 @@ void tsdata_v1::emit(
     emit_acceptor<group_name, metric_name, metric_value>& acceptor,
     std::optional<time_point> tr_begin,
     std::optional<time_point> tr_end,
-    const std::unordered_multimap<group_name, metric_name>& selector) const {
+    const std::function<bool(const group_name&)>& group_filter,
+    const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
+    const {
   using vector_type = emit_acceptor<group_name, metric_name, metric_value>::vector_type;
 
   visit(
-      [&tr_begin, &tr_end, &selector, &acceptor](auto&& ts) {
+      [&tr_begin, &tr_end, &group_filter, &metric_filter, &acceptor](auto&& ts) {
         const time_point tp = ts.get_time();
         if (tr_begin.has_value() && tp < tr_begin.value()) return;
         if (tr_end.has_value() && tp > tr_end.value()) return;
 
         vector_type values;
         std::for_each(ts.data().begin(), ts.data().end(),
-            [&values, &selector](auto&& tsv) {
-              auto[b, e] = selector.equal_range(tsv.get_name());
-              std::for_each(b, e,
-                  [&tsv, &values](auto&& selector_entry) {
-                    auto opt_mv = tsv[std::get<1>(selector_entry)];
-                    if (opt_mv.has_value()) {
-                      values.emplace_back(
-                          tsv.get_name(),
-                          std::get<1>(selector_entry),
-                          opt_mv.value());
-                    }
-                  });
-            });
+            [&values, &group_filter, &metric_filter](auto&& tsv) {
+              if (!group_filter(tsv.get_name())) return;
 
-        acceptor.accept(tp, std::move(values));
-      });
-}
+              const auto& metrics_map = tsv.get_metrics();
+              std::for_each(metrics_map.begin(), metrics_map.end(),
+                  [&tsv, &values, &metric_filter](auto&& entry) {
+                    if (!metric_filter(tsv.get_name(), std::get<0>(entry)))
+                      return;
 
-void tsdata_v1::emit(
-    emit_acceptor<group_name, metric_name, metric_value>& acceptor,
-    std::optional<time_point> tr_begin,
-    std::optional<time_point> tr_end,
-    const std::unordered_multimap<simple_group, metric_name>& selector) const {
-  using vector_type = emit_acceptor<group_name, metric_name, metric_value>::vector_type;
-
-  visit(
-      [&tr_begin, &tr_end, &selector, &acceptor](auto&& ts) {
-        const time_point tp = ts.get_time();
-        if (tr_begin.has_value() && tp < tr_begin.value()) return;
-        if (tr_end.has_value() && tp > tr_end.value()) return;
-
-        vector_type values;
-        std::for_each(ts.data().begin(), ts.data().end(),
-            [&values, &selector](auto&& tsv) {
-              auto[b, e] = selector.equal_range(tsv.get_name().get_path());
-              std::for_each(b, e,
-                  [&tsv, &values](auto&& selector_entry) {
-                    auto opt_mv = tsv[std::get<1>(selector_entry)];
-                    if (opt_mv.has_value()) {
-                      values.emplace_back(
-                          tsv.get_name(),
-                          std::get<1>(selector_entry),
-                          opt_mv.value());
-                    }
+                    values.emplace_back(
+                        tsv.get_name(),
+                        std::get<0>(entry),
+                        std::get<1>(entry));
                   });
             });
 

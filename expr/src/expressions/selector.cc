@@ -385,18 +385,16 @@ void selector_with_tags::operator()(acceptor<emit_type>& accept,
     time_point::duration slack) const {
   selector_accept_wrapper wrapped_accept{ accept };
 
-  auto filter = source.tagged_metrics(tr);
-  auto iter = filter.cbegin();
-  while (iter != filter.cend()) {
-    if (group_(std::get<0>(*iter).get_path())
-        && tags_(std::get<0>(*iter).get_tags())
-        && metric_(std::get<1>(*iter)))
-      ++iter;
-    else
-      iter = filter.erase(iter);
-  }
-
-  source.emit(wrapped_accept, tr, std::move(filter), slack);
+  source.emit(
+      wrapped_accept, tr,
+      [this](const group_name& gname) {
+        return group_(gname.get_path()) && tags_(gname.get_tags());
+      },
+      [this](const group_name& gname, const metric_name& mname) {
+        return group_(gname.get_path()) && tags_(gname.get_tags()) &&
+            metric_(mname);
+      },
+      slack);
 }
 
 void selector_with_tags::do_ostream(std::ostream& out) const {
@@ -412,17 +410,15 @@ void selector_without_tags::operator()(acceptor<emit_type>& accept,
     time_point::duration slack) const {
   selector_accept_wrapper wrapped_accept{ accept };
 
-  auto filter = source.untagged_metrics(tr);
-  auto iter = filter.cbegin();
-  while (iter != filter.cend()) {
-    if (group_(std::get<0>(*iter))
-        && metric_(std::get<1>(*iter)))
-      ++iter;
-    else
-      iter = filter.erase(iter);
-  }
-
-  source.emit(wrapped_accept, tr, std::move(filter), slack);
+  source.emit(
+      wrapped_accept, tr,
+      [this](const group_name& gname) {
+        return group_(gname.get_path());
+      },
+      [this](const group_name& gname, const metric_name& mname) {
+        return group_(gname.get_path()) && metric_(mname);
+      },
+      slack);
 }
 
 void selector_without_tags::do_ostream(std::ostream& out) const {

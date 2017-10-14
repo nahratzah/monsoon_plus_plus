@@ -46,12 +46,14 @@ class monsoon_dirhistory_export_ dirhistory
   void emit(
       acceptor<group_name, metric_name, metric_value>&,
       time_range,
-      std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>,
+      std::function<bool(const group_name&)>,
+      std::function<bool(const group_name&, const metric_name&)>,
       time_point::duration = time_point::duration(0)) const override;
   void emit(
       acceptor<group_name, metric_name, metric_value>&,
       time_range,
-      std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>,
+      std::function<bool(const simple_group&)>,
+      std::function<bool(const simple_group&, const metric_name&)>,
       time_point::duration = time_point::duration(0)) const override;
 
  private:
