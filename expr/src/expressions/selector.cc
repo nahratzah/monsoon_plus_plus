@@ -391,8 +391,8 @@ void selector_with_tags::operator()(acceptor<emit_type>& accept,
         return group_(gname.get_path()) && tags_(gname.get_tags());
       },
       [this](const group_name& gname, const metric_name& mname) {
-        return group_(gname.get_path()) && tags_(gname.get_tags()) &&
-            metric_(mname);
+        // We already know gname matches.
+        return metric_(mname);
       },
       slack);
 }
@@ -416,7 +416,8 @@ void selector_without_tags::operator()(acceptor<emit_type>& accept,
         return group_(gname.get_path());
       },
       [this](const group_name& gname, const metric_name& mname) {
-        return group_(gname.get_path()) && metric_(mname);
+        // We already know gname matches.
+        return metric_(mname);
       },
       slack);
 }
