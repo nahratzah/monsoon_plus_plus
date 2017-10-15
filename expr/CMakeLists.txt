@@ -6,6 +6,7 @@ add_library (monsoon_expr
   src/expression.cc
   src/expressions/selector.cc
   src/expressions/constant.cc
+  src/expressions/operators.cc
 )
 target_link_libraries (monsoon_expr ${extra_libs})
 target_link_libraries (monsoon_expr monsoon_intf)
@@ -20,4 +21,5 @@ install (FILES
 install (FILES
   include/monsoon/expressions/selector.h
   include/monsoon/expressions/constant.h
+  include/monsoon/expressions/operators.h
   DESTINATION include/monsoon/expressions)
