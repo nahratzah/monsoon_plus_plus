@@ -397,7 +397,7 @@ auto dirhistory_emit_reducer(time_point at,
     result = std::get<1>(*q_iter);
 
   while (q_iter != q_end) {
-    assert(std::get<0>(q_iter) > at);
+    assert(std::get<0>(*q_iter) > at);
     for (const auto& entry : std::get<1>(*q_iter)) {
       // Skip definite entries.
       if (result.find(entry.first) != result.end()) continue;
