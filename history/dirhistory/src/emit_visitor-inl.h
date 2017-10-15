@@ -108,7 +108,7 @@ auto emit_visitor<Args...>::iteration_value_() -> iteration {
   iteration result = std::move(paired_value.first);  // Extract pending result.
   paired_value.second();  // Advance coroutine.
 
-  if (!paired_value.second()) {  // Coroutine depleted.
+  if (!paired_value.second) {  // Coroutine depleted.
     iteration_.pop_back();
   } else {
     paired_value.first = paired_value.second.get();
