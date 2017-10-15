@@ -55,6 +55,10 @@ class monsoon_dirhistory_export_ dirhistory
       std::function<bool(const simple_group&)>,
       std::function<bool(const simple_group&, const metric_name&)>,
       time_point::duration = time_point::duration(0)) const override;
+  void emit_time(
+      std::function<void(time_point)>,
+      time_range,
+      time_point::duration = time_point::duration(0)) const override;
 
  private:
   dirhistory(const dirhistory&&) = delete;

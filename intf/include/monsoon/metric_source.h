@@ -46,6 +46,10 @@ class monsoon_intf_export_ metric_source {
       std::function<bool(const simple_group&)>,
       std::function<bool(const simple_group&, const metric_name&)>,
       time_point::duration = time_point::duration(0)) const;
+  virtual void emit_time(
+      std::function<void(time_point)>,
+      time_range,
+      time_point::duration = time_point::duration(0)) const = 0;
 };
 
 

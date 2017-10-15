@@ -212,21 +212,19 @@ auto tsdata_v0::tagged_metrics() const
 }
 
 void tsdata_v0::emit(
-    emit_acceptor<group_name, metric_name, metric_value>& acceptor,
+    const std::function<void(time_point, emit_map&&)>& acceptor,
     std::optional<time_point> tr_begin,
     std::optional<time_point> tr_end,
     const std::function<bool(const group_name&)>& group_filter,
     const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
     const {
-  using vector_type = emit_acceptor<group_name, metric_name, metric_value>::vector_type;
-
   visit(
       [&tr_begin, &tr_end, &group_filter, &metric_filter, &acceptor](auto&& ts) {
         const time_point tp = ts.get_time();
         if (tr_begin.has_value() && tp < tr_begin.value()) return;
         if (tr_end.has_value() && tp > tr_end.value()) return;
 
-        vector_type values;
+        emit_map values;
         std::for_each(ts.data().begin(), ts.data().end(),
             [&values, &group_filter, &metric_filter](auto&& tsv) {
               if (!group_filter(tsv.get_name())) return;
@@ -237,14 +235,26 @@ void tsdata_v0::emit(
                     if (!metric_filter(tsv.get_name(), std::get<0>(entry)))
                       return;
 
-                    values.emplace_back(
-                        tsv.get_name(),
-                        std::get<0>(entry),
-                        std::get<1>(entry));
+                    values.emplace(
+                        std::piecewise_construct,
+                        std::tie(tsv.get_name(), std::get<0>(entry)),
+                        std::tie(std::get<1>(entry)));
                   });
             });
 
-        acceptor.accept(tp, std::move(values));
+        acceptor(tp, std::move(values));
+      });
+}
+
+void tsdata_v0::emit_time(
+    const std::function<void(time_point)>& acceptor,
+    std::optional<time_point> tr_begin,
+    std::optional<time_point> tr_end) const {
+  visit(
+      [tr_begin, tr_end, &acceptor](auto&& ts) {
+        if ((!tr_begin.has_value() || tr_begin.value() <= ts.get_time())
+            && (!tr_end.has_value() || tr_end.value() >= ts.get_time()))
+          acceptor(ts.get_time());
       });
 }
 

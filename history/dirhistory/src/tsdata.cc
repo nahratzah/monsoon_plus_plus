@@ -93,7 +93,7 @@ auto tsdata::new_file(io::fd&& fd) -> std::shared_ptr<tsdata> {
 }
 
 void tsdata::emit(
-    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    const std::function<void(time_point, emit_map&&)>& accept_fn,
     std::optional<time_point> tr_begin,
     std::optional<time_point> tr_end,
     const std::function<bool(const simple_group&)>& group_filter,

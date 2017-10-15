@@ -123,32 +123,28 @@ auto tsdata_v2_list::tagged_metrics() const
 }
 
 void tsdata_v2_list::emit(
-    emit_acceptor<group_name, metric_name, metric_value>& accept_fn,
+    const std::function<void(time_point, emit_map&&)>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const std::function<bool(const group_name&)>& group_filter,
     const std::function<bool(const group_name&, const metric_name&)>& filter) const {
   using std::swap;
-  using vector_type =
-      emit_acceptor<group_name, metric_name, metric_value>::vector_type;
 
   // Reorder map, used to deal with non-distinct/non-sorted file.
   // The reorder map contains:
   // - 0 elements, if is_sorted() && is_distinct()
   // - 1 elements, if is_sorted() && !is_distinct()
   // - * elements, if !is_sorted()
-  std::vector<std::tuple<time_point, vector_type>> reorder_map;
-  static const auto CMP = [](
-      const std::tuple<group_name, metric_name, metric_value>& x,
-      const std::tuple<group_name, metric_name, metric_value>& y) {
-    return std::tie(std::get<0>(x), std::get<1>(x))
-        < std::tie(std::get<0>(y), std::get<1>(y));
-  };
+  std::vector<std::tuple<time_point, emit_map>> reorder_map;
 
   visit(
-      [&accept_fn, &group_filter, &filter, &reorder_map, this](
+      [&](
           const time_point& ts,
           std::shared_ptr<const tsdata_list::record_array> records) {
-        vector_type emit_data;
+        if ((tr_begin.has_value() && tr_begin.value() > ts)
+            || (tr_end.has_value() && tr_end.value() < ts))
+          return; /* SKIP */
+
+        emit_map emit_data;
 
         std::for_each(records->begin(), records->end(),
             [&emit_data, &group_filter, &filter](const auto& group_entry) {
@@ -163,10 +159,10 @@ void tsdata_v2_list::emit(
                       const auto& metric_value = std::get<1>(metric_entry);
 
                       if (filter(group_name, metric_name)) {
-                        emit_data.emplace_back(
-                            group_name,
-                            metric_name,
-                            metric_value);
+                        emit_data.emplace(
+                            std::piecewise_construct,
+                            std::forward_as_tuple(group_name, metric_name),
+                            std::forward_as_tuple(metric_value));
                       }
                     });
               }
@@ -185,30 +181,18 @@ void tsdata_v2_list::emit(
             auto& reorder_data = std::get<1>(reorder_map.back());
 
             if (reorder_ts == ts) {
-              // Add elements in emit_data,
-              // maintain invariant: reverse encounter order.
-              // NOTE: swap followed by insert-at-end
-              // is effectively the same as intert-at-begin.
-              swap(reorder_data, emit_data);
-              reorder_data.insert(
-                  reorder_data.end(),
+              swap(reorder_data, emit_data); // Keep last emit.
+#if __cplusplus >= 201703
+              if (reorder_data.get_allocator() == emit_data.get_allocator())
+                reorder_data.merge(std::move(emit_data));
+              else
+#endif
+                reorder_data.insert(
                   std::make_move_iterator(emit_data.begin()),
                   std::make_move_iterator(emit_data.end()));
             } else {
-              // Erase duplicates.
-              // std::unique will keep first element and erase
-              // subsequent elements. With the reverse encounter
-              // order invariant, this will maintain the last element.
-              std::stable_sort(
-                  reorder_data.begin(),
-                  reorder_data.end(),
-                  CMP);
-              reorder_data.erase(
-                  std::unique(reorder_data.begin(), reorder_data.end(), CMP),
-                  reorder_data.end());
-
               // Emit old data, now that it is cleaned up.
-              accept_fn.accept(
+              accept_fn(
                   reorder_ts,
                   std::move(reorder_data));
               // Store new data into reorder_map.
@@ -218,7 +202,7 @@ void tsdata_v2_list::emit(
           }
         } else {
           // Sorted and unique, emit directly.
-          accept_fn.accept(ts, std::move(emit_data));
+          accept_fn(ts, std::move(emit_data));
         }
       });
 
@@ -238,39 +222,68 @@ void tsdata_v2_list::emit(
 
   while (!reorder_map.empty()) {
     time_point ts;
-    vector_type emit_data;
+    emit_map emit_data;
     std::tie(ts, emit_data) = std::move(reorder_map.back());
     reorder_map.pop_back();
 
     if (!is_distinct()) {
-      bool cleanup_required = false;
       while (!reorder_map.empty() && std::get<0>(reorder_map.back()) == ts) {
-        cleanup_required = true; // We may have duplicates.
-
         // Keep later encountered data before earlier data,
         // so that stable_sort, unique can erase overwritten data.
         // NOTE: swap followed by insert-at-end
         // is effectively the same as intert-at-begin.
         swap(emit_data, std::get<1>(reorder_map.back()));
-        emit_data.insert(emit_data.end(),
-            std::make_move_iterator(std::get<1>(reorder_map.back()).begin()),
-            std::make_move_iterator(std::get<1>(reorder_map.back()).end()));
+#if __cplusplus >= 201703
+        if (emit_data.get_allocator() == reorder_map.back().get_allocator())
+          emit_data.merge(std::move(reorder_map.back()));
+        else
+#endif
+          emit_data.insert(
+              std::make_move_iterator(std::get<1>(reorder_map.back()).begin()),
+              std::make_move_iterator(std::get<1>(reorder_map.back()).end()));
         reorder_map.pop_back();
-      }
-
-      if (cleanup_required) { // Erase duplicates.
-        std::stable_sort(
-            emit_data.begin(),
-            emit_data.end(),
-            CMP);
-        emit_data.erase(
-            std::unique(emit_data.begin(), emit_data.end(), CMP),
-            emit_data.end());
       }
     }
 
-    accept_fn.accept(ts, std::move(emit_data));
+    accept_fn(ts, std::move(emit_data));
   }
+}
+
+void tsdata_v2_list::emit_time(
+    const std::function<void(time_point)>& accept_fn,
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end) const {
+  std::vector<time_point> reorder_map;
+  visit(
+      [&](
+          const time_point& ts,
+          const std::shared_ptr<const tsdata_list::record_array>& records) {
+        if (!is_sorted()) {
+          reorder_map.push_back(ts);
+        } else if (!is_distinct()) {
+          if (reorder_map.empty()) {
+            reorder_map.push_back(ts);
+          } else if (reorder_map.back() == ts) {
+            /* SKIP */
+          } else {
+            accept_fn(reorder_map.back());
+            reorder_map.back() = ts;
+          }
+        } else {
+          // Sorted and unique, emit directly.
+          accept_fn(ts);
+        }
+      });
+
+  if (!is_sorted()) {
+    std::sort(reorder_map.begin(), reorder_map.end());
+    if (!is_distinct()) {
+      reorder_map.erase(
+          std::unique(reorder_map.begin(), reorder_map.end()),
+          reorder_map.end());
+    }
+  }
+
+  std::for_each(reorder_map.begin(), reorder_map.end(), std::ref(accept_fn));
 }
 
 

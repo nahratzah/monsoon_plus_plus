@@ -5,6 +5,7 @@ include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES
 add_library (monsoon_expr
   src/expression.cc
   src/expressions/selector.cc
+  src/expressions/constant.cc
 )
 target_link_libraries (monsoon_expr ${extra_libs})
 target_link_libraries (monsoon_expr monsoon_intf)
@@ -18,4 +19,5 @@ install (FILES
   DESTINATION include/monsoon)
 install (FILES
   include/monsoon/expressions/selector.h
+  include/monsoon/expressions/constant.h
   DESTINATION include/monsoon/expressions)

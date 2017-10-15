@@ -18,18 +18,19 @@ if (NOT STD_FILESYSTEM)
   include_directories (${Boost_INCLUDE_DIR})
 endif ()
 add_library (monsoon_dirhistory
+  src/emit_visitor.cc
   src/raw_file_segment_reader.cc
   src/raw_file_segment_writer.cc
   src/hdir_exception.cc
   src/dirhistory.cc
   src/tsdata_mime.cc
+  src/tsdata.cc
   src/v0/tsdata.cc
   src/v1/tsdata.cc
   src/v2/encdec.cc
   src/v2/tsdata.cc
   src/v2/tsdata_tables.cc
   src/v2/tsdata_list.cc
-  src/tsdata.cc
 )
 target_include_directories(monsoon_history PUBLIC include)
 if (NOT STD_FILESYSTEM)

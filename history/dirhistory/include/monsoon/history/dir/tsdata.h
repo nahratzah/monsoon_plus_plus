@@ -8,7 +8,7 @@
 #include <vector>
 #include <tuple>
 #include <monsoon/time_series.h>
-#include <monsoon/history/collect_history.h>
+#include <monsoon/metric_source.h>
 
 namespace monsoon {
 namespace history {
@@ -16,8 +16,11 @@ namespace history {
 
 class monsoon_dirhistory_export_ tsdata {
  public:
-  using metrics_hash = collect_history::metrics_hash;
-  template<typename...> class emit_acceptor;
+  using metrics_hash = metric_source::metrics_hash;
+  using emit_map = std::unordered_map<
+      std::tuple<group_name, metric_name>,
+      metric_value,
+      metrics_hash>;
 
   virtual ~tsdata() noexcept;
 
@@ -70,29 +73,23 @@ class monsoon_dirhistory_export_ tsdata {
       tagged_metrics() const = 0;
 
   virtual void emit(
-      emit_acceptor<group_name, metric_name, metric_value>&,
+      const std::function<void(time_point, emit_map&&)>&,
       std::optional<time_point>,
       std::optional<time_point>,
       const std::function<bool(const group_name&)>&,
       const std::function<bool(const group_name&, const metric_name&)>&)
       const = 0;
   virtual void emit(
-      emit_acceptor<group_name, metric_name, metric_value>&,
+      const std::function<void(time_point, emit_map&&)>&,
       std::optional<time_point>,
       std::optional<time_point>,
       const std::function<bool(const simple_group&)>&,
       const std::function<bool(const simple_group&, const metric_name&)>&)
       const;
-};
-
-template<typename... Types>
-class tsdata::emit_acceptor {
- public:
-  using tuple_type = std::tuple<std::remove_cv_t<std::remove_reference_t<Types>>...>;
-  using vector_type = std::vector<tuple_type>;
-
-  virtual ~emit_acceptor() noexcept {}
-  virtual void accept(time_point, vector_type) = 0;
+  virtual void emit_time(
+      const std::function<void(time_point)>&,
+      std::optional<time_point>,
+      std::optional<time_point>) const = 0;
 };
 
 
