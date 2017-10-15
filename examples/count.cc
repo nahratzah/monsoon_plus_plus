@@ -14,17 +14,6 @@ auto open_dir(std::string dir)
   return std::make_unique<monsoon::history::dirhistory>(dir, false);
 }
 
-class scrape_counter
-: public monsoon::acceptor<monsoon::group_name, monsoon::metric_name, monsoon::metric_value>
-{
- public:
-  void accept(monsoon::time_point, vector_type) {
-    ++count;
-  }
-
-  std::uint64_t count = 0;
-};
-
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << (argc >= 1 ? argv[0] : "count") << " /path/to/history/dir\n";
@@ -32,13 +21,10 @@ int main(int argc, char** argv) {
   }
 
   auto history = open_dir(argv[1]);
-  const auto tr = monsoon::time_range();
-
-  scrape_counter counter;
-  history->emit(
-      counter, tr,
-      [](const monsoon::simple_group&) { return true; },
-      [](const monsoon::simple_group&, const monsoon::metric_name&) { return true; });
-  std::cout << counter.count << " scrapes\n";
+  std::uintmax_t counter;
+  history->emit_time(
+      [&counter](monsoon::time_point tp) { ++counter; },
+      monsoon::time_range());
+  std::cout << counter << " scrapes\n";
   return 0;
 }
