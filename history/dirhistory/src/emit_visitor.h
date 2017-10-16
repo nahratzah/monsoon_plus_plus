@@ -78,18 +78,22 @@ class monsoon_dirhistory_local_ emit_visitor
   using invocation_functor =
       std::function<void(const tsdata&, const callback&, const std::optional<time_point>&, const std::optional<time_point>&)>;
   using reduce_queue = std::deque<iteration>;
+  using pruning_vector = std::vector<iteration>;
 
   using merge_dst_tuple = std::add_lvalue_reference_t<iteration>;
   using merge_src_tuple = std::add_rvalue_reference_t<co_arg_type>;
   using merge_functor = std::function<void(merge_dst_tuple, merge_src_tuple)>;
   using reduce_at_functor =
       std::function<iteration(time_point, const reduce_queue&)>;
+  using pruning_functor = std::function<void(pruning_vector&)>;
 
   emit_visitor(const std::vector<std::shared_ptr<tsdata>>&,
       const time_range&, time_point::duration,
       invocation_functor,
       merge_functor,
-      reduce_at_functor);
+      reduce_at_functor,
+      pruning_functor prune_before,
+      pruning_functor prune_after);
 
   void operator()(const callback&);
   void before(const callback&);
@@ -119,6 +123,7 @@ class monsoon_dirhistory_local_ emit_visitor
   invocation_functor invoc_;
   merge_functor merge_;
   reduce_at_functor reduce_at_;
+  pruning_functor prune_before_, prune_after_;
   time_point ival_iter_;
   std::deque<iteration> ival_pending_;
 };

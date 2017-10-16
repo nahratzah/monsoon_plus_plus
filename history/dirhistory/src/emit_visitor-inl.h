@@ -14,15 +14,21 @@ emit_visitor<Args...>::emit_visitor(
     const time_range& tr, time_point::duration slack,
     invocation_functor invoc,
     merge_functor merge,
-    reduce_at_functor reduce_at)
+    reduce_at_functor reduce_at,
+    pruning_functor prune_before,
+    pruning_functor prune_after)
 : basic_emit_visitor(files, tr, slack),
   invoc_(std::move(invoc)),
   merge_(std::move(merge)),
-  reduce_at_(std::move(reduce_at))
+  reduce_at_(std::move(reduce_at)),
+  prune_before_(std::move(prune_before)),
+  prune_after_(std::move(prune_after))
 {
   assert(invoc_ != nullptr);
   assert(merge_ != nullptr);
   assert(reduce_at_ != nullptr);
+  assert(prune_before_ != nullptr);
+  assert(prune_after_ != nullptr);
 }
 
 template<typename... Args>
@@ -218,11 +224,21 @@ void emit_visitor<Args...>::before_without_interval_(const callback& cb,
     const std::optional<time_point>& tr_begin) {
   if (!tr_begin.has_value()) return;
 
+  pruning_vector iterations;
   for (auto itp = iteration_tp_();
       itp.has_value() && itp <= tr_begin.value();
       itp = iteration_tp_()) {
-    emit_without_interval_(cb);
+    emit_without_interval_(
+        [&iterations](auto&&... args) {
+          iterations.emplace_back(std::forward<std::decay_t<decltype(args)>>(args)...);
+        });
   }
+
+  prune_before_(iterations);
+  std::for_each(
+      std::make_move_iterator(iterations.begin()),
+      std::make_move_iterator(iterations.end()),
+      [&cb](iteration&& i) { std::apply(cb, std::move(i)); });
 }
 
 template<typename... Args>
@@ -237,11 +253,21 @@ void emit_visitor<Args...>::during_without_interval_(const callback& cb,
 
 template<typename... Args>
 void emit_visitor<Args...>::after_without_interval_(const callback& cb) {
+  pruning_vector iterations;
   for (auto itp = iteration_tp_();
       itp.has_value();
       itp = iteration_tp_()) {
-    emit_without_interval_(cb);
+    emit_without_interval_(
+        [&iterations](auto&&... args) {
+          iterations.emplace_back(std::forward<std::decay_t<decltype(args)>>(args)...);
+        });
   }
+
+  prune_after_(iterations);
+  std::for_each(
+      std::make_move_iterator(iterations.begin()),
+      std::make_move_iterator(iterations.end()),
+      [&cb](iteration&& i) { std::apply(cb, std::move(i)); });
 }
 
 template<typename... Args>

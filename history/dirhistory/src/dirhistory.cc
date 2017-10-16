@@ -19,6 +19,7 @@
 #include <optional>
 #include <queue>
 #include <iostream>
+#include <iterator>
 #include "v2/tsdata.h"
 #include "emit_visitor.h"
 #include <boost/coroutine2/coroutine.hpp>
@@ -32,10 +33,13 @@ monsoon_dirhistory_local_
 auto dirhistory_emit_reducer(time_point,
     const emit_visitor<tsdata::emit_map>::reduce_queue&)
     -> std::tuple<time_point, tsdata::emit_map>;
-
 monsoon_dirhistory_local_
 void dirhistory_emit_merger(std::tuple<time_point, tsdata::emit_map>&,
     std::tuple<time_point, tsdata::emit_map&&>&&);
+monsoon_dirhistory_local_
+void dirhistory_emit_prune_before_(emit_visitor<tsdata::emit_map>::pruning_vector&);
+monsoon_dirhistory_local_
+void dirhistory_emit_prune_after_(emit_visitor<tsdata::emit_map>::pruning_vector&);
 
 
 dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
@@ -233,7 +237,9 @@ void dirhistory::emit(
         tsd.emit(cb, tr_begin, tr_end, group_filter, metric_filter);
       },
       &dirhistory_emit_merger,
-      &dirhistory_emit_reducer);
+      &dirhistory_emit_reducer,
+      &dirhistory_emit_prune_before_,
+      &dirhistory_emit_prune_after_);
   visitor(
       [&accept_fn](time_point tp, tsdata::emit_map&& map) {
         acceptor<group_name, metric_name, metric_value>::vector_type v;
@@ -263,7 +269,9 @@ void dirhistory::emit(
         tsd.emit(cb, tr_begin, tr_end, group_filter, metric_filter);
       },
       &dirhistory_emit_merger,
-      &dirhistory_emit_reducer);
+      &dirhistory_emit_reducer,
+      &dirhistory_emit_prune_before_,
+      &dirhistory_emit_prune_after_);
   visitor(
       [&accept_fn](time_point tp, tsdata::emit_map&& map) {
         acceptor<group_name, metric_name, metric_value>::vector_type v;
@@ -284,22 +292,19 @@ void dirhistory::emit_time(
     std::function<void(time_point)> accept_fn,
     time_range tr,
     time_point::duration slack) const {
-  emit_visitor<>::invocation_functor invoc =
-      [](const tsdata& tsd, const auto& cb, const auto& tr_begin, const auto& tr_end) {
-        tsd.emit_time(cb, tr_begin, tr_end);
-      };
-  emit_visitor<>::merge_functor merge =
-      [](auto&, auto&&) {};
-  emit_visitor<>::reduce_at_functor reduce_at =
-      [](time_point at, const auto&) { return at; };
-
   auto visitor = emit_visitor<>(
       files_, tr, std::move(slack),
       [](const tsdata& tsd, const auto& cb, const auto& tr_begin, const auto& tr_end) {
         tsd.emit_time(cb, tr_begin, tr_end);
       },
       [](auto&, auto&&) {},
-      [](time_point at, const auto&) { return at; });
+      [](time_point at, const auto&) { return at; },
+      [](emit_visitor<>::pruning_vector& v) {
+        if (!v.empty()) v.erase(v.begin(), std::prev(v.end()));
+      },
+      [](emit_visitor<>::pruning_vector& v) {
+        if (!v.empty()) v.erase(std::next(v.begin()), v.end());
+      });
   visitor(accept_fn);
 }
 
@@ -436,6 +441,58 @@ void dirhistory_emit_merger(std::tuple<time_point, tsdata::emit_map>& dst_tpl,
         std::make_move_iterator(src.begin()),
         std::make_move_iterator(src.end()),
         std::inserter(dst, dst.begin()));
+}
+
+void dirhistory_emit_prune_before_(emit_visitor<tsdata::emit_map>::pruning_vector& v) {
+  using key_set = std::unordered_set<
+      tsdata::emit_map::key_type,
+      tsdata::emit_map::hasher,
+      tsdata::emit_map::key_equal>;
+  using namespace std::placeholders;
+
+  key_set keys;
+  for (auto iter = v.rbegin(); iter != v.rend(); ++iter) {
+    std::for_each(keys.cbegin(), keys.cend(),
+        [&iter](const key_set::value_type& k) {
+          std::get<1>(*iter).erase(k);
+        });
+
+    std::transform(std::get<1>(*iter).cbegin(), std::get<1>(*iter).cend(),
+        std::inserter(keys, keys.begin()),
+        std::bind(&tsdata::emit_map::value_type::first, _1));
+  }
+
+  v.erase(
+      std::remove_if(
+          v.begin(), v.end(),
+          [](const auto& v) { return std::get<1>(v).empty(); }),
+      v.end());
+}
+
+void dirhistory_emit_prune_after_(emit_visitor<tsdata::emit_map>::pruning_vector& v) {
+  using key_set = std::unordered_set<
+      tsdata::emit_map::key_type,
+      tsdata::emit_map::hasher,
+      tsdata::emit_map::key_equal>;
+  using namespace std::placeholders;
+
+  key_set keys;
+  for (auto iter = v.begin(); iter != v.end(); ++iter) {
+    std::for_each(keys.cbegin(), keys.cend(),
+        [&iter](const key_set::value_type& k) {
+          std::get<1>(*iter).erase(k);
+        });
+
+    std::transform(std::get<1>(*iter).cbegin(), std::get<1>(*iter).cend(),
+        std::inserter(keys, keys.begin()),
+        std::bind(&tsdata::emit_map::value_type::first, _1));
+  }
+
+  v.erase(
+      std::remove_if(
+          v.begin(), v.end(),
+          [](const auto& v) { return std::get<1>(v).empty(); }),
+      v.end());
 }
 
 
