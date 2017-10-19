@@ -1,7 +1,7 @@
-#include <monsoon/queue/queue.h>
+#include <monsoon/objpipe/pipe.h>
 
 namespace monsoon {
-namespace queue {
+namespace pipe {
 
 
 }} /* namespace monsoon::queue */
