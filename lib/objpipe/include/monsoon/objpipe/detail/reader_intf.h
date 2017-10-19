@@ -5,13 +5,18 @@
 
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/base_objpipe.h>
-#include <variant>
+#include <functional>
 #include <optional>
 #include <type_traits>
+#include <variant>
 
 namespace monsoon {
 namespace objpipe {
 namespace detail {
+
+
+template<typename T> class reader_intf;
+template<typename T> class continuation_intf;
 
 
 /**
@@ -19,7 +24,7 @@ namespace detail {
  * @headerfile "" <monsoon/objpipe/detail/reader_intf.h>
  */
 template<typename T>
-class reader_intf<T>
+class reader_intf
 : public virtual base_objpipe
 {
  public:
@@ -81,6 +86,13 @@ class reader_intf<T>
    * @return a value indicating success or failure.
    */
   virtual auto pop_front() -> objpipe_errc = 0;
+};
+
+template<typename T>
+class continuation_intf
+: public virtual base_objpipe
+{
+ public:
 };
 
 

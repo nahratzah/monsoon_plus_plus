@@ -6,6 +6,7 @@
 #include <monsoon/objpipe/objpipe_export_.h>
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 namespace monsoon {
 namespace objpipe {
@@ -51,6 +52,21 @@ class monsoon_objpipe_export_ base_objpipe {
  */
 struct monsoon_objpipe_export_ reader_release {
   /**
+   * Create a unique pointer for the linked reader implementation.
+   * @param r The reader to create a pointer for.
+   * @return A unique pointer holding the reader.
+   */
+  template<typename T>
+  static auto link(T* r) noexcept
+  -> std::enable_if_t<
+        std::is_base_of_v<base_objpipe, T>,
+        std::unique_ptr<T, reader_release>> {
+    r->refcnt_.fetch_add(1u, std::memory_order_acquire);
+    r->reader_refcnt_.fetch_add(1u, std::memory_order_acquire);
+    return std::unique_ptr<T, reader_release>(r);
+  }
+
+  /**
    * Release functor, releases the reader side of an objpipe.
    * @param ptr Pointer to objpipe to be released.
    */
@@ -62,6 +78,21 @@ struct monsoon_objpipe_export_ reader_release {
  * @headerfile "" <monsoon/objpipe/detail/base_objpipe.h>
  */
 struct monsoon_objpipe_export_ writer_release {
+  /**
+   * Create a unique pointer for the linked writer implementation.
+   * @param w The writer to create a pointer for.
+   * @return A unique pointer holding the writer.
+   */
+  template<typename T>
+  static auto link(T* w) noexcept
+  -> std::enable_if_t<
+        std::is_base_of_v<base_objpipe, T>,
+        std::unique_ptr<T, reader_release>> {
+    w->refcnt_.fetch_add(1u, std::memory_order_acquire);
+    w->reader_refcnt_.fetch_add(1u, std::memory_order_acquire);
+    return std::unique_ptr<T, reader_release>(w);
+  }
+
   /**
    * Release functor, releases the writer side of an objpipe.
    * @param ptr Pointer to objpipe to be released.

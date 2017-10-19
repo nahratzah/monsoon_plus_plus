@@ -77,11 +77,11 @@ class reader {
   auto front() const -> reference {
     assert(ptr_ != nullptr);
     return std::visit(
-        [](auto&& v) {
+        [](auto&& v) -> reference {
           if constexpr(std::is_same_t<ojbpipe_errc, std::decay_t<decltype(v)>>)
             throw std::system_error(static_cast<int>(v), objpipe_category());
           else
-            return std::forward<std::decay_t<decltype(v)>>(v);
+            return *v;
         },
         ptr_->front());
   }
@@ -99,6 +99,20 @@ class reader {
    */
   explicit operator bool() const noexcept {
     return ptr_ != nullptr && ptr_->is_pullable();
+  }
+
+  /**
+   * Apply a filter on the read elements.
+   *
+   * @param[in] pred A predicate.
+   * @return A reader that only yields objects for which the predicate evaluates to true.
+   */
+  template<typename Pred>
+  auto filter(Pred&& pred) && -> reader<T> {
+    using filter_type = filter_operation<T, std::decay_t<Pred>>;
+
+    auto ptr = link(new filter_type(std::move(ptr_), std::forward<Pred>(pred)));
+    return reader<T>(std::move(ptr));
   }
 
  private:

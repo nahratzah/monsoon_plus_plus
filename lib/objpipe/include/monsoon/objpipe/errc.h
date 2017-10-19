@@ -45,9 +45,13 @@ class monsoon_objpipe_export_ objpipe_category_t
 : public std::error_category
 {
  public:
+  /** @return the name of the category. */
   const char* name() const noexcept override;
+  /** @return an error condition based on the given error code. */
   std::error_condition default_error_condition(int) const noexcept override;
+  /** @return true iff the error code matches the given condition code. */
   bool equivalent(const std::error_code&, int) const noexcept override;
+  /** @return a message for the given condition code. */
   std::string message(int) const override;
 };
 
