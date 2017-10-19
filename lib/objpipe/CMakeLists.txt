@@ -1,3 +1,4 @@
+  src/pipe.cc2
 project (monsoon_objpipe)
 
 include (CheckFunctionExists)
@@ -14,5 +15,4 @@ set_property (TARGET monsoon_objpipe PROPERTY SOVERSION "0.0")
 install (TARGETS monsoon_objpipe DESTINATION lib)
 install (FILES
   include/monsoon/objpipe/queue_export_.h
-  include/monsoon/objpipe/pipe.h
   DESTINATION include/monsoon/objpipe)
