@@ -91,3 +91,6 @@ add_subdirectory (expr)
 if (BUILD_EXAMPLES)
   add_subdirectory (examples)
 endif()
+
+add_subdirectory (doc)
+message("DEBUG: DOC_DIRS=${DOC_DIRS}")

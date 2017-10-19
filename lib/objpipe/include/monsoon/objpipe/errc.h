@@ -1,7 +1,9 @@
 #ifndef MONSOON_OBJPIPE_ERRC_H
 #define MONSOON_OBJPIPE_ERRC_H
 
-#include <monsoon/objpipe/pipe_export_.h>
+///@file monsoon/objpipe/errc.h <monsoon/objpipe/errc.h>
+
+#include <monsoon/objpipe/objpipe_export_.h>
 #include <string>
 #include <system_error>
 #include <type_traits>
@@ -10,6 +12,9 @@ namespace monsoon {
 namespace objpipe {
 
 
+/**
+ * Object pipe error conditions.
+ */
 enum class objpipe_errc {
   success=0,
   closed
@@ -33,7 +38,10 @@ namespace monsoon {
 namespace objpipe {
 
 
-class monsoon_pipe_export_ objpipe_category_t
+/**
+ * Specialization of error_category, for objpipe errors.
+ */
+class monsoon_objpipe_export_ objpipe_category_t
 : public std::error_category
 {
  public:
@@ -43,11 +51,18 @@ class monsoon_pipe_export_ objpipe_category_t
   std::string message(int) const override;
 };
 
-monsoon_pipe_export_
+/**
+ * @return the object pipe error category.
+ */
+monsoon_objpipe_export_
 const objpipe_category_t& objpipe_category();
 
-monsoon_pipe_export_
-std::error_condition make_error_condition(objpipe_errc);
+/**
+ * Create a objpipe_category error condition.
+ * @param e The error code for which to create an error condition.
+ */
+monsoon_objpipe_export_
+std::error_condition make_error_condition(objpipe_errc e);
 
 
 }} /* namespace monsoon::objpipe */
