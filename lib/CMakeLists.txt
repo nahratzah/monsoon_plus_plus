@@ -15,4 +15,4 @@ install (FILES
   DESTINATION include/monsoon)
 
 add_subdirectory (misc)
-add_subdirectory (pipe)
+add_subdirectory (objpipe)
