@@ -2,15 +2,24 @@
 #define MONSOON_OBJPIPE_DETAIL_FILTER_OPERATION_H
 
 #include <monsoon/objpipe/detail/reader_intf.h>
+#include <functional>
 
 namespace monsoon {
 namespace objpipe {
 namespace detail {
 
 
+/**
+ * A filter operation.
+ *
+ * The reader interface will only emit objects matching the predicate.
+ *
+ * @tparam T The type of objects this operation filters on.
+ * @tparam Pred An invokable predicate.
+ */
 template<typename T, typename Pred>
-class filter_operation
-: public continuation_intf<T>,
+class filter_operation final
+: public continuation_intf,
   public reader_intf<T>
 {
  public:
@@ -31,6 +40,7 @@ class filter_operation
     src_(std::move(src))
   {
     assert(src_ != nullptr);
+    src_->add_continuation(writer_release::link(this));
   }
 
   ///@copydoc reader_intf<T>::is_pullable()
@@ -96,7 +106,26 @@ class filter_operation
     return src_->pop_front();
   }
 
+  ///@copydoc reader_intf<T>::add_continuation(std::unique_ptr<continuation_intf,writer_release>&&)
+  void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) {
+    if (src_) {
+      src_->erase_continuation(this);
+      src_->add_continuation(std::move(c));
+    }
+  }
+
+  ///@copydoc reader_intf<T>::erase_continuation(continuation_intf*)
+  void erase_continuation(continuation_intf* c) {
+    if (src_)
+      src_->erase_continuation(c);
+  }
+
  private:
+  ///copydoc base_objpipe::on_last_reader_gone_()
+  void on_last_reader_gone_() noexcept override {
+    src_.reset();
+  }
+
   bool test_predicate_(objpipe_errc& e) const {
     std::variant<pointer, objpipe_errc> v = src_->front();
     if (v.index() == 1u) e = std::get<1>(v);

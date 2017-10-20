@@ -15,12 +15,34 @@ namespace objpipe {
 namespace detail {
 
 
-template<typename T> class reader_intf;
-template<typename T> class continuation_intf;
+/**
+ * A continuation is an alternative to a reader.
+ *
+ * When an object pipe has a continuation, it will keep it live
+ * until its writer side is closed.
+ * @headerfile "" <monsoon/objpipe/detail/reader_intf.h>
+ */
+class monsoon_objpipe_export_ continuation_intf
+: public virtual base_objpipe
+{
+ public:
+  ~continuation_intf() noexcept;
+
+ private:
+  /**
+   * copydoc base_objpipe::on_last_writer_gone_()
+   *  The default for a continuation is to not care about writers,
+   *  as all reading is done using forwarding to the source object pipe.
+   */
+  void on_last_writer_gone_() noexcept override;
+  ///copydoc base_objpipe::on_last_writer_gone_()
+  virtual void on_last_reader_gone_() noexcept override = 0;
+};
 
 
 /**
  * This class is the interface type for the reader side of object pipe implementations.
+ * @tparam T The type of objects emitted by the object pipe.
  * @headerfile "" <monsoon/objpipe/detail/reader_intf.h>
  */
 template<typename T>
@@ -86,13 +108,22 @@ class reader_intf
    * @return a value indicating success or failure.
    */
   virtual auto pop_front() -> objpipe_errc = 0;
-};
 
-template<typename T>
-class continuation_intf
-: public virtual base_objpipe
-{
- public:
+  /**
+   * Add a continuation.
+   *
+   * @note If the object pipe has no writer, this may be a noop.
+   * @param c The continuation that is to be connected.
+   */
+  virtual void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) = 0;
+
+  /**
+   * Remove a continuation.
+   *
+   * @note If the object pipe has no writer, this may be a noop.
+   * @param c The continuation that is to be disconnected.
+   */
+  virtual void erase_continuation(continuation_intf* c) = 0;
 };
 
 

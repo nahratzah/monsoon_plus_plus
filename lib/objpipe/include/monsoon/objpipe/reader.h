@@ -14,6 +14,8 @@ namespace objpipe {
 
 /**
  * An object pipe reader.
+ *
+ * @tparam T The type of objects emitted by the object pipe.
  * @headerfile "" <monsoon/objpipe/reader.h>
  */
 template<typename T>
