@@ -2,6 +2,7 @@
 #include <monsoon/history/dir/tsdata.h>
 #include <monsoon/history/collect_history.h>
 #include <monsoon/interpolate.h>
+#include <monsoon/objpipe/callback.h>
 #include <stdexcept>
 #include <utility>
 #include <cassert>
@@ -22,8 +23,6 @@
 #include <iterator>
 #include "v2/tsdata.h"
 #include "emit_visitor.h"
-#include <boost/coroutine2/coroutine.hpp>
-#include <boost/coroutine2/protected_fixedsize_stack.hpp>
 
 namespace monsoon {
 namespace history {
@@ -224,15 +223,16 @@ auto dirhistory::tagged_metrics(const monsoon::time_range& tr) const
   return result;
 }
 
-void dirhistory::emit(
-    acceptor<group_name, metric_name, metric_value>& accept_fn,
+auto dirhistory::emit(
     time_range tr,
     std::function<bool(const group_name&)> group_filter,
     std::function<bool(const group_name&, const metric_name&)> metric_filter,
-    time_point::duration slack) const {
+    time_point::duration slack) const -> objpipe::reader<emit_type> {
+  using namespace std::placeholders;
+
   auto visitor = emit_visitor<tsdata::emit_map>(
       files_, tr, std::move(slack),
-      [&group_filter, &metric_filter](const tsdata& tsd, const auto& cb,
+      [group_filter, metric_filter](const tsdata& tsd, const auto& cb,
           const auto& tr_begin, const auto& tr_end) {
         tsd.emit(cb, tr_begin, tr_end, group_filter, metric_filter);
       },
@@ -240,31 +240,30 @@ void dirhistory::emit(
       &dirhistory_emit_reducer,
       &dirhistory_emit_prune_before_,
       &dirhistory_emit_prune_after_);
-  visitor(
-      [&accept_fn](time_point tp, tsdata::emit_map&& map) {
-        acceptor<group_name, metric_name, metric_value>::vector_type v;
-        std::transform(
-            std::make_move_iterator(map.begin()),
-            std::make_move_iterator(map.end()),
-            std::back_inserter(v),
-            [](tsdata::emit_map::value_type&& entry) {
-              return std::tuple_cat(
-                  std::move(entry.first),
-                  std::forward_as_tuple(std::move(entry.second)));
-            });
-        accept_fn.accept(tp, std::move(v));
-      });
+
+  return objpipe::new_callback<emit_type>(
+      std::bind(
+          [](emit_visitor<tsdata::emit_map>& visitor, auto& cb) {
+            visitor(
+                [&cb](time_point tp, tsdata::emit_map&& map) {
+                  cb(emit_type(std::in_place_index<1>, std::move(tp), std::move(map)));
+                  std::invoke(cb, emit_type(std::in_place_index<1>, std::move(tp), std::move(map)));
+                });
+          },
+          std::move(visitor),
+          _1));
 }
 
-void dirhistory::emit(
-    acceptor<group_name, metric_name, metric_value>& accept_fn,
+auto dirhistory::emit(
     time_range tr,
     std::function<bool(const simple_group&)> group_filter,
     std::function<bool(const simple_group&, const metric_name&)> metric_filter,
-    time_point::duration slack) const {
+    time_point::duration slack) const -> objpipe::reader<emit_type> {
+  using namespace std::placeholders;
+
   auto visitor = emit_visitor<tsdata::emit_map>(
       files_, tr, std::move(slack),
-      [&group_filter, &metric_filter](const tsdata& tsd, const auto& cb,
+      [group_filter, metric_filter](const tsdata& tsd, const auto& cb,
           const auto& tr_begin, const auto& tr_end) {
         tsd.emit(cb, tr_begin, tr_end, group_filter, metric_filter);
       },
@@ -272,40 +271,36 @@ void dirhistory::emit(
       &dirhistory_emit_reducer,
       &dirhistory_emit_prune_before_,
       &dirhistory_emit_prune_after_);
-  visitor(
-      [&accept_fn](time_point tp, tsdata::emit_map&& map) {
-        acceptor<group_name, metric_name, metric_value>::vector_type v;
-        std::transform(
-            std::make_move_iterator(map.begin()),
-            std::make_move_iterator(map.end()),
-            std::back_inserter(v),
-            [](tsdata::emit_map::value_type&& entry) {
-              return std::tuple_cat(
-                  std::move(entry.first),
-                  std::forward_as_tuple(std::move(entry.second)));
-            });
-        accept_fn.accept(tp, std::move(v));
-      });
+
+  return objpipe::new_callback<emit_type>(
+      std::bind(
+          [](emit_visitor<tsdata::emit_map>& visitor, auto& cb) {
+            visitor(
+                [&cb](time_point tp, tsdata::emit_map&& map) {
+                  std::invoke(cb, std::forward_as_tuple(tp, std::move(map)));
+                });
+          },
+          std::move(visitor),
+          _1));
 }
 
-void dirhistory::emit_time(
-    std::function<void(time_point)> accept_fn,
+auto dirhistory::emit_time(
     time_range tr,
-    time_point::duration slack) const {
-  auto visitor = emit_visitor<>(
-      files_, tr, std::move(slack),
-      [](const tsdata& tsd, const auto& cb, const auto& tr_begin, const auto& tr_end) {
-        tsd.emit_time(cb, tr_begin, tr_end);
-      },
-      [](auto&, auto&&) {},
-      [](time_point at, const auto&) { return at; },
-      [](emit_visitor<>::pruning_vector& v) {
-        if (!v.empty()) v.erase(v.begin(), std::prev(v.end()));
-      },
-      [](emit_visitor<>::pruning_vector& v) {
-        if (!v.empty()) v.erase(std::next(v.begin()), v.end());
-      });
-  visitor(accept_fn);
+    time_point::duration slack) const -> objpipe::reader<time_point> {
+  return objpipe::new_callback<time_point>(
+      emit_visitor<>(
+          files_, tr, std::move(slack),
+          [](const tsdata& tsd, const auto& cb, const auto& tr_begin, const auto& tr_end) {
+            tsd.emit_time(cb, tr_begin, tr_end);
+          },
+          [](auto&, auto&&) {},
+          [](time_point at, const auto&) { return at; },
+          [](emit_visitor<>::pruning_vector& v) {
+            if (!v.empty()) v.erase(v.begin(), std::prev(v.end()));
+          },
+          [](emit_visitor<>::pruning_vector& v) {
+            if (!v.empty()) v.erase(std::next(v.begin()), v.end());
+          }));
 }
 
 void dirhistory::maybe_start_new_file_(time_point tp) {

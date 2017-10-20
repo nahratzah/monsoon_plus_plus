@@ -6,7 +6,6 @@
 #include <monsoon/objpipe/detail/base_objpipe.h>
 #include <monsoon/objpipe/detail/callbacked.h>
 #include <monsoon/objpipe/reader.h>
-#include <monsoon/objpipe/writer.h>
 
 namespace monsoon {
 namespace objpipe {
@@ -23,8 +22,8 @@ namespace objpipe {
  */
 template<typename T, typename Fn>
 auto new_callback(Fn&& fn) -> reader<T> {
-  detail::callbacked* ptr = new detail::callbacked();
-  return reader<T>(reader_release::link(ptr)); // Never throws
+  detail::callbacked<T>* ptr = new detail::callbacked<T>(std::forward<Fn>(fn));
+  return reader<T>(detail::reader_release::link(ptr)); // Never throws
 }
 
 

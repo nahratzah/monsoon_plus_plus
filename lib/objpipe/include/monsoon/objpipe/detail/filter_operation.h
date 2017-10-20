@@ -104,7 +104,7 @@ class filter_operation final
   auto pop_front() -> objpipe_errc override {
     while (!test_predicate_(src_->front())) {
       objpipe_errc e = src_->pop_front();
-      if (e) return e;
+      if (e != objpipe_errc::success) return e;
     }
     return src_->pop_front();
   }
@@ -135,7 +135,7 @@ class filter_operation final
     return v.index() == 0u && test_predicate_(std::get<0>(v));
   }
 
-  bool test_predicate_(std::add_reference_t<std::add_const_t<value_type>> v)
+  bool test_predicate_(std::add_lvalue_reference_t<std::add_const_t<value_type>> v)
       const {
     return std::invoke(pred_, v);
   }

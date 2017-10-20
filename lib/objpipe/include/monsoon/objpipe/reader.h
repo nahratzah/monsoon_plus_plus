@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/reader_intf.h>
+#include <monsoon/objpipe/detail/filter_operation.h>
 
 namespace monsoon {
 namespace objpipe {
@@ -78,14 +79,10 @@ class reader {
    */
   auto front() const -> reference {
     assert(ptr_ != nullptr);
-    return std::visit(
-        [](auto&& v) -> reference {
-          if constexpr(std::is_same_t<ojbpipe_errc, std::decay_t<decltype(v)>>)
-            throw std::system_error(static_cast<int>(v), objpipe_category());
-          else
-            return *v;
-        },
-        ptr_->front());
+    auto f = ptr_->front();
+    if (f.index() == 1u)
+      throw std::system_error(static_cast<int>(std::get<1>(f)), objpipe_category());
+    return *std::get<0u>(f);
   }
 
   /**
@@ -111,7 +108,7 @@ class reader {
    */
   template<typename Pred>
   auto filter(Pred&& pred) && -> reader<T> {
-    using filter_type = filter_operation<T, std::decay_t<Pred>>;
+    using filter_type = detail::filter_operation<T, std::decay_t<Pred>>;
 
     auto ptr = link(new filter_type(std::move(ptr_), std::forward<Pred>(pred)));
     return reader<T>(std::move(ptr));
@@ -130,6 +127,11 @@ class reader {
 template<typename T>
 class shared_reader {
  public:
+  /** @brief The type of objects in this object pipe. */
+  using value_type = T;
+  /** @brief Reference type for objects in this object pipe. */
+  using reference = std::add_lvalue_reference_t<value_type>;
+
   /**
    * @brief Pull an object from the objpipe.
    *

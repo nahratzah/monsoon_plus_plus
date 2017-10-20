@@ -3,9 +3,10 @@
 
 ///@file monsoon/objpipe/detail/callbacked.h <monsoon/objpipe/detail/callbacked.h>
 
+#include <monsoon/objpipe/detail/reader_intf.h>
 #include <functional>
-#include <boost/coroutines2/protected_fixedsize_stack.hpp>
-#include <boost/coroutines2/coroutine.hpp>
+#include <boost/coroutine2/protected_fixedsize_stack.hpp>
+#include <boost/coroutine2/coroutine.hpp>
 
 namespace monsoon {
 namespace objpipe {
@@ -35,9 +36,9 @@ class callbacked final
 
  public:
   ///@copydoc reader_intf<T>::value_type
-  using value_type = T;
+  using value_type = typename reader_intf<T>::value_type;
   ///@copydoc reader_intf<T>::pointer
-  using pointer = std::add_pointer<value_type>;
+  using pointer = typename reader_intf<T>::pointer;
 
  private:
   using co_type = boost::coroutines2::coroutine<pointer>;
@@ -45,18 +46,13 @@ class callbacked final
  public:
   template<typename Fn>
   explicit callbacked(Fn&& fn)
-  : co_fn_(
-      std::bind(
-          [](auto fn, co_type::push_type& yield) {
-            std::invoke(
-                fn,
-                [&yield](auto&& v) {
-                  yield(&v);
-                });
-          },
-          std::forward<Fn>(fn),
-          std::placeholders::_1))
-  {}
+  : co_(
+      boost::coroutines2::protected_fixedsize_stack(),
+      fn_wrapper_<Fn>(std::forward<Fn>(fn)))
+  {
+    offered_ = co_.get();
+    assert(offered_ == nullptr);
+  }
 
   ///@copydoc reader_intf<T>::is_pullable()
   auto is_pullable() const noexcept -> bool override {
@@ -75,11 +71,11 @@ class callbacked final
   ///@copydoc reader_intf<T>::empty()
   auto empty() const noexcept -> bool override {
     ensure_populated_();
-    return ofered_ == nullptr;
+    return offered_ == nullptr;
   }
 
   ///@copydoc reader_intf<T>::pull(objpipe_errc&)
-  auto pull(objpipe_errc& e) -> std::optional<value_type> {
+  auto pull(objpipe_errc& e) -> std::optional<value_type> override {
     ensure_populated_();
     if (offered_ == nullptr) {
       e = objpipe_errc::closed;
@@ -89,23 +85,25 @@ class callbacked final
   }
 
   ///@copydoc reader_intf<T>::pull()
-  auto pull() -> value_type {
+  auto pull() -> value_type override {
     ensure_populated_();
     if (offered_ == nullptr)
-      throw std::system_error(objpipe_errc::closed, objpipe_category());
+      throw std::system_error(static_cast<int>(objpipe_errc::closed), objpipe_category());
     return std::move(*std::exchange(offered_, nullptr));
   }
 
   ///@copydoc reader_intf<T>::front()
-  auto front() const -> std::variant<pointer, objpipe_errc> {
+  auto front() const -> std::variant<pointer, objpipe_errc> override {
+    using result_type = std::variant<pointer, objpipe_errc>;
+
     ensure_populated_();
     if (offered_ == nullptr)
-      return { std::in_place_index<1>, objpipe_errc::closed };
-    return { std::in_place_index<0>, offered_ };
+      return result_type(std::in_place_index<1>, objpipe_errc::closed);
+    return result_type(std::in_place_index<0>, offered_);
   }
 
   ///@copydoc reader_intf<T>::pop_front()
-  auto pop_front() -> objpipe_errc {
+  auto pop_front() -> objpipe_errc override {
     ensure_populated_();
     if (offered_ == nullptr) return objpipe_errc::closed;
     offered_ = nullptr;
@@ -116,12 +114,12 @@ class callbacked final
    * @copydoc reader_intf<T>::add_continuation(std::unique_ptr<continuation_intf,writer_release>&&)
    * @note The callback objpipe holds no continuations, as it cannot transition from \ref empty() to !\ref empty().
    */
-  void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) {
+  void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) override {
     /* SKIP */
   }
 
   ///@copydoc reader_intf<T>::add_continuation(std::unique_ptr<continuation_intf,writer_release>&&)
-  void erase_continuation(continuation_intf* c) {
+  void erase_continuation(continuation_intf* c) override {
     /* SKIP */
   }
 
@@ -134,6 +132,33 @@ class callbacked final
     assert(false); // Should never be called.
   }
 
+  struct yield_wrapper_ {
+    typename co_type::push_type& yield;
+
+    yield_wrapper_(typename co_type::push_type& yield) : yield(yield) {}
+
+    void operator()(value_type&& v) const {
+      yield(&v);
+    }
+
+    void operator()(const value_type& v) const {
+      (*this)(value_type(v));
+    }
+  };
+
+  template<typename Fn>
+  struct fn_wrapper_ {
+    std::decay_t<Fn> fn_;
+
+    fn_wrapper_(Fn&& fn) : fn_(std::forward<Fn>(fn)) {}
+
+    void operator()(typename co_type::push_type& yield) {
+      yield(nullptr); // Delay entering co routine.
+      yield_wrapper_ wrapper = yield_wrapper_(yield);
+      fn_(wrapper);
+    }
+  };
+
   /**
    * @brief Ensure next value of offered_ is available.
    * @note This lazily initializes the coroutine the first time it is called.
@@ -141,23 +166,15 @@ class callbacked final
   void ensure_populated_() const {
     if (offered_ != nullptr) return;
 
-    bool need_advance = true;
-    std::call_once(
-        co_init_once_,
-        [this, &need_advance]() {
-          need_advance = false;
-          co_ = co_type::pull_type(
-              boost::coroutines2::protected_fixedsize_stack(),
-              std::move(co_fn_));
-        });
-    if (need_advance && co_) co_();
-    if (co_) offered_ = co_.get();
+    if (co_) co_();
+    if (co_) {
+      offered_ = co_.get();
+      assert(offered_ != nullptr);
+    }
   }
 
   mutable pointer offered_ = nullptr;
-  mutable co_type::pull_type co_;
-  mutable std::function<void(co_type::push_type&)> co_fn_;
-  mutable std::once_flag co_init_once_;
+  mutable typename co_type::pull_type co_;
 };
 
 

@@ -5,12 +5,11 @@ namespace monsoon {
 
 metric_source::~metric_source() noexcept {}
 
-void metric_source::emit(
-    acceptor<group_name, metric_name, metric_value>& accept_fn,
+auto metric_source::emit(
     time_range tr,
     std::function<bool(const simple_group&)> group_filter,
     std::function<bool(const simple_group&, const metric_name&)> metric_filter,
-    time_point::duration slack) const {
+    time_point::duration slack) const -> objpipe::reader<emit_type> {
   std::function<bool(const group_name&)> wrapped_group_filter =
       [&group_filter](const group_name& gname) {
         return group_filter(gname.get_path());
@@ -21,7 +20,6 @@ void metric_source::emit(
       };
 
   return emit(
-      accept_fn,
       std::move(tr),
       std::move(wrapped_group_filter),
       std::move(wrapped_metric_filter),
