@@ -59,6 +59,7 @@ class writer_intf
   /**
    * Push an object onto the pipe.
    * @param[in] v the value that is to be pushed.
+   * @throw std::system_error if the push operation fails.
    */
   virtual void push(rvalue_reference v) {
     objpipe_errc e;
@@ -73,6 +74,7 @@ class writer_intf
    *   the value that is to be pushed.
    *   @note A copy of v will be made.
    * @endparblock
+   * @throw std::system_error if the push operation fails.
    */
   virtual void push(const_reference v) {
     objpipe_errc e;

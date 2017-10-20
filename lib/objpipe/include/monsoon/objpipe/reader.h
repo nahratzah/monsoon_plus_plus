@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <memory>
+#include <type_traits>
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/reader_intf.h>
 
@@ -13,7 +14,7 @@ namespace objpipe {
 
 
 /**
- * An object pipe reader.
+ * @brief An object pipe reader.
  *
  * @tparam T The type of objects emitted by the object pipe.
  * @headerfile "" <monsoon/objpipe/reader.h>
@@ -21,18 +22,17 @@ namespace objpipe {
 template<typename T>
 class reader {
  public:
-  /**
-   * The type of objects in this object pipe.
-   */
+  /** @brief The type of objects in this object pipe. */
   using value_type = T;
-  /**
-   * Reference type for objects in this object pipe.
-   */
+  /** @brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
+  explicit reader(std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr)
+  : ptr_(std::move(ptr))
+  {}
+
   /**
-   * Test if the object pipe has data available.
-   *
+   * @brief Test if the object pipe has data available.
    * @return true iff the objpipe has data available.
    */
   auto empty() const -> bool {
@@ -41,7 +41,7 @@ class reader {
   }
 
   /**
-   * Pull an object from the objpipe.
+   * @brief Pull an object from the objpipe.
    *
    * @param[out] e An error condition used to communicate success/error reasons.
    * @return an initialized optional on success, empty optional on failure.
@@ -52,7 +52,7 @@ class reader {
   }
 
   /**
-   * Pull an object from the objpipe.
+   * @brief Pull an object from the objpipe.
    *
    * @throw std::system_error if the pipe is empty and closed by the writer.
    */
@@ -62,7 +62,7 @@ class reader {
   }
 
   /**
-   * Wait for the next element to become available.
+   * @brief Wait for the next element to become available.
    *
    * @return an enum indicating success or failure.
    */
@@ -72,7 +72,7 @@ class reader {
   }
 
   /**
-   * Yields a reference to the next element in the object pipe.
+   * @brief Yields a reference to the next element in the object pipe.
    *
    * @return a reference to the next element in the pipe.
    */
@@ -89,7 +89,7 @@ class reader {
   }
 
   /**
-   * Remove the next element from the object pipe.
+   * @brief Remove the next element from the object pipe.
    */
   void pop_front() {
     assert(ptr_ != nullptr);
@@ -104,7 +104,7 @@ class reader {
   }
 
   /**
-   * Apply a filter on the read elements.
+   * @brief Apply a filter on the read elements.
    *
    * @param[in] pred A predicate.
    * @return A reader that only yields objects for which the predicate evaluates to true.
@@ -122,7 +122,7 @@ class reader {
 };
 
 /**
- * A shared object pipe reader.
+ * @brief A shared object pipe reader.
  *
  * Multiple shared_reader instances may share the same object pipe.
  * An object pulled by any reader will not be read by any other reader.
@@ -131,7 +131,7 @@ template<typename T>
 class shared_reader {
  public:
   /**
-   * Pull an object from the objpipe.
+   * @brief Pull an object from the objpipe.
    *
    * @param e An error condition used to communicate success/error reasons.
    * @return an initialized optional on success, empty optional on failure.
@@ -142,7 +142,7 @@ class shared_reader {
   }
 
   /**
-   * Pull an object from the objpipe.
+   * @brief Pull an object from the objpipe.
    *
    * @throw std::system_error if the pipe is empty and closed by the writer.
    */

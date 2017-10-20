@@ -7,6 +7,7 @@
 #include <monsoon/objpipe/detail/writer_intf.h>
 #include <monsoon/objpipe/errc.h>
 #include <mutex>
+#include <condition_variable>
 
 namespace monsoon {
 namespace objpipe {
@@ -14,7 +15,7 @@ namespace detail {
 
 
 /**
- * An threadsafe, interlocked objpipe.
+ * @brief A threadsafe, interlocked objpipe.
  *
  * An interlock objpipe is one where readers and writers synchronize the
  * hand-off of objects. Due to the synchronization, they can often eliminate
@@ -25,6 +26,7 @@ namespace detail {
  * The type of objects in the objpipe.
  * @note The type may not be a reference, nor may it be const.
  * @endparblock
+ * @sa @ref monsoon::objpipe::new_interlock()
  * @headerfile monsoon/objpipe/detail/interlocked.h <monsoon/objpipe/detail/interlocked.h>
  */
 template<typename T>
