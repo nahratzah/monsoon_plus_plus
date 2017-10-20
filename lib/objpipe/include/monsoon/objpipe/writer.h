@@ -30,7 +30,7 @@ class writer
   /** @brief const reference type for objects in this object pipe. */
   using rvalue_reference = std::add_lvalue_reference_t<std::add_const_t<value_type>>;
 
-  explicit writer(std::unique_ptr<detail::writer_intf<T>, detail::writer_release> ptr)
+  explicit writer(std::unique_ptr<detail::writer_intf<T>, detail::writer_release> ptr) noexcept
   : ptr_(std::move(ptr))
   {}
 

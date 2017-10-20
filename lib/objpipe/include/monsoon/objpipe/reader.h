@@ -27,7 +27,7 @@ class reader {
   /** @brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
-  explicit reader(std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr)
+  explicit reader(std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr) noexcept
   : ptr_(std::move(ptr))
   {}
 

@@ -21,8 +21,7 @@ namespace detail {
  * hand-off of objects. Due to the synchronization, they can often eliminate
  * a move/copy operation, at the cost of additional synchronization.
  *
- * @tparam T
- * @parblock
+ * @tparam T @parblock
  * The type of objects in the objpipe.
  * @note The type may not be a reference, nor may it be const.
  * @endparblock
