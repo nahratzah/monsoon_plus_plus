@@ -1,6 +1,8 @@
 #ifndef MONSOON_OBJPIPE_DETAIL_FILTER_OPERATION_H
 #define MONSOON_OBJPIPE_DETAIL_FILTER_OPERATION_H
 
+///@file monsoon/objpipe/detail/filter_operation.h <monsoon/objpipe/detail/filter_operation.h>
+
 #include <monsoon/objpipe/detail/reader_intf.h>
 #include <functional>
 
@@ -16,6 +18,7 @@ namespace detail {
  *
  * @tparam T The type of objects this operation filters on.
  * @tparam Pred An invokable predicate.
+ * @headerfile monsoon/objpipe/detail/filter_operation.h <monsoon/objpipe/detail/filter_operation.h>
  */
 template<typename T, typename Pred>
 class filter_operation final

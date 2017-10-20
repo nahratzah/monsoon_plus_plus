@@ -25,6 +25,7 @@ namespace detail {
  * The type of objects in the objpipe.
  * @note The type may not be a reference, nor may it be const.
  * @endparblock
+ * @headerfile monsoon/objpipe/detail/interlocked.h <monsoon/objpipe/detail/interlocked.h>
  */
 template<typename T>
 class interlocked final
