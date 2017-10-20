@@ -35,6 +35,17 @@ class monsoon_objpipe_export_ base_objpipe {
   /** Object pipes are destructible. */
   virtual ~base_objpipe() noexcept;
 
+ protected:
+  /** @return True iff there is a reader connected. */
+  bool has_reader() const noexcept {
+    return reader_refcnt_.load(std::memory_order_acquire) > 0u;
+  }
+
+  /** @return True iff there is a writer connected. */
+  bool has_writer() const noexcept {
+    return writer_refcnt_.load(std::memory_order_acquire) > 0u;
+  }
+
  private:
   /** Function invoked when the last reader closes. */
   virtual void on_last_reader_gone_() noexcept = 0;

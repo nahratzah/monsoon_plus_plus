@@ -26,7 +26,7 @@ class monsoon_objpipe_export_ continuation_intf
 : public virtual base_objpipe
 {
  public:
-  ~continuation_intf() noexcept;
+  ~continuation_intf() noexcept override;
 
  private:
   /**

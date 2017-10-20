@@ -1,0 +1,214 @@
+#ifndef MONSOON_OBJPIPE_DETAIL_INTERLOCKED_H
+#define MONSOON_OBJPIPE_DETAIL_INTERLOCKED_H
+
+///@file monsoon/objpipe/detail/interlocked.h <monsoon/objpipe/detail/interlocked.h>
+
+#include <monsoon/objpipe/detail/reader_intf.h>
+#include <monsoon/objpipe/detail/writer_intf.h>
+#include <monsoon/objpipe/errc.h>
+#include <mutex>
+
+namespace monsoon {
+namespace objpipe {
+namespace detail {
+
+
+/**
+ * An threadsafe, interlocked objpipe.
+ *
+ * An interlock objpipe is one where readers and writers synchronize the
+ * hand-off of objects. Due to the synchronization, they can often eliminate
+ * a move/copy operation, at the cost of additional synchronization.
+ *
+ * @tparam T
+ * @parblock
+ * The type of objects in the objpipe.
+ * @note The type may not be a reference, nor may it be const.
+ * @endparblock
+ */
+template<typename T>
+class interlocked final
+: public reader_intf<T>,
+  public writer_intf<T>
+{
+  static_assert(!std::is_reference_v<T>,
+      "Interlocked objpipe cannot deal with references.");
+  static_assert(!std::is_const_v<T>,
+      "Interlocked objpipe cannot deal with const objects.");
+
+ public:
+  ///@copydoc reader_intf<T>::value_type
+  using value_type = T;
+  ///@copydoc reader_intf<T>::pointer
+  using pointer = std::add_pointer_t<value_type>;
+  ///@copydoc writer_intf<T>::rvalue_reference
+  using rvalue_reference = std::add_rvalue_reference_t<value_type>;
+
+  ///@copydoc reader_intf<T>::is_pullable()
+  auto is_pullable() const noexcept -> bool override {
+    // offered_ can only be non-null if there is a writer.
+    return this->has_writer();
+  }
+
+  ///@copydoc writer_intf<T>::is_pushable()
+  auto is_pushable() const noexcept -> bool override {
+    return this->has_reader();
+  }
+
+  ///@copydoc writer_intf<T>::push(rvalue_reference, objpipe_errc&)
+  void push(rvalue_reference v, objpipe_errc& e) override {
+    e = objpipe_errc::success;
+
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    if (!has_writer()) {
+      e = objpipe_errc::closed;
+      return;
+    }
+    while (offered_ != nullptr) {
+      write_avail_.wait();
+      if (!has_writer()) {
+        e = objpipe_errc::closed;
+        return;
+      }
+    }
+
+    offered_ = &v;
+    read_avail_.notify_one();
+    do {
+      write_done_.wait(lck)
+    } while (offered_ == &v);
+  }
+
+  ///@copydoc reader_intf<T>::wait()
+  auto wait() const noexcept -> objpipe_errc {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    while (offered_ == nullptr) {
+      if (!this->has_writer()) return objpipe_errc::closed;
+      read_avail_.wait(lck);
+    }
+    return objpipe_errc::success;
+  }
+
+  ///@copydoc reader_intf<T>::empty()
+  auto empty() const noexcept -> bool {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    return offered_ == nullptr;
+  }
+
+  ///@copydoc reader_intf<T>::pull(objpipe_errc&)
+  auto pull(objpipe_errc& e) -> std::optional<value_type> {
+    e = objpipe_errc::success;
+
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    while (offered_ == nullptr) {
+      if (!this->has_writer()) {
+        e = objpipe_errc::closed;
+        return {};
+      }
+      read_avail_.wait(lck);
+    }
+
+    std::optional<value_type> result =
+        std::make_optional<value_type>(std::move_if_noexcept(*std::exchange(offered_, nullptr)));
+    lck.unlock();
+    write_done_.notify_one();
+    write_avail_.notify_one();
+    return result;
+  }
+
+  ///@copydoc reader_intf<T>::pull()
+  auto pull() -> value_type {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    while (offered_ == nullptr) {
+      if (!this->has_writer())
+        throw std::system_error(objpipe_errc::closed, objpipe_category());
+      read_avail_.wait(lck);
+    }
+
+    value_type result = std::move_if_noexcept(*std::exchange(offered_, nullptr));
+    lck.unlock();
+    write_done_.notify_one();
+    write_avail_.notify_one();
+    return result;
+  }
+
+  ///@copydoc reader_intf<T>::front()
+  auto front() const -> std::variant<pointer, objpipe_errc> {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    while (offered_ == nullptr) {
+      if (!this->has_writer())
+        return { std::in_place_index<1>, objpipe_errc::closed };
+      read_avail_.wait(lck);
+    }
+
+    return { std::in_place_index<0>, offered_ };
+  }
+
+  ///@copydoc reader_intf<T>::pop_front()
+  auto pop_front() -> objpipe_errc {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    while (offered_ == nullptr) {
+      if (!this->has_writer()) return objpipe_errc::closed;
+      read_avail_.wait(lck);
+    }
+
+    offered_ = nullptr;
+    lck.unlock();
+    write_done_.notify_one();
+    write_avail_.notify_one();
+    return objpipe_errc::success;
+  }
+
+  ///@copydoc reader_intf<T>::add_continuation(std::unique_ptr<continuation_intf,writer_release>&&)
+  void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) {
+    std::lock_guard<std::mutex> lck{ mtx_ };
+    if (has_writer()) swap(continuation_, c);
+  }
+
+  ///@copydoc reader_intf<T>::erase_continuation(continuation_intf*)
+  void erase_continuation(continuation_intf* c) {
+    std::lock_guard<std::mutex> lck{ mtx_ };
+    if (continuation_ == c) continuation_.reset(); // No destruction.
+  }
+
+ private:
+  /**
+   * When the last writer goes away:
+   * - release the continuation
+   *   (since interlocked is always empty if there are no writers)
+   * - unblock all readers
+   */
+  void on_last_writer_gone_() noexcept override {
+    std::unique_ptr<continuation_intf, writer_release> old_c;
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    old_c = std::move(continuation_);
+
+    lck.unlock(); // Unlock prior to destruction of old_c pointee.
+    // Implied: old_c::~unique_ptr();
+
+    // Signal any blocking readers.
+    read_avail_.notify_all();
+  }
+
+  /**
+   * When the last reader goes away:
+   * - unblock all writers
+   */
+  void on_last_reader_gone_() noexcept override {
+    // Signal any blocking writers.
+    write_done_.notify_all();
+    write_avail_.notify_all();
+  }
+
+  mutable std::mutex mtx_;
+  mutable std::condition_variable read_avail_,
+                                  write_avail_,
+                                  write_done_;
+  pointer offered_ = nullptr;
+  std::unique_ptr<continuation_intf, writer_release> continuation_;
+};
+
+
+}}} /* namespace monsoon::objpipe::detail */
+
+#endif /* MONSOON_OBJPIPE_DETAIL_INTERLOCKED_H */
