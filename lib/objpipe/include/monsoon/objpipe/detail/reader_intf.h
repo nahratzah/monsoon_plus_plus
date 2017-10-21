@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_DETAIL_READER_INTF_H
 #define MONSOON_OBJPIPE_DETAIL_READER_INTF_H
 
-///@file monsoon/objpipe/detail/reader_intf.h <monsoon/objpipe/detail/reader_intf.h>
+///\file
+///\ingroup objpipe_detail
 
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/base_objpipe.h>
@@ -16,11 +17,11 @@ namespace detail {
 
 
 /**
- * A continuation is an alternative to a reader.
+ * \brief A continuation is an alternative to a reader.
+ * \ingroup objpipe_detail
  *
  * When an object pipe has a continuation, it will keep it live
  * until its writer side is closed.
- * @headerfile "" <monsoon/objpipe/detail/reader_intf.h>
  */
 class monsoon_objpipe_export_ continuation_intf
 : public virtual base_objpipe
@@ -41,9 +42,9 @@ class monsoon_objpipe_export_ continuation_intf
 
 
 /**
- * This class is the interface type for the reader side of object pipe implementations.
- * @tparam T The type of objects emitted by the object pipe.
- * @headerfile "" <monsoon/objpipe/detail/reader_intf.h>
+ * \brief This class is the interface type for the reader side of object pipe implementations.
+ * \ingroup objpipe_detail
+ * \tparam T The type of objects emitted by the object pipe.
  */
 template<typename T>
 class reader_intf

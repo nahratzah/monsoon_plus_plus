@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_READER_H
 #define MONSOON_OBJPIPE_READER_H
 
-///@file monsoon/objpipe/reader.h <monsoon/objpipe/reader.h>
+///\file
+///\ingroup objpipe
 
 #include <cassert>
 #include <memory>
@@ -15,10 +16,10 @@ namespace objpipe {
 
 
 /**
- * @brief An object pipe reader.
+ * \brief An object pipe reader.
+ * \ingroup objpipe
  *
- * @tparam T The type of objects emitted by the object pipe.
- * @headerfile "" <monsoon/objpipe/reader.h>
+ * \tparam T The type of objects emitted by the object pipe.
  */
 template<typename T>
 class reader {
@@ -28,6 +29,11 @@ class reader {
   /** @brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
+  /**
+   * \brief Construct a reader using the given pointer.
+   *
+   * Mainly used internally to the objpipe library.
+   */
   explicit reader(std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr) noexcept
   : ptr_(std::move(ptr))
   {}
@@ -119,7 +125,8 @@ class reader {
 };
 
 /**
- * @brief A shared object pipe reader.
+ * \brief A shared object pipe reader.
+ * \ingroup objpipe
  *
  * Multiple shared_reader instances may share the same object pipe.
  * An object pulled by any reader will not be read by any other reader.

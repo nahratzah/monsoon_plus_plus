@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_INTERLOCK_H
 #define MONSOON_OBJPIPE_INTERLOCK_H
 
-///@file monsoon/objpipe/interlock.h <monsoon/objpipe/interlock.h>
+///\file
+///\ingroup objpipe
 
 #include <monsoon/objpipe/detail/base_objpipe.h>
 #include <monsoon/objpipe/detail/interlocked.h>
@@ -13,12 +14,13 @@ namespace objpipe {
 
 
 /**
- * @brief Create a new interlocked objpipe.
+ * \brief Create a new interlocked objpipe.
+ * \ingroup objpipe
  *
- * @tparam T The type of elements used in the interlocked pipe.
- * @return A tuple pair, with a reader and a writer, both
+ * \tparam T The type of elements used in the interlocked pipe.
+ * \return A tuple pair, with a reader and a writer, both
  * sharing the same interlocked object pipe.
- * @sa @ref monsoon::objpipe::detail::interlocked<T>
+ * \sa \ref monsoon::objpipe::detail::interlocked<T>
  */
 template<typename T>
 auto new_interlock() -> std::tuple<reader<T>, writer<T>> {

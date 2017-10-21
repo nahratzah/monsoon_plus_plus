@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_DETAIL_BASE_OBJPIPE_H
 #define MONSOON_OBJPIPE_DETAIL_BASE_OBJPIPE_H
 
-///@file monsoon/objpipe/detail/base_objpipe.h <monsoon/objpipe/detail/base_objpipe.h>
+///\file
+///\ingroup objpipe_detail
 
 #include <monsoon/objpipe/objpipe_export_.h>
 #include <atomic>
@@ -14,8 +15,8 @@ namespace detail {
 
 
 /**
- * Base class for all objpipe instances.
- * @headerfile "" <monsoon/objpipe/detail/base_objpipe.h>
+ * \brief Base class for all objpipe instances.
+ * \ingroup objpipe_detail
  */
 class monsoon_objpipe_export_ base_objpipe {
   friend struct reader_release;
@@ -58,8 +59,8 @@ class monsoon_objpipe_export_ base_objpipe {
 };
 
 /**
- * Functor used in combination with std::unique_ptr, to release reader references.
- * @headerfile "" <monsoon/objpipe/detail/base_objpipe.h>
+ * \brief Functor used in combination with std::unique_ptr, to release reader references.
+ * \ingroup objpipe_detail
  */
 struct monsoon_objpipe_export_ reader_release {
   /**
@@ -85,8 +86,8 @@ struct monsoon_objpipe_export_ reader_release {
 };
 
 /**
- * Functor used in combination with std::unique_ptr, to release reader references.
- * @headerfile "" <monsoon/objpipe/detail/base_objpipe.h>
+ * \brief Functor used in combination with std::unique_ptr, to release reader references.
+ * \ingroup objpipe_detail
  */
 struct monsoon_objpipe_export_ writer_release {
   /**

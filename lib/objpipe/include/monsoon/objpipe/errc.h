@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_ERRC_H
 #define MONSOON_OBJPIPE_ERRC_H
 
-///@file monsoon/objpipe/errc.h <monsoon/objpipe/errc.h>
+///\file
+///\ingroup objpipe objpipe_errors
 
 #include <monsoon/objpipe/objpipe_export_.h>
 #include <string>
@@ -13,12 +14,29 @@ namespace objpipe {
 
 
 /**
- * Object pipe error conditions.
+ * \brief Object pipe error conditions.
+ * \ingroup objpipe_errors
  */
 enum class objpipe_errc {
-  success=0,
-  closed
+  success=0, ///< Status code indicating successful completion.
+  closed ///< Status code indicating failure, due to a closed object pipe.
 };
+
+/**
+ * \brief Reference to the \ref objpipe_category.
+ * \ingroup objpipe_errors
+ * \return the object pipe error category.
+ */
+monsoon_objpipe_export_
+const std::error_category& objpipe_category();
+
+/**
+ * \brief Create an \ref objpipe_category error condition.
+ * \ingroup objpipe_errors
+ * \param e The error code for which to create an error condition.
+ */
+monsoon_objpipe_export_
+std::error_condition make_error_condition(objpipe_errc e);
 
 
 }} /* namespace monsoon::objpipe */
@@ -33,42 +51,5 @@ struct is_error_condition_enum<monsoon::objpipe::objpipe_errc>
 
 
 } /* namespace std */
-
-namespace monsoon {
-namespace objpipe {
-
-
-/**
- * Specialization of error_category, for objpipe errors.
- */
-class monsoon_objpipe_export_ objpipe_category_t
-: public std::error_category
-{
- public:
-  /** @return the name of the category. */
-  const char* name() const noexcept override;
-  /** @return an error condition based on the given error code. */
-  std::error_condition default_error_condition(int) const noexcept override;
-  /** @return true iff the error code matches the given condition code. */
-  bool equivalent(const std::error_code&, int) const noexcept override;
-  /** @return a message for the given condition code. */
-  std::string message(int) const override;
-};
-
-/**
- * @return the object pipe error category.
- */
-monsoon_objpipe_export_
-const objpipe_category_t& objpipe_category();
-
-/**
- * Create a objpipe_category error condition.
- * @param e The error code for which to create an error condition.
- */
-monsoon_objpipe_export_
-std::error_condition make_error_condition(objpipe_errc e);
-
-
-}} /* namespace monsoon::objpipe */
 
 #endif /* MONSOON_OBJPIPE_ERRC_H */

@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_DETAIL_CALLBACKED_H
 #define MONSOON_OBJPIPE_DETAIL_CALLBACKED_H
 
-///@file monsoon/objpipe/detail/callbacked.h <monsoon/objpipe/detail/callbacked.h>
+///\file
+///\ingroup objpipe_detail
 
 #include <monsoon/objpipe/detail/reader_intf.h>
 #include <functional>
@@ -14,16 +15,16 @@ namespace detail {
 
 
 /**
- * @brief A obj pipe that is supplied by a callback invocation.
+ * \brief A obj pipe that is supplied by a callback invocation.
+ * \ingroup objpipe_detail
  *
  * This implementation uses boost::coroutines2 to handle the callback.
  * The coroutine will not be constructed until the first call to a reader-based function.
- * @tparam T @parblock
+ * \tparam T \parblock
  *   The type of object emitted by the object pipe.
  *   @note The type may not be a reference, nor may it be const.
- * @endparblock
- * @sa @ref monsoon::objpipe::new_callback()
- * @headerfile monsoon/objpipe/detail/callbacked.h <monsoon/objpipe/detail/callbacked.h>
+ * \endparblock
+ * \sa \ref monsoon::objpipe::new_callback()
  */
 template<typename T>
 class callbacked final
@@ -44,6 +45,30 @@ class callbacked final
   using co_type = boost::coroutines2::coroutine<pointer>;
 
  public:
+  /**
+   * \brief Callback constructor.
+   *
+   * Constructs the callback objpipe, using the supplied functor \p fn
+   * as the function accepting the callback.
+   *
+   * The callback objpipe will use boost coroutines2 to invert the control
+   * flow, meaning that no additional thread will be constructed.
+   *
+   * @tparam Fn The type of the functor.
+   * @param fn \parblock
+   *   The functor that is to be invoked with a callback acceptor.
+   *
+   *   The functor will be invoked with an unspecified functor as callback.
+   *   The functor will contain be equivalent to:
+   *   \code{.cc}
+   *     struct {
+   *       void operator(T&&) const;
+   *       void operator(const T&) const;
+   *     };
+   *   \endcode
+   *   \note In the case the value passed to the functor is not an rvalue reference, a local copy will be created and pushed onto the object pipe.
+   * \endparblock
+   */
   template<typename Fn>
   explicit callbacked(Fn&& fn)
   : co_(

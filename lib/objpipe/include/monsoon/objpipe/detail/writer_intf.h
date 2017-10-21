@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_DETAIL_WRITER_INTF_H
 #define MONSOON_OBJPIPE_DETAIL_WRITER_INTF_H
 
-///@file monsoon/objpipe/detail/writer_intf.h <monsoon/objpipe/detail/writer_intf.h>
+///\file
+///\ingroup objpipe_detail
 
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/base_objpipe.h>
@@ -11,6 +12,11 @@ namespace objpipe {
 namespace detail {
 
 
+/**
+ * \brief This class is the interface to the writer side of the object pipe implementation.
+ * \ingroup objpipe_detail
+ * \tparam T The type accepted by the object pipe.
+ */
 template<typename T>
 class writer_intf
 : public virtual base_objpipe

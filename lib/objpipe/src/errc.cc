@@ -4,6 +4,17 @@ namespace monsoon {
 namespace objpipe {
 
 
+class monsoon_objpipe_local_ objpipe_category_t
+: public std::error_category
+{
+ public:
+  const char* name() const noexcept override;
+  std::error_condition default_error_condition(int) const noexcept override;
+  bool equivalent(const std::error_code&, int) const noexcept override;
+  std::string message(int) const override;
+};
+
+
 const char* objpipe_category_t::name() const noexcept {
   return "monsoon::objpipe";
 }
@@ -31,7 +42,7 @@ std::string objpipe_category_t::message(int e) const {
   }
 }
 
-const objpipe_category_t& objpipe_category() {
+const std::error_category& objpipe_category() {
   static const objpipe_category_t cat;
   return cat;
 }

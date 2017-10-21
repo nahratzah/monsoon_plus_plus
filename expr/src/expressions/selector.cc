@@ -242,8 +242,9 @@ class monsoon_expr_local_ selector_with_tags
 
   ~selector_with_tags() noexcept override;
 
-  void operator()(acceptor<emit_type>&, const metric_source&,
-      const time_range&, time_point::duration) const override;
+  auto operator()(const metric_source&, const time_range&,
+      time_point::duration) const
+      -> objpipe::reader<emit_type> override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -264,8 +265,9 @@ class monsoon_expr_local_ selector_without_tags
 
   ~selector_without_tags() noexcept override;
 
-  void operator()(acceptor<emit_type>&, const metric_source&,
-      const time_range&, time_point::duration) const override;
+  auto operator()(const metric_source&, const time_range&,
+      time_point::duration) const
+      -> objpipe::reader<emit_type> override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -379,22 +381,22 @@ std::string to_string(const tag_matcher& tm) {
 
 selector_with_tags::~selector_with_tags() noexcept {}
 
-void selector_with_tags::operator()(acceptor<emit_type>& accept,
+auto selector_with_tags::operator()(
     const metric_source& source,
     const time_range& tr,
-    time_point::duration slack) const {
-  selector_accept_wrapper wrapped_accept{ accept };
-
-  source.emit(
-      wrapped_accept, tr,
-      [this](const group_name& gname) {
-        return group_(gname.get_path()) && tags_(gname.get_tags());
-      },
-      [this](const group_name& gname, const metric_name& mname) {
-        // We already know gname matches.
-        return metric_(mname);
-      },
-      slack);
+    time_point::duration slack) const -> objpipe::reader<emit_type> {
+  source
+      .emit(
+          tr,
+          [this](const group_name& gname) {
+            return group_(gname.get_path()) && tags_(gname.get_tags());
+          },
+          [this](const group_name& gname, const metric_name& mname) {
+            // We already know gname matches.
+            return metric_(mname);
+          },
+          slack)
+      .map(selector_accept_wrapper());
 }
 
 void selector_with_tags::do_ostream(std::ostream& out) const {
@@ -404,22 +406,22 @@ void selector_with_tags::do_ostream(std::ostream& out) const {
 
 selector_without_tags::~selector_without_tags() noexcept {}
 
-void selector_without_tags::operator()(acceptor<emit_type>& accept,
+auto selector_without_tags::operator()(acceptor<emit_type>& accept,
     const metric_source& source,
     const time_range& tr,
     time_point::duration slack) const {
-  selector_accept_wrapper wrapped_accept{ accept };
-
-  source.emit(
-      wrapped_accept, tr,
-      [this](const group_name& gname) {
-        return group_(gname.get_path());
-      },
-      [this](const group_name& gname, const metric_name& mname) {
-        // We already know gname matches.
-        return metric_(mname);
-      },
-      slack);
+  source
+      .emit(
+          tr,
+          [this](const group_name& gname) {
+            return group_(gname.get_path());
+          },
+          [this](const group_name& gname, const metric_name& mname) {
+            // We already know gname matches.
+            return metric_(mname);
+          },
+          slack)
+      .map(selector_accept_wrapper());
 }
 
 void selector_without_tags::do_ostream(std::ostream& out) const {

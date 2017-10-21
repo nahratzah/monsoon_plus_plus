@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_WRITER_H
 #define MONSOON_OBJPIPE_WRITER_H
 
-///@file monsoon/objpipe/writer.h <monsoon/objpipe/writer.h
+///\file monsoon/objpipe/writer.h <monsoon/objpipe/writer.h
+///\ingroup objpipe
 
 #include <cassert>
 #include <memory>
@@ -14,10 +15,10 @@ namespace objpipe {
 
 
 /**
- * @brief An object pipe writer.
+ * \brief An object pipe writer.
+ * \ingroup objpipe
  *
- * @tparam T The type of objects written to the object pipe.
- * @headerfile "" <monsoon/objpipe/writer.h>
+ * \tparam T The type of objects written to the object pipe.
  */
 template<typename T>
 class writer
@@ -30,6 +31,11 @@ class writer
   /** @brief const reference type for objects in this object pipe. */
   using rvalue_reference = std::add_lvalue_reference_t<std::add_const_t<value_type>>;
 
+  /**
+   * \brief Construct a writer using the given pointer.
+   *
+   * Mainly used internally to the objpipe library.
+   */
   explicit writer(std::unique_ptr<detail::writer_intf<T>, detail::writer_release> ptr) noexcept
   : ptr_(std::move(ptr))
   {}

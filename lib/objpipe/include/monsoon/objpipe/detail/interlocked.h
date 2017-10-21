@@ -1,7 +1,8 @@
 #ifndef MONSOON_OBJPIPE_DETAIL_INTERLOCKED_H
 #define MONSOON_OBJPIPE_DETAIL_INTERLOCKED_H
 
-///@file monsoon/objpipe/detail/interlocked.h <monsoon/objpipe/detail/interlocked.h>
+///\file
+///\ingroup objpipe_detail
 
 #include <monsoon/objpipe/detail/reader_intf.h>
 #include <monsoon/objpipe/detail/writer_intf.h>
@@ -15,18 +16,18 @@ namespace detail {
 
 
 /**
- * @brief A threadsafe, interlocked objpipe.
+ * \brief A threadsafe, interlocked objpipe.
+ * \ingroup objpipe_detail
  *
  * An interlock objpipe is one where readers and writers synchronize the
  * hand-off of objects. Due to the synchronization, they can often eliminate
  * a move/copy operation, at the cost of additional synchronization.
  *
- * @tparam T @parblock
+ * \tparam T \parblock
  * The type of objects in the objpipe.
- * @note The type may not be a reference, nor may it be const.
- * @endparblock
- * @sa @ref monsoon::objpipe::new_interlock()
- * @headerfile monsoon/objpipe/detail/interlocked.h <monsoon/objpipe/detail/interlocked.h>
+ * \note The type may not be a reference, nor may it be const.
+ * \endparblock
+ * \sa \ref monsoon::objpipe::new_interlock()
  */
 template<typename T>
 class interlocked final
