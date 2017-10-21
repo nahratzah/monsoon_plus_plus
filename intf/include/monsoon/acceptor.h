@@ -1,6 +1,10 @@
 #ifndef MONSOON_ACCEPTOR_H
 #define MONSOON_ACCEPTOR_H
 
+///\file
+///\ingroup intf
+///\deprecated This interface was a mistake and it should go away.
+
 #include <type_traits>
 #include <tuple>
 #include <vector>
@@ -9,6 +13,9 @@
 namespace monsoon {
 
 
+///\brief Metric acceptor type.
+///\ingroup intf
+///\deprecated This interface was a mistake and it should go away.
 template<typename... Types>
 class acceptor {
  public:
