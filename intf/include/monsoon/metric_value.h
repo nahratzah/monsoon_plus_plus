@@ -22,8 +22,8 @@ namespace monsoon {
  * \brief Metric value.
  * \ingroup intf
  *
- * A metric value is either:
- * \li \em \ref monsoon::metric_value::empty representing an empty value.
+ * \details A metric value is either:
+ * \li <em>\ref monsoon::metric_value::empty</em> representing an empty value.
  * \li <em>a boolean</em> value representing true or false.
  * \li <em>a scalar</em> representing an integral or floating point value.
  * \li <em>a \ref monsoon::histogram "histogram"</em>
@@ -38,12 +38,19 @@ class monsoon_intf_export_ metric_value {
    * \todo Maybe we should get rid of this and use std::optional<metric_value> where appropriate instead?
    */
   struct empty {
+    ///\brief Constructor.
     constexpr empty() noexcept {}
+    ///\brief Copy constructor.
     constexpr empty(const empty&) noexcept {}
+    ///\brief Move constructor.
     constexpr empty(empty&&) noexcept {}
+    ///\brief Copy assignment.
     constexpr empty& operator=(const empty&) noexcept { return *this; }
+    ///\brief Move assignment.
     constexpr empty& operator=(empty&&) noexcept { return *this; }
+    ///\brief Equality.
     constexpr bool operator==(const empty&) const noexcept { return true; }
+    ///\brief Inequality.
     constexpr bool operator!=(const empty&) const noexcept { return false; }
   };
   /**
@@ -360,9 +367,12 @@ namespace std {
 ///\ingroup intf_stl
 template<>
 struct hash<monsoon::metric_value::empty> {
+  ///\brief Hashed type.
   using argument_type = const monsoon::metric_value::empty&;
+  ///\brief Hash outcome.
   using result_type = size_t;
 
+  ///\brief Compute hash code for empty metric value.
   size_t operator()(argument_type) const noexcept { return 0; }
 };
 
@@ -370,9 +380,12 @@ struct hash<monsoon::metric_value::empty> {
 ///\ingroup intf_stl
 template<>
 struct hash<monsoon::metric_value> {
+  ///\brief Hashed type.
   using argument_type = const monsoon::metric_value&;
+  ///\brief Hash outcome.
   using result_type = size_t;
 
+  ///\brief Compute hash code for metric value.
   monsoon_intf_export_
   size_t operator()(const monsoon::metric_value&) const noexcept;
 };

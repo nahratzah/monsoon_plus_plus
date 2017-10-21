@@ -23,7 +23,7 @@ enum class objpipe_errc {
 };
 
 /**
- * \brief Reference to the \ref objpipe_category.
+ * \brief Reference to the \ref objpipe_category().
  * \ingroup objpipe_errors
  * \return the object pipe error category.
  */
@@ -31,7 +31,7 @@ monsoon_objpipe_export_
 const std::error_category& objpipe_category();
 
 /**
- * \brief Create an \ref objpipe_category error condition.
+ * \brief Create an \ref objpipe_category() error condition.
  * \ingroup objpipe_errors
  * \param e The error code for which to create an error condition.
  */
