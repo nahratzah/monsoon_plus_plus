@@ -113,7 +113,7 @@ class monsoon_intf_export_ metric_name {
 
 /**
  * \brief Write metric name to a stream.
- * \ingroup intf
+ * \ingroup intf_io
  *
  * @param n The metric name of which to write the textual representation.
  * @param out The destination stream.
@@ -130,7 +130,7 @@ namespace std {
 
 
 ///\brief STL Hash support.
-///\ingroup intf
+///\ingroup intf_stl
 template<>
 struct hash<monsoon::metric_name> {
   using argument_type = const monsoon::metric_name&;

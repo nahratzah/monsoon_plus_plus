@@ -70,7 +70,7 @@ class monsoon_intf_export_ group_name {
 
 /**
  * \brief Write textual representation of the group name to a stream.
- * \ingroup intf
+ * \ingroup intf_io
  *
  * \param out The output stream.
  * \param n The group name to write out.
@@ -87,7 +87,7 @@ namespace std {
 
 
 ///\brief STL Hash support.
-///\ingroup intf
+///\ingroup intf_stl
 template<>
 struct hash<monsoon::group_name> {
   using argument_type = const monsoon::group_name&;
