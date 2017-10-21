@@ -20,7 +20,8 @@ namespace monsoon {
  * \param s The string to quote.
  * \return A properly escaped, quoted representation of the string.
  */
-std::string monsoon_intf_export_ quoted_string(std::string_view s);
+monsoon_intf_export_
+std::string quoted_string(std::string_view s);
 
 /**
  * \brief Put single quotes and apply correct escaping for an identifier,
@@ -37,7 +38,8 @@ std::string monsoon_intf_export_ quoted_string(std::string_view s);
  * \return \p s unchanged, if \p s is valid as an unquoted identifier.
  *   Otherwise, a quoted and appropriately escaped representation of the identifier.
  */
-std::string monsoon_intf_export_ maybe_quote_identifier(std::string_view);
+monsoon_intf_export_
+std::string maybe_quote_identifier(std::string_view);
 
 
 } /* namespace monsoon */
