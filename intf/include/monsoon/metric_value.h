@@ -23,7 +23,7 @@ namespace monsoon {
  * \ingroup intf
  *
  * A metric value is either:
- * \li \em \ref monsoon::metric_value::empty "empty" representing an empty value.
+ * \li \em \ref monsoon::metric_value::empty representing an empty value.
  * \li <em>a boolean</em> value representing true or false.
  * \li <em>a scalar</em> representing an integral or floating point value.
  * \li <em>a \ref monsoon::histogram "histogram"</em>
