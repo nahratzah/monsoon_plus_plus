@@ -291,25 +291,39 @@ auto selector(path_matcher groupname, std::optional<tag_matcher> tagset, path_ma
 ///@{
 /**
  * \brief Stream matcher textual representation to stream.
+ *
+ * \param out The output stream to write the textual representation.
+ * \param m The matcher for which to create a textual representation.
+ * \return \p out
  */
 monsoon_expr_export_
-std::ostream& operator<<(std::ostream&, const path_matcher&);
+std::ostream& operator<<(std::ostream& out, const path_matcher& m);
 /**
  * \brief Stream matcher textual representation to stream.
+ *
+ * \param out The output stream to write the textual representation.
+ * \param m The matcher for which to create a textual representation.
+ * \return \p out
  */
 monsoon_expr_export_
-std::ostream& operator<<(std::ostream&, const tag_matcher&);
+std::ostream& operator<<(std::ostream& out, const tag_matcher& m);
 
 /**
  * \brief Yield textual representation of the matcher.
+ *
+ * \param m The matcher for which to create a textual representation.
+ * \return Textual representation of \p m
  */
 monsoon_expr_export_
-std::string to_string(const path_matcher&);
+std::string to_string(const path_matcher& m);
 /**
  * \brief Yield textual representation of the matcher.
+ *
+ * \param m The matcher for which to create a textual representation.
+ * \return Textual representation of \p m
  */
 monsoon_expr_export_
-std::string to_string(const tag_matcher&);
+std::string to_string(const tag_matcher& m);
 ///@}
 
 

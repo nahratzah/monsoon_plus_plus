@@ -43,6 +43,7 @@ using expression_ptr = std::shared_ptr<const expression>;
 class monsoon_expr_export_ expression {
   /**
    * \brief Expressions can be textually represented into a stream.
+   * \ingroup expr_io
    *
    * \param out The output stream to which to write the textual representation of the expression.
    * \param expr The expression of which the textual representation is to be written.
@@ -111,6 +112,7 @@ class monsoon_expr_export_ expression {
 
 /**
  * \brief Convert an expression to its text representation.
+ * \ingroup expr_io
  *
  * The yielded expression is parsable into a new instance of expression.
  *
