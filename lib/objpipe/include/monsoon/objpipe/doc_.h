@@ -1,14 +1,14 @@
 // Document groups and namespaces.
 
-///\defgroup objpipe Object Pipes.
+///\defgroup objpipe Object Pipes
 
 /**
- * \defgroup objpipe_errors Object pipe error handling.
+ * \defgroup objpipe_errors Object pipe error handling
  * \ingroup objpipe
  */
 
 /**
- * \defgroup objpipe_detail Object pipe implementation details.
+ * \defgroup objpipe_detail Object pipe implementation details
  * \ingroup objpipe
  */
 
