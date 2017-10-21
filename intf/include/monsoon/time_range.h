@@ -56,7 +56,7 @@ class monsoon_intf_export_ time_range {
    * \f${\tt begin()} + n * {\tt interval()} = {\tt end()}\f$,
    * an additional emit for \f${\tt end()}\f$ shall be generated.
    *
-   * \todo Figure out how to omit this from anything not handling images (aka man pages).
+   * \todo Figure out how to omit this math formula from anything not handling images (aka man pages).
    */
   std::optional<time_point::duration> interval() const noexcept;
 
