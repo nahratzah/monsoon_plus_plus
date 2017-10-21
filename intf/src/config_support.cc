@@ -12,18 +12,20 @@ namespace monsoon {
 namespace {
 
 
-constexpr std::array<const char*, 32> lo_escapes = {{
-  "\\0"  , "\\001", "\\002", "\\003", "\\004", "\\005", "\\006", "\\a"  ,
-  "\\b"  , "\\t"  , "\\n"  , "\\v"  , "\\f"  , "\\r"  , "\\016", "\\017",
-  "\\020", "\\021", "\\022", "\\023", "\\024", "\\025", "\\026", "\\027",
-  "\\030", "\\031", "\\032", "\\033", "\\034", "\\035", "\\036", "\\037",
-}};
+using namespace std::literals;
 
-auto quote(const std::string& s, const char* special)
+constexpr std::array<std::string_view, 32> lo_escapes({
+  "\\0"sv  , "\\001"sv, "\\002"sv, "\\003"sv, "\\004"sv, "\\005"sv, "\\006"sv, "\\a"sv  ,
+  "\\b"sv  , "\\t"sv  , "\\n"sv  , "\\v"sv  , "\\f"sv  , "\\r"sv  , "\\016"sv, "\\017"sv,
+  "\\020"sv, "\\021"sv, "\\022"sv, "\\023"sv, "\\024"sv, "\\025"sv, "\\026"sv, "\\027"sv,
+  "\\030"sv, "\\031"sv, "\\032"sv, "\\033"sv, "\\034"sv, "\\035"sv, "\\036"sv, "\\037"sv,
+});
+
+auto quote(std::string_view s, std::u32string_view special)
 ->  std::tuple<std::string, bool> {
   using converter =
       std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t>;
-  const std::u32string codepoints = converter().from_bytes(s);
+  const std::u32string codepoints = converter().from_bytes(std::string(s));
 
   bool needs_quotes = false;
   std::ostringstream result;
@@ -38,7 +40,7 @@ auto quote(const std::string& s, const char* special)
     } else if (c > 127) {
       result << "\\u" << std::setw(4) << std::hex << (unsigned long)c;
       needs_quotes = true;
-    } else if (strchr(special, c) != nullptr) {
+    } else if (special.find(c) != std::string_view::npos) {
       result << '\\' << (char)c;
       needs_quotes = true;
     } else {
@@ -52,17 +54,17 @@ auto quote(const std::string& s, const char* special)
 } /* namespace monsoon::<unnamed> */
 
 
-auto quoted_string(const std::string& s) -> std::string {
-  return "\"" + std::get<0>(quote(s, "\"")) + "\"";
+auto quoted_string(std::string_view s) -> std::string {
+  return "\"" + std::get<0>(quote(s, U"\"")) + "\"";
 }
 
-auto maybe_quote_identifier(const std::string& s) -> std::string {
+auto maybe_quote_identifier(std::string_view s) -> std::string {
   auto identifier_re = std::regex("[_a-zA-Z][_a-zA-Z0-9]*");
-  bool ident_quotes = !std::regex_match(s, identifier_re);
+  bool ident_quotes = !std::regex_match(std::string(s), identifier_re);
 
   std::string result;
   bool needs_quotes;
-  std::tie(result, needs_quotes) = quote(s, "'");
+  std::tie(result, needs_quotes) = quote(s, U"'");
 
   if (needs_quotes || ident_quotes) {
     result.insert(0, "'");
