@@ -21,16 +21,9 @@ namespace monsoon {
  * \li an optional interval
  *
  * The begin time point must be at or before the end time point.
- *
- * \todo Consider removing defaulted constructors, to make compiler generate them for us.
  */
 class monsoon_intf_export_ time_range {
  public:
-  time_range() noexcept = default;
-  time_range(const time_range&) noexcept = default;
-  time_range& operator=(const time_range&) noexcept = default;
-  ~time_range() noexcept = default;
-
   /**
    * \brief The begin of the time range.
    *
