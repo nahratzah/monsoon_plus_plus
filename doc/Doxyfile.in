@@ -164,6 +164,7 @@ FULL_PATH_NAMES        = YES
 
 STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@/lib/include \
                          @PROJECT_SOURCE_DIR@/lib/objpipe/include \
+                         @PROJECT_SOURCE_DIR@/intf/include \
                          @PROJECT_SOURCE_DIR@/expr/include
 
 # The STRIP_FROM_INC_PATH tag can be used to strip a user-defined part of the
@@ -175,6 +176,7 @@ STRIP_FROM_PATH        = @PROJECT_SOURCE_DIR@/lib/include \
 
 STRIP_FROM_INC_PATH    = @PROJECT_SOURCE_DIR@/lib/include \
                          @PROJECT_SOURCE_DIR@/lib/objpipe/include \
+                         @PROJECT_SOURCE_DIR@/intf/include \
                          @PROJECT_SOURCE_DIR@/expr/include
 
 # If the SHORT_NAMES tag is set to YES, doxygen will generate much shorter (but
@@ -796,6 +798,7 @@ WARN_LOGFILE           =
 
 INPUT                  = @PROJECT_SOURCE_DIR@/lib/include \
                          @PROJECT_SOURCE_DIR@/lib/objpipe/include \
+                         @PROJECT_SOURCE_DIR@/intf/include \
                          @PROJECT_SOURCE_DIR@/expr/include
 
 # This tag can be used to specify the character encoding of the source files
