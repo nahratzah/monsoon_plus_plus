@@ -24,9 +24,9 @@ namespace objpipe {
 template<typename T>
 class reader {
  public:
-  /** @brief The type of objects in this object pipe. */
+  /** \brief The type of objects in this object pipe. */
   using value_type = T;
-  /** @brief Reference type for objects in this object pipe. */
+  /** \brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
   /**
@@ -39,8 +39,8 @@ class reader {
   {}
 
   /**
-   * @brief Test if the object pipe has data available.
-   * @return true iff the objpipe has data available.
+   * \brief Test if the object pipe has data available.
+   * \return true iff the objpipe has data available.
    */
   auto empty() const -> bool {
     assert(ptr_ != nullptr);
@@ -48,10 +48,10 @@ class reader {
   }
 
   /**
-   * @brief Pull an object from the objpipe.
+   * \brief Pull an object from the objpipe.
    *
-   * @param[out] e An error condition used to communicate success/error reasons.
-   * @return an initialized optional on success, empty optional on failure.
+   * \param[out] e An error condition used to communicate success/error reasons.
+   * \return an initialized optional on success, empty optional on failure.
    */
   auto pull(objpipe_errc& e) -> std::optional<value_type> {
     assert(ptr_ != nullptr);
@@ -59,9 +59,9 @@ class reader {
   }
 
   /**
-   * @brief Pull an object from the objpipe.
+   * \brief Pull an object from the objpipe.
    *
-   * @throw std::system_error if the pipe is empty and closed by the writer.
+   * \throw std::system_error if the pipe is empty and closed by the writer.
    */
   auto pull() -> value_type {
     assert(ptr_ != nullptr);
@@ -69,9 +69,9 @@ class reader {
   }
 
   /**
-   * @brief Wait for the next element to become available.
+   * \brief Wait for the next element to become available.
    *
-   * @return an enum indicating success or failure.
+   * \return an enum indicating success or failure.
    */
   auto wait() const -> objpipe_errc {
     assert(ptr_ != nullptr);
@@ -79,9 +79,9 @@ class reader {
   }
 
   /**
-   * @brief Yields a reference to the next element in the object pipe.
+   * \brief Yields a reference to the next element in the object pipe.
    *
-   * @return a reference to the next element in the pipe.
+   * \return a reference to the next element in the pipe.
    */
   auto front() const -> reference {
     assert(ptr_ != nullptr);
@@ -92,7 +92,7 @@ class reader {
   }
 
   /**
-   * @brief Remove the next element from the object pipe.
+   * \brief Remove the next element from the object pipe.
    */
   void pop_front() {
     assert(ptr_ != nullptr);
@@ -100,17 +100,17 @@ class reader {
   }
 
   /**
-   * @return true iff the reader is valid and pullable.
+   * \return true iff the reader is valid and pullable.
    */
   explicit operator bool() const noexcept {
     return ptr_ != nullptr && ptr_->is_pullable();
   }
 
   /**
-   * @brief Apply a filter on the read elements.
+   * \brief Apply a filter on the read elements.
    *
-   * @param[in] pred A predicate.
-   * @return A reader that only yields objects for which the predicate evaluates to true.
+   * \param[in] pred A predicate.
+   * \return A reader that only yields objects for which the predicate evaluates to true.
    */
   template<typename Pred>
   auto filter(Pred&& pred) && -> reader<T> {
@@ -134,16 +134,16 @@ class reader {
 template<typename T>
 class shared_reader {
  public:
-  /** @brief The type of objects in this object pipe. */
+  /** \brief The type of objects in this object pipe. */
   using value_type = T;
-  /** @brief Reference type for objects in this object pipe. */
+  /** \brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
   /**
-   * @brief Pull an object from the objpipe.
+   * \brief Pull an object from the objpipe.
    *
-   * @param e An error condition used to communicate success/error reasons.
-   * @return an initialized optional on success, empty optional on failure.
+   * \param e An error condition used to communicate success/error reasons.
+   * \return an initialized optional on success, empty optional on failure.
    */
   auto pull(objpipe_errc& e) -> std::optional<value_type> {
     assert(ptr_ != nullptr);
@@ -151,9 +151,9 @@ class shared_reader {
   }
 
   /**
-   * @brief Pull an object from the objpipe.
+   * \brief Pull an object from the objpipe.
    *
-   * @throw std::system_error if the pipe is empty and closed by the writer.
+   * \throw std::system_error if the pipe is empty and closed by the writer.
    */
   auto pull() -> value_type {
     assert(ptr_ != nullptr);
@@ -161,7 +161,7 @@ class shared_reader {
   }
 
   /**
-   * @return true iff the reader is valid and pullable.
+   * \return true iff the reader is valid and pullable.
    */
   explicit operator bool() const noexcept {
     return ptr_ != nullptr && ptr_->is_pullable();

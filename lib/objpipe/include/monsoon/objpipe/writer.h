@@ -24,11 +24,11 @@ template<typename T>
 class writer
 {
  public:
-  /** @brief The type of objects in this object pipe. */
+  /** \brief The type of objects in this object pipe. */
   using value_type = T;
-  /** @brief Rvalue reference type for objects in this object pipe. */
+  /** \brief Rvalue reference type for objects in this object pipe. */
   using rvalue_reference = std::add_rvalue_reference_t<value_type>;
-  /** @brief const reference type for objects in this object pipe. */
+  /** \brief const reference type for objects in this object pipe. */
   using rvalue_reference = std::add_lvalue_reference_t<std::add_const_t<value_type>>;
 
   /**
@@ -40,32 +40,32 @@ class writer
   : ptr_(std::move(ptr))
   {}
 
-  ///@copydoc detail::writer_intf<T>::push(rvalue_reference,objpipe_errc&)
+  ///\copydoc detail::writer_intf<T>::push(rvalue_reference,objpipe_errc&)
   void push(rvalue_reference v, objpipe_errc& e) {
     assert(ptr_ != nullptr);
     ptr_->push(std::move(v), e);
   }
 
-  ///@copydoc detail::writer_intf<T>::push(const_reference,objpipe_errc&)
+  ///\copydoc detail::writer_intf<T>::push(const_reference,objpipe_errc&)
   void push(const_reference v, objpipe_errc& e) {
     assert(ptr_ != nullptr);
     ptr_->push(v, e);
   }
 
-  ///@copydoc detail::writer_intf<T>::push(rvalue_reference)
+  ///\copydoc detail::writer_intf<T>::push(rvalue_reference)
   void push(rvalue_reference v) {
     assert(ptr_ != nullptr);
     ptr_->push(std::move(v));
   }
 
-  ///@copydoc detail::writer_intf<T>::push(const_reference)
+  ///\copydoc detail::writer_intf<T>::push(const_reference)
   void push(const_reference v) {
     assert(ptr_ != nullptr);
     ptr_->push(v);
   }
 
   /**
-   * @return true iff the writer is valid and pushable.
+   * \return true iff the writer is valid and pushable.
    */
   explicit operator bool() const noexcept {
     return ptr_ != nullptr && ptr_->is_pushable();
