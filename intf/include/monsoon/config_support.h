@@ -39,7 +39,7 @@ std::string quoted_string(std::string_view s);
  *   Otherwise, a quoted and appropriately escaped representation of the identifier.
  */
 monsoon_intf_export_
-std::string maybe_quote_identifier(std::string_view);
+std::string maybe_quote_identifier(std::string_view s);
 
 
 } /* namespace monsoon */
