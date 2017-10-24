@@ -49,7 +49,7 @@ class filter_operation final
 
   ///@copydoc reader_intf<T>::is_pullable()
   auto is_pullable() const noexcept override {
-    return bool(*src_);
+    return src_->is_pullable();
   }
 
   ///@copydoc reader_intf<T>::wait()
