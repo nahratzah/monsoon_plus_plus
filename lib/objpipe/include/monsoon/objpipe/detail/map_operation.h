@@ -26,7 +26,7 @@ using map_out_type = decltype(std::invoke(
 
 template<typename InType, typename Op, typename OutType>
 class map_operation final
-: public reader_intf<OutType>
+: public reader_intf<std::decay_t<OutType>>
 {
  private:
   using in_type = InType;
@@ -90,7 +90,7 @@ class map_operation final
 
     auto src_value = src_->pull(e);
     if (!src_value.has_value()) return {};
-    return std::invoke(op_, std::move(src_value.value()));
+    return map_apply_(std::move(src_value.value()));
   }
 
   ///@copydoc reader_intf<T>::front()

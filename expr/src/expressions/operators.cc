@@ -16,18 +16,18 @@ template<typename Fn>
 class monsoon_expr_local_ unop_t final
 : public expression
 {
- private:
-  class application;
-
  public:
   unop_t(Fn&&, std::string_view, expression_ptr&&);
   ~unop_t() noexcept override;
 
-  void operator()(acceptor<emit_type>&, const metric_source&,
-      const time_range&, time_point::duration) const override;
+  auto operator()(const metric_source&,
+      const time_range&, time_point::duration) const
+      -> objpipe::reader<emit_type> override;
 
  private:
   void do_ostream(std::ostream&) const override;
+
+  static auto apply_(emit_type&, const Fn&) -> emit_type&;
 
   expression_ptr nested_;
   Fn fn_;
@@ -46,8 +46,9 @@ class monsoon_expr_local_ binop_t final
   binop_t(Fn&&, std::string_view, expression_ptr&&, expression_ptr&&);
   ~binop_t() noexcept override;
 
-  void operator()(acceptor<emit_type>&, const metric_source&,
-      const time_range&, time_point::duration) const override;
+  auto operator()(const metric_source&,
+      const time_range&, time_point::duration) const
+      -> objpipe::reader<emit_type> override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -55,23 +56,6 @@ class monsoon_expr_local_ binop_t final
   expression_ptr x_, y_;
   Fn fn_;
   std::string_view sign_;
-};
-
-
-template<typename Fn>
-class monsoon_expr_local_ unop_t<Fn>::application final
-: public acceptor<emit_type>
-{
- public:
-  application(acceptor<emit_type>&, const Fn&) noexcept;
-  ~application() noexcept override;
-
-  void accept_speculative(time_point, const emit_type&) override;
-  void accept(time_point, vector_type) override;
-
- private:
-  acceptor<emit_type>& accept_fn_;
-  const Fn& fn_;
 };
 
 
@@ -88,12 +72,14 @@ template<typename Fn>
 unop_t<Fn>::~unop_t() noexcept {}
 
 template<typename Fn>
-void unop_t<Fn>::operator()(
-    acceptor<emit_type>& accept_fn,
+auto unop_t<Fn>::operator()(
     const metric_source& src,
-    const time_range& tr, time_point::duration slack) const {
-  auto app = application(accept_fn, fn_);
-  (*nested_)(app, src, tr, std::move(slack));
+    const time_range& tr, time_point::duration slack) const
+-> objpipe::reader<emit_type> {
+  using namespace std::placeholders;
+
+  return std::invoke(*nested_, src, tr, std::move(slack))
+      .transform_copy(std::bind(&unop_t::apply_, _1, fn_));
 }
 
 template<typename Fn>
@@ -101,48 +87,37 @@ void unop_t<Fn>::do_ostream(std::ostream& out) const {
   out << sign_ << *nested_;
 }
 
-
 template<typename Fn>
-unop_t<Fn>::application::application(acceptor<emit_type>& accept_fn,
-    const Fn& fn) noexcept
-: accept_fn_(accept_fn),
-  fn_(fn)
-{}
+auto unop_t<Fn>::apply_(emit_type& emt, const Fn& fn) -> emit_type& {
+  if (std::get<1>(emt).index() == 0u) {
+    auto& speculative = std::get<0>(std::get<1>(emt));
 
-template<typename Fn>
-unop_t<Fn>::application::~application() noexcept {}
+    std::visit(
+        overload(
+            [&fn](metric_value& v) {
+              v = std::invoke(fn, v);
+            },
+            [&fn](std::tuple<tags, metric_value>& tpl) {
+              std::get<1>(tpl) = std::invoke(fn, std::get<1>(tpl));
+            }),
+        speculative);
+  } else {
+    auto& factual = std::get<1>(std::get<1>(emt));
 
-template<typename Fn>
-void unop_t<Fn>::application::accept_speculative(time_point tp,
-    const emit_type& emt) {
-  std::visit(
-      overload(
-          [tp, this](const metric_value& mv) {
-            accept_fn_.accept_speculative(std::move(tp), fn_(std::move(mv)));
-          },
-          [tp, this](std::tuple<tags, metric_value> mv_tpl) {
-            std::get<1>(mv_tpl) = fn_(std::get<1>(std::move(mv_tpl)));
-            accept_fn_.accept_speculative(std::move(tp), std::move(mv_tpl));
-          }),
-      emt);
-}
+    std::visit(
+        overload(
+            [&fn](metric_value& v) {
+              v = std::invoke(fn, v);
+            },
+            [&fn](std::unordered_map<tags, metric_value>& map) {
+              for (auto& elem : map) {
+                elem.second = std::invoke(fn, elem.second);
+              }
+            }),
+        factual);
+  }
 
-template<typename Fn>
-void unop_t<Fn>::application::accept(time_point tp, vector_type v) {
-  std::for_each(v.begin(), v.end(),
-      [this](std::tuple<emit_type>& outer_tpl) {
-        auto& emt = std::get<0>(outer_tpl);
-        std::visit(
-            overload(
-                [this](metric_value& mv) {
-                  mv = fn_(std::move(mv));
-                },
-                [this](std::tuple<tags, metric_value>& mv_tpl) {
-                  std::get<1>(mv_tpl) = fn_(std::get<1>(std::move(mv_tpl)));
-                }),
-            emt);
-      });
-  accept_fn_.accept(std::move(tp), std::move(v));
+  return emt;
 }
 
 

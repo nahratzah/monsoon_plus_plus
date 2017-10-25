@@ -118,7 +118,7 @@ class reader {
     using operation_type = detail::filter_operation<T, std::decay_t<Pred>>;
 
     auto ptr = detail::reader_release::link(
-	new operation_type(std::move(ptr_), std::forward<Pred>(pred)));
+        new operation_type(std::move(ptr_), std::forward<Pred>(pred)));
     return reader<T>(std::move(ptr));
   }
 
@@ -129,13 +129,13 @@ class reader {
    * \return A reader that invokes \p fn on each element, yielding the result.
    */
   template<typename Fn>
-  auto transform(Fn&& fn) && -> reader<detail::map_out_type<T, Fn>> {
+  auto transform(Fn&& fn) && -> reader<std::decay_t<detail::map_out_type<T, Fn>>> {
     using result_type = detail::map_out_type<T, std::decay_t<Fn>>;
     using operation_type = detail::map_operation<T, std::decay_t<Fn>, result_type>;
 
     auto ptr = detail::reader_release::link(
-	new operation_type(std::move(ptr_), std::forward<Fn>(fn)));
-    return reader<result_type>(std::move(ptr));
+        new operation_type(std::move(ptr_), std::forward<Fn>(fn)));
+    return reader<std::decay_t<result_type>>(std::move(ptr));
   }
 
   /**
@@ -147,11 +147,12 @@ class reader {
    * \return A reader that invokes \p fn on each element, yielding the result.
    */
   template<typename Fn>
-  auto transform_copy(Fn&& fn) && -> reader<detail::map_out_type<T, Fn>> {
+  auto transform_copy(Fn&& fn) && -> reader<std::decay_t<detail::map_out_type<T, Fn>>> {
     using result_type = std::decay_t<detail::map_out_type<T, std::decay_t<Fn>>>;
     using operation_type = detail::map_operation<T, std::decay_t<Fn>, result_type>;
 
-    auto ptr = link(new operation_type(std::move(ptr_), std::forward<Fn>(fn)));
+    auto ptr = detail::reader_release::link(
+        new operation_type(std::move(ptr_), std::forward<Fn>(fn)));
     return reader<result_type>(std::move(ptr));
   }
 
