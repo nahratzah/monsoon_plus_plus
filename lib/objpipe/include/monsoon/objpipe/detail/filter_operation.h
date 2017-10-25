@@ -23,8 +23,7 @@ namespace detail {
  */
 template<typename T, typename Pred>
 class filter_operation final
-: public continuation_intf,
-  public reader_intf<T>
+: public reader_intf<T>
 {
  public:
   ///@copydoc reader_intf<T>::value_type
@@ -44,16 +43,16 @@ class filter_operation final
     src_(std::move(src))
   {
     assert(src_ != nullptr);
-    src_->add_continuation(writer_release::link(this));
   }
 
   ///@copydoc reader_intf<T>::is_pullable()
   auto is_pullable() const noexcept override {
-    return src_->is_pullable();
+    return offered_ != nullptr || src_->is_pullable();
   }
 
   ///@copydoc reader_intf<T>::wait()
   auto wait() const noexcept -> objpipe_errc override {
+    if (offered_ != nullptr) return objpipe_errc::success;
     for (;;) {
       objpipe_errc e = objpipe_errc::success;
       if (test_predicate_(e) || e) return e;
@@ -64,6 +63,7 @@ class filter_operation final
 
   ///@copydoc reader_intf<T>::empty()
   auto empty() const noexcept -> bool override {
+    if (offered_ != nullptr) return false;
     for (;;) {
       if (src_->empty()) return true;
       objpipe_errc e;
@@ -75,6 +75,11 @@ class filter_operation final
 
   ///@copydoc reader_intf<T>::pull(objpipe_errc&)
   auto pull(objpipe_errc& e) -> std::optional<value_type> override {
+    if (offered_ != nullptr) {
+      e = objpipe_errc::success;
+      return std::move(*std::exchange(offered_, nullptr));
+    }
+
     for (;;) {
       std::optional<value_type> result = src_->pull(e);
       if (!result.has_value() || test_predicate_(result.value()))
@@ -84,6 +89,9 @@ class filter_operation final
 
   ///@copydoc reader_intf<T>::pull()
   auto pull() -> value_type override {
+    if (offered_ != nullptr)
+      return std::move(*std::exchange(offered_, nullptr));
+
     for (;;) {
       value_type result = src_->pull();
       if (test_predicate_(result))
@@ -93,20 +101,28 @@ class filter_operation final
 
   ///@copydoc reader_intf<T>::front()
   auto front() const -> std::variant<pointer, objpipe_errc> override {
+    if (offered_ != nullptr)
+      return { std::in_place_index<0>, offered_ };
+
     for (;;) {
       std::variant<pointer, objpipe_errc> result = src_->front();
-      if (result.index() != 0u || test_predicate_(std::get<0>(result)))
+      if (result.index() != 0u || test_predicate_(std::get<0>(result))) {
+        if (result.index() == 0u) offered_ = std::get<0>(result);
         return result;
+      }
       src_->pop_front();
     }
   }
 
   ///@copydoc reader_intf<T>::pop_front()
   auto pop_front() -> objpipe_errc override {
-    while (!test_predicate_(src_->front())) {
-      objpipe_errc e = src_->pop_front();
-      if (e != objpipe_errc::success) return e;
+    if (offered_ == nullptr) {
+      while (!test_predicate_(src_->front())) {
+        objpipe_errc e = src_->pop_front();
+        if (e != objpipe_errc::success) return e;
+      }
     }
+    offered_ = nullptr;
     return src_->pop_front();
   }
 
@@ -130,6 +146,9 @@ class filter_operation final
     src_.reset();
   }
 
+  ///Never fires, as we don't attach.
+  void on_last_writer_gone_() noexcept override {}
+
   bool test_predicate_(objpipe_errc& e) const {
     std::variant<pointer, objpipe_errc> v = src_->front();
     if (v.index() == 1u) e = std::get<1>(v);
@@ -143,6 +162,7 @@ class filter_operation final
 
   Pred pred_;
   std::unique_ptr<reader_intf<T>, reader_release> src_;
+  pointer offered_ = nullptr;
 };
 
 
