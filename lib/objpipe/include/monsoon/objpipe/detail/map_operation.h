@@ -11,6 +11,7 @@ namespace detail {
 
 /**
  * Deduction of \ref map_operation result type.
+ * \ingroup objpipe_detail
  */
 #if __cplusplus >= 201703
 template<typename InType, typename Op>
@@ -24,6 +25,10 @@ using map_out_type = decltype(std::invoke(
     std::declval<std::add_lvalue_reference_t<std::remove_reference_t<InType>>>()));
 #endif
 
+/**
+ * A transformation on objects in an objpipe.
+ * \ingroup objpipe_detail
+ */
 template<typename InType, typename Op, typename OutType>
 class map_operation final
 : public reader_intf<std::decay_t<OutType>>
