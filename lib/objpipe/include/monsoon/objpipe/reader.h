@@ -156,6 +156,24 @@ class reader {
     return reader<result_type>(std::move(ptr));
   }
 
+  /**
+   * \brief Apply functor on each pulled value.
+   *
+   * \param[in] fn A unary invokable to be applied to each element.
+   * \return \p fn
+   */
+  template<typename Fn>
+  Fn visit(Fn fn) && {
+    objpipe_errc e;
+    for (std::optional<value_type> v = pull(e);
+        e == objpipe_errc::success;
+        v = pull(e)) {
+      assert(v.has_value());
+      std::invoke(fn, std::move(v.value()));
+    }
+    return fn;
+  }
+
  private:
   std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr_;
 };
