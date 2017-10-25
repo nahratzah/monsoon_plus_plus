@@ -23,7 +23,9 @@ class writer_intf
 {
  public:
   static_assert(!std::is_reference_v<T>,
-      "Reference queues are not implemented.");
+      "It makes no sense to write references to an objpipe.");
+  static_assert(!std::is_const_v<T>,
+      "It makes no sense to write const values to an objpipe.");
 
   ///@copydoc reader_intf<T>::value_type
   using value_type = T;

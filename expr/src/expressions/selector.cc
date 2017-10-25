@@ -9,6 +9,11 @@ namespace monsoon {
 namespace expressions {
 
 
+monsoon_expr_local_
+auto selector_accept_wrapper_(const metric_source::emit_type&)
+    -> expression::emit_type;
+
+
 template<typename MatchIter, typename ValIter>
 bool monsoon_expr_local_ do_match(
     MatchIter m_b, MatchIter m_e,
@@ -208,28 +213,6 @@ void tag_matcher::check_absence(std::string_view tagname) {
 }
 
 
-class monsoon_expr_local_ selector_accept_wrapper
-: public acceptor<group_name, metric_name, metric_value>
-{
- public:
-  using emit_type = expression::emit_type;
-
-  selector_accept_wrapper(acceptor<emit_type>& accept) noexcept
-  : accept_(accept)
-  {}
-
-  ~selector_accept_wrapper() noexcept override = default;
-
-  void accept_speculative(time_point, const group_name&, const metric_name&,
-      const metric_value&) override;
-  void accept(time_point,
-      acceptor<group_name, metric_name, metric_value>::vector_type) override;
-
- private:
-  acceptor<emit_type>& accept_;
-};
-
-
 class monsoon_expr_local_ selector_with_tags
 : public expression
 {
@@ -385,7 +368,7 @@ auto selector_with_tags::operator()(
     const metric_source& source,
     const time_range& tr,
     time_point::duration slack) const -> objpipe::reader<emit_type> {
-  source
+  return source
       .emit(
           tr,
           [this](const group_name& gname) {
@@ -396,7 +379,7 @@ auto selector_with_tags::operator()(
             return metric_(mname);
           },
           slack)
-      .map(selector_accept_wrapper());
+      .transform(&selector_accept_wrapper_);
 }
 
 void selector_with_tags::do_ostream(std::ostream& out) const {
@@ -406,11 +389,11 @@ void selector_with_tags::do_ostream(std::ostream& out) const {
 
 selector_without_tags::~selector_without_tags() noexcept {}
 
-auto selector_without_tags::operator()(acceptor<emit_type>& accept,
+auto selector_without_tags::operator()(
     const metric_source& source,
     const time_range& tr,
-    time_point::duration slack) const {
-  source
+    time_point::duration slack) const -> objpipe::reader<emit_type> {
+  return source
       .emit(
           tr,
           [this](const group_name& gname) {
@@ -421,7 +404,7 @@ auto selector_without_tags::operator()(acceptor<emit_type>& accept,
             return metric_(mname);
           },
           slack)
-      .map(selector_accept_wrapper());
+      .transform(&selector_accept_wrapper_);
 }
 
 void selector_without_tags::do_ostream(std::ostream& out) const {
@@ -429,27 +412,42 @@ void selector_without_tags::do_ostream(std::ostream& out) const {
 }
 
 
-void selector_accept_wrapper::accept_speculative(time_point tp,
-    const group_name& group, const metric_name& metric,
-    const metric_value& value) {
-  accept_.accept_speculative(std::move(tp),
-      emit_type(std::make_tuple(group.get_tags(), value)));
-}
+auto selector_accept_wrapper_(const metric_source::emit_type& src)
+-> expression::emit_type {
+  if (src.index() == 0) {
+    const auto& speculative = std::get<0>(src);
+    const time_point& tp = std::get<0>(speculative);
+    const tags& tag_set = std::get<1>(speculative).get_tags();
+    const metric_value& value = std::get<3>(speculative);
 
-void selector_accept_wrapper::accept(time_point tp,
-    acceptor<group_name, metric_name, metric_value>::vector_type values) {
-  std::vector<std::tuple<emit_type>> converted_values;
-  std::for_each(
-      std::make_move_iterator(values.begin()),
-      std::make_move_iterator(values.end()),
-      [&converted_values](auto&& v) {
-        converted_values.emplace_back(
-            std::make_tuple(
-                std::get<0>(std::move(v)).get_tags(),
-                std::get<2>(std::move(v))));
-      });
+    return expression::emit_type(
+        tp,
+        expression::speculative_emit_type(
+            std::in_place_index<1>,
+            tag_set,
+            value));
+  } else {
+    const auto& factual = std::get<1>(src);
+    const time_point tp = std::get<0>(factual);
+    const auto& map = std::get<1>(factual);
 
-  accept_.accept(std::move(tp), std::move(converted_values));
+    // Create empty factual result.
+    auto result = expression::emit_type(
+        tp,
+        expression::factual_emit_type(std::in_place_index<1>));
+
+    // Fill in the map of the factual result.
+    auto& out_map = std::get<1>(std::get<1>(std::get<1>(result)));
+    std::transform(map.begin(), map.end(),
+        std::inserter(out_map, out_map.end()),
+        [](const auto& metric) {
+          return std::forward_as_tuple(
+              std::get<0>(metric.first).get_tags(),
+              metric.second);
+        });
+
+    return result;
+  }
 }
 
 

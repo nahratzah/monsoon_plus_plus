@@ -10,6 +10,7 @@
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/reader_intf.h>
 #include <monsoon/objpipe/detail/filter_operation.h>
+#include <monsoon/objpipe/detail/map_operation.h>
 
 namespace monsoon {
 namespace objpipe {
@@ -25,7 +26,7 @@ template<typename T>
 class reader {
  public:
   /** \brief The type of objects in this object pipe. */
-  using value_type = T;
+  using value_type = std::decay_t<T>;
   /** \brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
@@ -114,57 +115,44 @@ class reader {
    */
   template<typename Pred>
   auto filter(Pred&& pred) && -> reader<T> {
-    using filter_type = detail::filter_operation<T, std::decay_t<Pred>>;
+    using operation_type = detail::filter_operation<T, std::decay_t<Pred>>;
 
-    auto ptr = link(new filter_type(std::move(ptr_), std::forward<Pred>(pred)));
+    auto ptr = detail::reader_release::link(
+	new operation_type(std::move(ptr_), std::forward<Pred>(pred)));
     return reader<T>(std::move(ptr));
   }
 
- private:
-  std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr_;
-};
-
-/**
- * \brief A shared object pipe reader.
- * \ingroup objpipe
- *
- * Multiple shared_reader instances may share the same object pipe.
- * An object pulled by any reader will not be read by any other reader.
- */
-template<typename T>
-class shared_reader {
- public:
-  /** \brief The type of objects in this object pipe. */
-  using value_type = T;
-  /** \brief Reference type for objects in this object pipe. */
-  using reference = std::add_lvalue_reference_t<value_type>;
-
   /**
-   * \brief Pull an object from the objpipe.
+   * \brief Apply a transformation on the read elements.
    *
-   * \param e An error condition used to communicate success/error reasons.
-   * \return an initialized optional on success, empty optional on failure.
+   * \param[in] fn A unary invokable to be applied to each element.
+   * \return A reader that invokes \p fn on each element, yielding the result.
    */
-  auto pull(objpipe_errc& e) -> std::optional<value_type> {
-    assert(ptr_ != nullptr);
-    return ptr_->pull(e);
+  template<typename Fn>
+  auto transform(Fn&& fn) && -> reader<detail::map_out_type<T, Fn>> {
+    using result_type = detail::map_out_type<T, std::decay_t<Fn>>;
+    using operation_type = detail::map_operation<T, std::decay_t<Fn>, result_type>;
+
+    auto ptr = detail::reader_release::link(
+	new operation_type(std::move(ptr_), std::forward<Fn>(fn)));
+    return reader<result_type>(std::move(ptr));
   }
 
   /**
-   * \brief Pull an object from the objpipe.
+   * \brief Apply a transformation on the read elements.
    *
-   * \throw std::system_error if the pipe is empty and closed by the writer.
+   * The transformed value will be copied.
+   *
+   * \param[in] fn A unary invokable to be applied to each element.
+   * \return A reader that invokes \p fn on each element, yielding the result.
    */
-  auto pull() -> value_type {
-    assert(ptr_ != nullptr);
-    return ptr_->pull();
-  }
+  template<typename Fn>
+  auto transform_copy(Fn&& fn) && -> reader<detail::map_out_type<T, Fn>> {
+    using result_type = std::decay_t<detail::map_out_type<T, std::decay_t<Fn>>>;
+    using operation_type = detail::map_operation<T, std::decay_t<Fn>, result_type>;
 
-  /**
-   * \return true iff the reader is valid and pullable.
-   */
-  explicit operator bool() const noexcept {
-    return ptr_ != nullptr && ptr_->is_pullable();
+    auto ptr = link(new operation_type(std::move(ptr_), std::forward<Fn>(fn)));
+    return reader<result_type>(std::move(ptr));
   }
 
  private:

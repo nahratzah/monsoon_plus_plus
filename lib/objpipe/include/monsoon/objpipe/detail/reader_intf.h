@@ -51,11 +51,8 @@ class reader_intf
 : public virtual base_objpipe
 {
  public:
-  static_assert(!std::is_reference_v<T>,
-      "Reference queues are not implemented.");
-
   /** Value type of elements in the object pipe. */
-  using value_type = T;
+  using value_type = std::decay_t<T>;
   /** Pointer type of elements in the object pipe. */
   using pointer = std::add_pointer_t<value_type>;
 
