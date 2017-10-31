@@ -11,7 +11,7 @@ namespace expressions {
 
 monsoon_expr_local_
 auto selector_accept_wrapper_(const metric_source::emit_type&)
-    -> expression::emit_type;
+    -> expression::vector_emit_type;
 
 
 template<typename MatchIter, typename ValIter>
@@ -227,7 +227,7 @@ class monsoon_expr_local_ selector_with_tags
 
   auto operator()(const metric_source&, const time_range&,
       time_point::duration) const
-      -> objpipe::reader<emit_type> override;
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -250,7 +250,7 @@ class monsoon_expr_local_ selector_without_tags
 
   auto operator()(const metric_source&, const time_range&,
       time_point::duration) const
-      -> objpipe::reader<emit_type> override;
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -367,7 +367,8 @@ selector_with_tags::~selector_with_tags() noexcept {}
 auto selector_with_tags::operator()(
     const metric_source& source,
     const time_range& tr,
-    time_point::duration slack) const -> objpipe::reader<emit_type> {
+    time_point::duration slack) const
+-> std::variant<scalar_objpipe, vector_objpipe> {
   return source
       .emit(
           tr,
@@ -392,7 +393,8 @@ selector_without_tags::~selector_without_tags() noexcept {}
 auto selector_without_tags::operator()(
     const metric_source& source,
     const time_range& tr,
-    time_point::duration slack) const -> objpipe::reader<emit_type> {
+    time_point::duration slack) const
+-> std::variant<scalar_objpipe, vector_objpipe> {
   return source
       .emit(
           tr,
@@ -413,31 +415,26 @@ void selector_without_tags::do_ostream(std::ostream& out) const {
 
 
 auto selector_accept_wrapper_(const metric_source::emit_type& src)
--> expression::emit_type {
+-> expression::vector_emit_type {
   if (src.index() == 0) {
     const auto& speculative = std::get<0>(src);
     const time_point& tp = std::get<0>(speculative);
     const tags& tag_set = std::get<1>(speculative).get_tags();
     const metric_value& value = std::get<3>(speculative);
 
-    return expression::emit_type(
+    return {
         tp,
-        expression::speculative_emit_type(
-            std::in_place_index<1>,
-            tag_set,
-            value));
+        std::in_place_index<0>,
+        tag_set,
+        value
+    };
   } else {
     const auto& factual = std::get<1>(src);
     const time_point tp = std::get<0>(factual);
     const auto& map = std::get<1>(factual);
 
-    // Create empty factual result.
-    auto result = expression::emit_type(
-        tp,
-        expression::factual_emit_type(std::in_place_index<1>));
-
     // Fill in the map of the factual result.
-    auto& out_map = std::get<1>(std::get<1>(std::get<1>(result)));
+    expression::factual_vector out_map;
     std::transform(map.begin(), map.end(),
         std::inserter(out_map, out_map.end()),
         [](const auto& metric) {
@@ -446,7 +443,11 @@ auto selector_accept_wrapper_(const metric_source::emit_type& src)
               metric.second);
         });
 
-    return result;
+    return {
+        tp,
+        std::in_place_index<1>,
+        std::move(out_map)
+    };
   }
 }
 

@@ -53,32 +53,75 @@ class monsoon_expr_export_ expression {
 
  public:
   /**
-   * \brief The speculative emit type.
+   * \brief A speculative scalar.
    *
    * Speculative emitted values are emitted as early as possible.
    * Being speculative, they may be overriden or invalidated by later emitions.
    */
-  using speculative_emit_type =
-      std::variant<metric_value, std::tuple<tags, metric_value>>;
+  using speculative_scalar = metric_value;
   /**
-   * \brief A factual emition.
+   * \brief A speculative vector.
+   *
+   * Speculative emitted values are emitted as early as possible.
+   * Being speculative, they may be overriden or invalidated by later emitions.
+   */
+  using speculative_vector = std::tuple<tags, metric_value>;
+  /**
+   * \brief A factual scalar.
    *
    * Factual emitions are known correct and will never be overriden, nor invalidated.
    * A factual emition will always contain all data for a given timestamp.
    * Speculative emitions shall never have a timestamp at/before the most recent
    * factual emition.
    */
-  using factual_emit_type =
-      std::variant<metric_value, std::unordered_map<tags, metric_value>>;
+  using factual_scalar = metric_value;
   /**
-   * \brief The emit type of the evaluation.
+   * \brief A factual vector.
    *
-   * A mix of speculative and factual emitions are yielded during evaluation.
+   * Factual emitions are known correct and will never be overriden, nor invalidated.
+   * A factual emition will always contain all data for a given timestamp.
+   * Speculative emitions shall never have a timestamp at/before the most recent
+   * factual emition.
    */
-  using emit_type =
-      std::tuple<
-          time_point,
-          std::variant<speculative_emit_type, factual_emit_type>>;
+  using factual_vector = std::unordered_map<tags, metric_value>;
+  /**
+   * \brief Emitted scalar values.
+   *
+   * Scalars are untagged values.
+   */
+  struct scalar_emit_type {
+    time_point tp;
+    std::variant<speculative_scalar, factual_scalar> data;
+
+    template<typename... Args>
+    scalar_emit_type(time_point tp, Args&&... args)
+    : tp(std::move(tp)),
+      data(std::forward<Args>(args)...)
+    {}
+  };
+  /**
+   * \brief Emitted vectors.
+   *
+   * Vectors are tagged values.
+   */
+  struct vector_emit_type {
+    time_point tp;
+    std::variant<speculative_vector, factual_vector> data;
+
+    template<typename... Args>
+    vector_emit_type(time_point tp, Args&&... args)
+    : tp(std::move(tp)),
+      data(std::forward<Args>(args)...)
+    {}
+  };
+  /**
+   * \brief An objpipe of scalars.
+   */
+  using scalar_objpipe = objpipe::reader<scalar_emit_type>;
+  /**
+   * \brief An objpipe of vectors.
+   */
+  using vector_objpipe = objpipe::reader<vector_emit_type>;
 
   /**
    * \brief Create an expression pointer in place.
@@ -104,7 +147,7 @@ class monsoon_expr_export_ expression {
    */
   virtual auto operator()(const metric_source&, const time_range&,
       time_point::duration) const
-      -> objpipe::reader<emit_type> = 0;
+      -> std::variant<scalar_objpipe, vector_objpipe> = 0;
 
  private:
   virtual void do_ostream(std::ostream&) const = 0;

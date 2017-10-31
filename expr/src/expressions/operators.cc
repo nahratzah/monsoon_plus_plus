@@ -22,12 +22,13 @@ class monsoon_expr_local_ unop_t final
 
   auto operator()(const metric_source&,
       const time_range&, time_point::duration) const
-      -> objpipe::reader<emit_type> override;
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
 
  private:
   void do_ostream(std::ostream&) const override;
 
-  static auto apply_(emit_type&, const Fn&) -> emit_type&;
+  static auto apply_scalar_(scalar_emit_type&, const Fn&) -> scalar_emit_type&;
+  static auto apply_vector_(vector_emit_type&, const Fn&) -> vector_emit_type&;
 
   expression_ptr nested_;
   Fn fn_;
@@ -48,7 +49,7 @@ class monsoon_expr_local_ binop_t final
 
   auto operator()(const metric_source&,
       const time_range&, time_point::duration) const
-      -> objpipe::reader<emit_type> override;
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -75,11 +76,22 @@ template<typename Fn>
 auto unop_t<Fn>::operator()(
     const metric_source& src,
     const time_range& tr, time_point::duration slack) const
--> objpipe::reader<emit_type> {
+-> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 
-  return std::invoke(*nested_, src, tr, std::move(slack))
-      .transform_copy(std::bind(&unop_t::apply_, _1, fn_));
+  return std::visit(
+      overload(
+          [this](scalar_objpipe&& s)
+          -> std::variant<scalar_objpipe, vector_objpipe> {
+            return std::move(s)
+                .transform_copy(std::bind(&unop_t::apply_scalar_, _1, fn_));
+          },
+          [this](vector_objpipe&& s)
+          -> std::variant<scalar_objpipe, vector_objpipe> {
+            return std::move(s)
+                .transform_copy(std::bind(&unop_t::apply_vector_, _1, fn_));
+          }),
+      std::invoke(*nested_, src, tr, std::move(slack)));
 }
 
 template<typename Fn>
@@ -88,35 +100,29 @@ void unop_t<Fn>::do_ostream(std::ostream& out) const {
 }
 
 template<typename Fn>
-auto unop_t<Fn>::apply_(emit_type& emt, const Fn& fn) -> emit_type& {
-  if (std::get<1>(emt).index() == 0u) {
-    auto& speculative = std::get<0>(std::get<1>(emt));
+auto unop_t<Fn>::apply_scalar_(scalar_emit_type& emt, const Fn& fn)
+-> scalar_emit_type& {
+  std::visit(
+      [&fn](metric_value& v) {
+        v = std::invoke(fn, std::move(v));
+      },
+      emt.data);
+  return emt;
+}
 
-    std::visit(
-        overload(
-            [&fn](metric_value& v) {
-              v = std::invoke(fn, v);
-            },
-            [&fn](std::tuple<tags, metric_value>& tpl) {
-              std::get<1>(tpl) = std::invoke(fn, std::get<1>(tpl));
-            }),
-        speculative);
-  } else {
-    auto& factual = std::get<1>(std::get<1>(emt));
-
-    std::visit(
-        overload(
-            [&fn](metric_value& v) {
-              v = std::invoke(fn, v);
-            },
-            [&fn](std::unordered_map<tags, metric_value>& map) {
-              for (auto& elem : map) {
-                elem.second = std::invoke(fn, elem.second);
-              }
-            }),
-        factual);
-  }
-
+template<typename Fn>
+auto unop_t<Fn>::apply_vector_(vector_emit_type& emt, const Fn& fn)
+-> vector_emit_type& {
+  std::visit(
+      overload(
+          [&fn](speculative_vector& v) {
+            std::get<1>(v) = std::invoke(fn, std::move(std::get<1>(v)));
+          },
+          [&fn](factual_vector& map) {
+            for (auto& elem : map)
+              elem.second = std::invoke(fn, std::move(elem.second));
+          }),
+      emt.data);
   return emt;
 }
 

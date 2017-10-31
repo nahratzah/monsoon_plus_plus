@@ -15,12 +15,12 @@ class monsoon_expr_local_ constant_expr
 
   auto operator()(const metric_source&,
       const time_range&, time_point::duration) const
-      -> objpipe::reader<emit_type> override;
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
 
  private:
   void do_ostream(std::ostream&) const override;
 
-  static auto transform_time_(time_point tp, metric_value v) -> emit_type;
+  static auto transform_time_(time_point, metric_value) -> scalar_emit_type;
 
   metric_value v_;
 };
@@ -35,7 +35,8 @@ constant_expr::~constant_expr() noexcept {}
 
 auto constant_expr::operator()(
     const metric_source& source, const time_range& tr,
-    time_point::duration slack) const -> objpipe::reader<emit_type> {
+    time_point::duration slack) const
+-> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 
   return source.emit_time(tr, slack)
@@ -47,9 +48,8 @@ void constant_expr::do_ostream(std::ostream& out) const {
 }
 
 auto constant_expr::transform_time_(time_point tp, metric_value v)
--> emit_type {
-  return emit_type(tp,
-      factual_emit_type(v));
+-> scalar_emit_type {
+  return { tp, std::in_place_index<1>, v };
 }
 
 
