@@ -23,7 +23,6 @@ namespace expressions {
  *
  * Test if a \ref monsoon::simple_group "simple_group" or
  * \ref monsoon::metric_name "metric_name" matches.
- * \todo Maybe remove the constructors and let compiler default them.
  */
 class monsoon_expr_export_ path_matcher {
  public:
@@ -58,13 +57,6 @@ class monsoon_expr_export_ path_matcher {
   using const_iterator = matcher_vector::const_iterator;
   ///\copydoc monsoon::expressions::path_matcher::const_iterator
   using iterator = const_iterator;
-
-  path_matcher() = default;
-  path_matcher(const path_matcher&);
-  path_matcher& operator=(const path_matcher&);
-  path_matcher(path_matcher&&) noexcept;
-  path_matcher& operator=(path_matcher&&) noexcept;
-  ~path_matcher() noexcept;
 
   ///@{
   /**
@@ -128,7 +120,6 @@ class monsoon_expr_export_ path_matcher {
  * \ingroup expr
  *
  * Test if a \ref monsoon::tags "tag set" matches.
- * \todo Maybe remove the constructors and let compiler default them.
  */
 class monsoon_expr_export_ tag_matcher {
   friend std::ostream& operator<<(std::ostream&, const tag_matcher&);
@@ -174,13 +165,6 @@ class monsoon_expr_export_ tag_matcher {
   using const_iterator = matcher_map::const_iterator;
   ///@copydoc monsoon::expressions::tag_matcher::const_iterator
   using iterator = const_iterator;
-
-  tag_matcher() = default;
-  tag_matcher(const tag_matcher&);
-  tag_matcher& operator=(const tag_matcher&);
-  tag_matcher(tag_matcher&&) noexcept;
-  tag_matcher& operator=(tag_matcher&&) noexcept;
-  ~tag_matcher() noexcept;
 
   /**
    * \brief Test if the given tag set is a match.

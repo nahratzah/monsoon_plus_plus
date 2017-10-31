@@ -63,17 +63,6 @@ bool monsoon_expr_local_ do_match(
   return val_b == val_e;
 }
 
-path_matcher::path_matcher(const path_matcher& o)
-: matcher_(o.matcher_)
-{}
-
-auto path_matcher::operator=(const path_matcher& o) -> path_matcher& {
-  matcher_ = o.matcher_;
-  return *this;
-}
-
-path_matcher::~path_matcher() noexcept {}
-
 bool path_matcher::operator()(const simple_group& g) const {
   return do_match(matcher_.begin(), matcher_.end(), g.begin(), g.end());
 }
@@ -106,17 +95,6 @@ void path_matcher::push_back_double_wildcard() {
   }
 }
 
-
-tag_matcher::tag_matcher(const tag_matcher& o)
-: matcher_(o.matcher_)
-{}
-
-auto tag_matcher::operator=(const tag_matcher& o) -> tag_matcher& {
-  matcher_ = o.matcher_;
-  return *this;
-}
-
-tag_matcher::~tag_matcher() noexcept {}
 
 bool tag_matcher::operator()(const tags& t) const {
   for (const auto& m : matcher_) {

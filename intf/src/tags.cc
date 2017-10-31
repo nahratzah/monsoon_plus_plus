@@ -30,10 +30,6 @@ auto tags::operator<(const tags& other) const noexcept -> bool {
       });
 }
 
-auto tags::tag_string() const -> std::string {
-  return (std::ostringstream() << *this).str();
-}
-
 
 auto operator<<(std::ostream& out, const tags& tv) -> std::ostream& {
   if (tv.empty()) return out << "{}";
@@ -47,6 +43,10 @@ auto operator<<(std::ostream& out, const tags& tv) -> std::ostream& {
   }
   out << "}";
   return out;
+}
+
+auto to_string(const tags& t) -> std::string {
+  return (std::ostringstream() << t).str();
 }
 
 

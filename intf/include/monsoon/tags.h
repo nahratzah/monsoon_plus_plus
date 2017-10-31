@@ -24,8 +24,6 @@ namespace monsoon {
  *
  * Tag values are \ref metric_value "metric values",
  * excluding \ref metric_value::empty and \ref histogram values.
- *
- * \todo Consider if explicitly mentioned default constructors can be made implicit.
  */
 class monsoon_intf_export_ tags {
  public:
@@ -36,10 +34,6 @@ class monsoon_intf_export_ tags {
 
   ///@{
   tags() = default;
-  tags(const tags&) = default;
-  tags(tags&&) noexcept;
-  tags& operator=(const tags&) = default;
-  tags& operator=(tags&&) noexcept;
 
   /**
    * \brief Construct a tag set using an iteration.
@@ -51,11 +45,11 @@ class monsoon_intf_export_ tags {
   /**
    * \brief Construct a tag set using the given values.
    */
-  tags(map_type) noexcept;
+  explicit tags(map_type) noexcept;
   /**
    * \brief Construct a tag set using the given values.
    */
-  tags(std::initializer_list<map_type::value_type>);
+  explicit tags(std::initializer_list<map_type::value_type>);
   ///@}
 
   /**
@@ -99,12 +93,6 @@ class monsoon_intf_export_ tags {
   ///@}
 
   /**
-   * \brief Get the string representation of the tag set.
-   * \return String representation of the tag set.
-   * \todo This should be a to_string function.
-   */
-  std::string tag_string() const;
-  /**
    * \brief Test if the tag set has all given key names defined.
    *
    * \tparam Iter An iterator type.
@@ -128,6 +116,13 @@ class monsoon_intf_export_ tags {
  */
 monsoon_intf_export_
 std::ostream& operator<<(std::ostream& out, const tags& t);
+
+/**
+ * \brief Get the string representation of the tag set.
+ * \param t The tag set to create a string representation of.
+ * \return String representation of the tag set.
+ */
+std::string to_string(const tags& t);
 
 
 } /* namespace monsoon */
