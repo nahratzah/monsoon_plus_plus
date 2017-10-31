@@ -37,8 +37,6 @@ install (FILES
   include/monsoon/intf_export_.h
   include/monsoon/interpolate.h
   include/monsoon/metric_source.h
-  include/monsoon/acceptor.h
-  include/monsoon/acceptor-inl.h
   include/monsoon/alert-inl.h
   include/monsoon/alert.h
   include/monsoon/collector.h

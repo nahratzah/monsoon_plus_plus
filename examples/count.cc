@@ -5,7 +5,6 @@
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
-#include <monsoon/acceptor.h>
 #include <cstdint>
 #include <iostream>
 
