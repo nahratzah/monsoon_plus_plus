@@ -229,6 +229,9 @@ class monsoon_expr_local_ selector_with_tags
       time_point::duration) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
+
  private:
   void do_ostream(std::ostream&) const override;
 
@@ -251,6 +254,9 @@ class monsoon_expr_local_ selector_without_tags
   auto operator()(const metric_source&, const time_range&,
       time_point::duration) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
+
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -383,6 +389,14 @@ auto selector_with_tags::operator()(
       .transform(&selector_accept_wrapper_);
 }
 
+bool selector_with_tags::is_scalar() const noexcept {
+  return false;
+}
+
+bool selector_with_tags::is_vector() const noexcept {
+  return true;
+}
+
 void selector_with_tags::do_ostream(std::ostream& out) const {
   out << group_ << tags_ << "::" << metric_;
 }
@@ -407,6 +421,14 @@ auto selector_without_tags::operator()(
           },
           slack)
       .transform(&selector_accept_wrapper_);
+}
+
+bool selector_without_tags::is_scalar() const noexcept {
+  return false;
+}
+
+bool selector_without_tags::is_vector() const noexcept {
+  return true;
 }
 
 void selector_without_tags::do_ostream(std::ostream& out) const {

@@ -24,6 +24,9 @@ class monsoon_expr_local_ unop_t final
       const time_range&, time_point::duration) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
+
  private:
   void do_ostream(std::ostream&) const override;
 
@@ -50,6 +53,9 @@ class monsoon_expr_local_ binop_t final
   auto operator()(const metric_source&,
       const time_range&, time_point::duration) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
+
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
 
  private:
   void do_ostream(std::ostream&) const override;
@@ -92,6 +98,16 @@ auto unop_t<Fn>::operator()(
                 .transform_copy(std::bind(&unop_t::apply_vector_, _1, fn_));
           }),
       std::invoke(*nested_, src, tr, std::move(slack)));
+}
+
+template<typename Fn>
+bool unop_t<Fn>::is_scalar() const noexcept {
+  return nested_->is_scalar();
+}
+
+template<typename Fn>
+bool unop_t<Fn>::is_vector() const noexcept {
+  return nested_->is_scalar();
 }
 
 template<typename Fn>
@@ -141,6 +157,16 @@ binop_t<Fn>::binop_t(Fn&& fn, std::string_view sign,
 
 template<typename Fn>
 binop_t<Fn>::~binop_t() noexcept {}
+
+template<typename Fn>
+bool binop_t<Fn>::is_scalar() const noexcept {
+  return x_->is_scalar() && y_->is_scalar();
+}
+
+template<typename Fn>
+bool binop_t<Fn>::is_vector() const noexcept {
+  return x_->is_vector() || y_->is_vector();
+}
 
 template<typename Fn>
 void binop_t<Fn>::do_ostream(std::ostream& out) const {

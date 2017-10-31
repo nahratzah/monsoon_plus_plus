@@ -17,6 +17,9 @@ class monsoon_expr_local_ constant_expr
       const time_range&, time_point::duration) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
+
  private:
   void do_ostream(std::ostream&) const override;
 
@@ -41,6 +44,14 @@ auto constant_expr::operator()(
 
   return source.emit_time(tr, slack)
       .transform(std::bind(&constant_expr::transform_time_, _1, v_));
+}
+
+bool constant_expr::is_scalar() const noexcept {
+  return true;
+}
+
+bool constant_expr::is_vector() const noexcept {
+  return false;
 }
 
 void constant_expr::do_ostream(std::ostream& out) const {

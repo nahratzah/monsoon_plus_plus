@@ -149,6 +149,19 @@ class monsoon_expr_export_ expression {
       time_point::duration) const
       -> std::variant<scalar_objpipe, vector_objpipe> = 0;
 
+  /**
+   * \brief Test if the expression is a scalar expression.
+   *
+   * \note Exactly one of #is_scalar() and #is_vector() will return true.
+   */
+  virtual bool is_scalar() const noexcept = 0;
+  /**
+   * \brief Test if the expression is a vector expression.
+   *
+   * \note Exactly one of #is_scalar() and #is_vector() will return true.
+   */
+  virtual bool is_vector() const noexcept = 0;
+
  private:
   virtual void do_ostream(std::ostream&) const = 0;
 };
