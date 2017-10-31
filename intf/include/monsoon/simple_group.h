@@ -114,15 +114,17 @@ std::ostream& operator<<(std::ostream& out, const simple_group& n);
 namespace std {
 
 
-/**
- * \brief STL Hash support.
- * \ingroup intf_stl
- */
+///\brief STL Hash support.
+///\ingroup intf_stl
+///\relates simple_group
 template<>
 struct hash<monsoon::simple_group> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::simple_group&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for simple_group.
   monsoon_intf_export_
   size_t operator()(const monsoon::simple_group&) const noexcept;
 };

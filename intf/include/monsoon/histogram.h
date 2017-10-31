@@ -132,20 +132,32 @@ std::ostream& operator<<(std::ostream&, const histogram&);
 namespace std {
 
 
+///\brief STL Hash support.
+///\ingroup intf_stl
+///\relates histogram::range
 template<>
 struct hash<monsoon::histogram::range> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::histogram::range&;
+  ///\brief Result type for hash function.
   using result_type = std::size_t;
 
+  ///\brief Compute hash code for histogram::range.
   monsoon_intf_export_
   size_t operator()(const monsoon::histogram::range&) const noexcept;
 };
 
+///\brief STL Hash support.
+///\ingroup intf_stl
+///\relates histogram
 template<>
 struct hash<monsoon::histogram> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::histogram&;
+  ///\brief Result type for hash function.
   using result_type = std::size_t;
 
+  ///\brief Compute hash code for histogram.
   monsoon_intf_export_
   size_t operator()(const monsoon::histogram&) const noexcept;
 };

@@ -49,11 +49,17 @@ class monsoon_intf_export_ time_series_value {
 namespace std {
 
 
+///\brief STL Hash support.
+///\ingroup intf_stl
+///\relates metric_value
 template<>
 struct hash<monsoon::time_series_value> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::time_series_value&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for time_series_value.
   monsoon_intf_export_
   size_t operator()(const monsoon::time_series_value&) const noexcept;
 };

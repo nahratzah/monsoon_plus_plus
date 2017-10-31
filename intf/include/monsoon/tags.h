@@ -141,9 +141,12 @@ namespace std {
 ///\relates tags
 template<>
 struct hash<monsoon::tags> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::tags&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for tags.
   monsoon_intf_export_
   size_t operator()(const monsoon::tags&) const noexcept;
 };

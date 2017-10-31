@@ -131,11 +131,15 @@ namespace std {
 
 ///\brief STL Hash support.
 ///\ingroup intf_stl
+///\relates metric_name
 template<>
 struct hash<monsoon::metric_name> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::metric_name&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for metric_name.
   monsoon_intf_export_
   size_t operator()(const monsoon::metric_name&) const noexcept;
 };

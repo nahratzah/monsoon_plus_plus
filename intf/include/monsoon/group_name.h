@@ -88,11 +88,15 @@ namespace std {
 
 ///\brief STL Hash support.
 ///\ingroup intf_stl
+///\relates group_name
 template<>
 struct hash<monsoon::group_name> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::group_name&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for group_name.
   monsoon_intf_export_
   size_t operator()(const monsoon::group_name&) const noexcept;
 };
