@@ -38,8 +38,8 @@ class monsoon_expr_local_ unop_t final
   static auto apply_scalar_(scalar_emit_type&, const Fn&) -> scalar_emit_type&;
   static auto apply_vector_(vector_emit_type&, const Fn&) -> vector_emit_type&;
 
-  expression_ptr nested_;
   Fn fn_;
+  expression_ptr nested_;
   std::string_view sign_;
 };
 
@@ -65,8 +65,8 @@ class monsoon_expr_local_ binop_t final
  private:
   void do_ostream(std::ostream&) const override;
 
-  expression_ptr x_, y_;
   Fn fn_;
+  expression_ptr x_, y_;
   std::string_view sign_;
 };
 
@@ -212,8 +212,8 @@ class monsoon_expr_local_ vector_accumulator {
 template<typename Fn>
 unop_t<Fn>::unop_t(Fn&& fn, std::string_view sign, expression_ptr&& nested)
 : fn_(std::move(fn)),
-  sign_(std::move(sign)),
-  nested_(std::move(nested))
+  nested_(std::move(nested)),
+  sign_(std::move(sign))
 {
   if (nested_ == nullptr) throw std::invalid_argument("null expression_ptr");
 }
@@ -290,9 +290,9 @@ template<typename Fn>
 binop_t<Fn>::binop_t(Fn&& fn, std::string_view sign,
     expression_ptr&& x, expression_ptr&& y)
 : fn_(std::move(fn)),
-  sign_(std::move(sign)),
   x_(std::move(x)),
-  y_(std::move(y))
+  y_(std::move(y)),
+  sign_(std::move(sign))
 {
   if (x_ == nullptr) throw std::invalid_argument("null expression_ptr x");
   if (y_ == nullptr) throw std::invalid_argument("null expression_ptr y");
