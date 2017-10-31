@@ -38,16 +38,6 @@ class monsoon_intf_export_ metric_value {
    * \todo Maybe we should get rid of this and use std::optional<metric_value> where appropriate instead?
    */
   struct empty {
-    ///\brief Constructor.
-    constexpr empty() noexcept {}
-    ///\brief Copy constructor.
-    constexpr empty(const empty&) noexcept {}
-    ///\brief Move constructor.
-    constexpr empty(empty&&) noexcept {}
-    ///\brief Copy assignment.
-    constexpr empty& operator=(const empty&) noexcept { return *this; }
-    ///\brief Move assignment.
-    constexpr empty& operator=(empty&&) noexcept { return *this; }
     ///\brief Equality.
     constexpr bool operator==(const empty&) const noexcept { return true; }
     ///\brief Inequality.
