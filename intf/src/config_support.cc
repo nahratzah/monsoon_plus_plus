@@ -14,12 +14,12 @@ namespace {
 
 using namespace std::literals;
 
-constexpr std::array<std::string_view, 32> lo_escapes({
+constexpr std::array<std::string_view, 32> lo_escapes{{
   "\\0"sv  , "\\001"sv, "\\002"sv, "\\003"sv, "\\004"sv, "\\005"sv, "\\006"sv, "\\a"sv  ,
   "\\b"sv  , "\\t"sv  , "\\n"sv  , "\\v"sv  , "\\f"sv  , "\\r"sv  , "\\016"sv, "\\017"sv,
   "\\020"sv, "\\021"sv, "\\022"sv, "\\023"sv, "\\024"sv, "\\025"sv, "\\026"sv, "\\027"sv,
   "\\030"sv, "\\031"sv, "\\032"sv, "\\033"sv, "\\034"sv, "\\035"sv, "\\036"sv, "\\037"sv,
-});
+}};
 
 auto quote(std::string_view s, std::u32string_view special)
 ->  std::tuple<std::string, bool> {
