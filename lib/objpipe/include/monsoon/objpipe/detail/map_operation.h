@@ -34,6 +34,7 @@ class map_operation final
 : public reader_intf<std::decay_t<OutType>>
 {
  private:
+  ///\brief Element type of the objpipe that supplies values.
   using in_type = InType;
   ///@copydoc reader_intf<T>::value_type
   using value_type = typename reader_intf<OutType>::value_type;
@@ -41,6 +42,12 @@ class map_operation final
   using pointer = typename reader_intf<OutType>::pointer;
 
  public:
+  /**
+   * \brief Construct a map operation.
+   * \tparam OpArgs Type of \p op_args, used to construct transform operation.
+   * \param src The source objpipe, values of which are to be transformed.
+   * \param op_args Arguments to construct the transform operation.
+   */
   template<typename... OpArgs>
   explicit map_operation(
       std::unique_ptr<reader_intf<InType>, reader_release>&& src,
