@@ -27,10 +27,8 @@ class expression;
  *
  * Since \ref monsoon::expression "expression" is an interface, it can only be held in a pointer.
  * This type represents the default pointer for an expression.
- *
- * \todo Figure out if we can simply use std::unique_ptr instead, removing the shared_ptr overhead.
  */
-using expression_ptr = std::shared_ptr<const expression>;
+using expression_ptr = std::unique_ptr<const expression>;
 
 /**
  * \brief Expressions represent a computation on zero or more metrics.
