@@ -4,8 +4,8 @@ namespace monsoon {
 
 
 auto interpolate(time_point at,
-    const std::tuple<time_point, metric_value>& x,
-    const std::tuple<time_point, metric_value>& y)
+    std::tuple<time_point, const metric_value&> x,
+    std::tuple<time_point, const metric_value&> y)
 -> std::optional<metric_value> {
   if (std::get<0>(x) == std::get<0>(y))
     throw std::invalid_argument("interpolate same timestamp");

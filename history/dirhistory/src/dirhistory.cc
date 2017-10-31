@@ -407,10 +407,10 @@ auto dirhistory_emit_reducer(time_point at,
       if (found != intermediate.end()) {
         std::optional<metric_value> mv = interpolate(
             at,
-            std::make_tuple(
+            std::tie(
                 std::get<0>(found->second),
                 *std::get<1>(found->second)),
-            std::make_tuple(
+            std::tie(
                 std::get<0>(*q_iter),
                 entry.second));
         if (mv.has_value())

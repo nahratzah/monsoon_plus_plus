@@ -30,8 +30,8 @@ namespace monsoon {
  * \relates metric_value
  */
 auto monsoon_intf_export_ interpolate(time_point tp,
-    const std::tuple<time_point, metric_value>& x,
-    const std::tuple<time_point, metric_value>& y)
+    std::tuple<time_point, const metric_value&> x,
+    std::tuple<time_point, const metric_value&> y)
 -> std::optional<metric_value>;
 
 
