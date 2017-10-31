@@ -34,14 +34,6 @@ class monsoon_dirhistory_export_ dirhistory
   void push_back(const time_series&) override;
 
   auto time() const -> std::tuple<time_point, time_point> override;
-  auto simple_groups(const time_range&) const
-      -> std::unordered_set<simple_group> override;
-  auto group_names(const time_range&) const
-      -> std::unordered_set<group_name> override;
-  auto tagged_metrics(const time_range&) const
-      -> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> override;
-  auto untagged_metrics(const time_range&) const
-      -> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> override;
 
   auto emit(
       time_range,

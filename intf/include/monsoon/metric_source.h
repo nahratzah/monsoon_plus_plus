@@ -72,45 +72,6 @@ class monsoon_intf_export_ metric_source {
 
   ///@{
   /**
-   * \brief Retrieve groups used in the given time range.
-   *
-   * The returned set will describe all groups that are known during the given time range.
-   * \note The metric source is allowed to return groups that are not present in the time range.
-   * \deprecated This is not used and makes it hard to create reliable processors.
-   */
-  virtual auto simple_groups(const time_range&) const
-      -> std::unordered_set<simple_group> = 0;
-  /**
-   * \brief Retrieve groups used in the given time range.
-   *
-   * The returned set will describe all groups that are known during the given time range.
-   * \note The metric source is allowed to return groups that are not present in the time range.
-   * \deprecated This is not used and makes it hard to create reliable processors.
-   */
-  virtual auto group_names(const time_range&) const
-      -> std::unordered_set<group_name> = 0;
-  /**
-   * \brief Retrieve metric names used in the given time range.
-   *
-   * The returned set will describe all metric names that are known during the given time range.
-   * \note The metric source is allowed to return metric names that are not present in the time range.
-   * \deprecated This is not used and makes it hard to create reliable processors.
-   */
-  virtual auto tagged_metrics(const time_range&) const
-      -> std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash> = 0;
-  /**
-   * \brief Retrieve metric names used in the given time range.
-   *
-   * The returned set will describe all metric names that are known during the given time range.
-   * \note The metric source is allowed to return metric names that are not present in the time range.
-   * \deprecated This is not used and makes it hard to create reliable processors.
-   */
-  virtual auto untagged_metrics(const time_range&) const
-      -> std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash> = 0;
-  ///@}
-
-  ///@{
-  /**
    * \brief Retrieve all metrics matching the given filters over time.
    *
    * \param tr The interval over which to yield metrics.
