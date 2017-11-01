@@ -197,6 +197,21 @@ class reader {
     return fn;
   }
 
+  /**
+   * \brief Gather all elements in a vector.
+   *
+   * \tparam Alloc The allocator type for the vector.
+   * \param[in] alloc The allocator to use for the vector.
+   */
+  template<typename Alloc>
+  auto to_vector(const Alloc& alloc = std::allocator<value_type>()) &&
+  -> std::vector<value_type, Alloc> {
+    auto result = std::vector<value_type, Alloc>(alloc);
+    std::copy(begin(), end(), std::back_inserter(result));
+    ptr_.reset();
+    return result;
+  }
+
  private:
   std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr_;
 };
