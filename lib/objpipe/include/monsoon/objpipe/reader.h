@@ -34,13 +34,17 @@ class reader {
   class iterator;
 
   iterator begin() {
+    assert(ptr_ != nullptr);
     return iterator(*this);
   }
 
   iterator end() {
+    assert(ptr_ != nullptr);
     return iterator();
   }
   ///@}
+
+  reader() = default;
 
   /**
    * \brief Construct a reader using the given pointer.
@@ -194,6 +198,7 @@ class reader {
       assert(v.has_value());
       std::invoke(fn, std::move(v.value()));
     }
+    ptr_.reset();
     return fn;
   }
 
@@ -209,6 +214,13 @@ class reader {
     auto result = std::vector<value_type, Alloc>(begin(), end(), alloc);
     ptr_.reset();
     return result;
+  }
+
+  /**
+   * \brief Discard the object pipe.
+   */
+  void reset() noexcept {
+    ptr_.reset();
   }
 
  private:
