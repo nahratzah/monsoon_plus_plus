@@ -30,6 +30,18 @@ class reader {
   /** \brief Reference type for objects in this object pipe. */
   using reference = std::add_lvalue_reference_t<value_type>;
 
+  ///@{
+  class iterator;
+
+  iterator begin() {
+    return iterator(*this);
+  }
+
+  iterator end() {
+    return iterator();
+  }
+  ///@}
+
   /**
    * \brief Construct a reader using the given pointer.
    *
@@ -187,6 +199,103 @@ class reader {
 
  private:
   std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr_;
+};
+
+/**
+ * \brief Iterate over all elements in the reader.
+ * \ingroup objpipe
+ *
+ * This is an input iterator.
+ */
+template<typename T>
+class reader<T>::iterator {
+ public:
+  ///\copydoc reader<T>::value_type
+  using value_type = typename reader<T>::value_type;
+  ///\brief The reference type is the value type.
+  using reference = value_type;
+  ///\brief We do not supply pointers.
+  using pointer = void;
+  ///\brief Difference type.
+  using difference_type = ptrdiff_t;
+  ///\brief The iterator is an input iterator.
+  using iterator_category = std::input_iterator_tag;
+
+  iterator() = default;
+
+ private:
+  explicit iterator(reader<T>& r) noexcept
+  : reader_(&r)
+  {}
+
+ public:
+  /**
+   * \brief Dereference the iterator.
+   *
+   * This is an input iterator, therefore the dereference operation
+   * must be called exactly once between increments.
+   * \return the value type of the underlying objpipe.
+   * \throw std::system_error if the objpipe cannot be pulled from.
+   */
+  auto operator*() -> reference {
+    assert(reader_ != nullptr && bool(*reader_));
+    return reader_->pull();
+  }
+
+  /**
+   * \brief Advance iterator.
+   *
+   * This is effectively a noop, as the input iterator advances at dereference.
+   * \return the iterator.
+   */
+  auto operator++() -> iterator& {
+    return *this;
+  }
+
+  /**
+   * \brief Advance iterator (postfix increment operator).
+   *
+   * This is effectively a noop, as the input iterator advances at dereference.
+   */
+  auto operator++(int) -> void {
+    ++*this;
+  }
+
+  /**
+   * \brief Check if two objpipe iterators are equal.
+   *
+   * Two iterators are considered equal if both are end iterators.
+   * All other iterators are considered not equal.
+   * \param x,y The iterators to check for equality.
+   * \note Only end iterators compare as equal.
+   */
+  friend bool operator==(const iterator& x, const iterator& y) noexcept {
+    if (x.reader_ != nullptr
+        && x.reader_->wait() != objpipe_errc::closed)
+      return false;
+
+    if (y.reader_ != nullptr
+        && y.reader_->wait() != objpipe_errc::closed)
+      return false;
+
+    // Both are at the end.
+    return true;
+  }
+
+  /**
+   * \brief Check if two objpipe iterators are not equal.
+   *
+   * Two iterators are considered equal if both are end iterators.
+   * All other iterators are considered not equal.
+   * \param x,y The iterators to check for equality.
+   * \note Only end iterators compare as equal.
+   */
+  friend bool operator!=(const iterator& x, const iterator& y) noexcept {
+    return !(x == y);
+  }
+
+ private:
+  reader<T>* reader_ = nullptr;
 };
 
 
