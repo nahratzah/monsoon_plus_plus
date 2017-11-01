@@ -209,6 +209,8 @@ class reader {
  */
 template<typename T>
 class reader<T>::iterator {
+  friend class reader<T>;
+
  public:
   ///\copydoc reader<T>::value_type
   using value_type = typename reader<T>::value_type;
