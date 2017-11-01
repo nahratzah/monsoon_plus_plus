@@ -206,8 +206,7 @@ class reader {
   template<typename Alloc>
   auto to_vector(const Alloc& alloc = std::allocator<value_type>()) &&
   -> std::vector<value_type, Alloc> {
-    auto result = std::vector<value_type, Alloc>(alloc);
-    std::copy(begin(), end(), std::back_inserter(result));
+    auto result = std::vector<value_type, Alloc>(begin(), end(), alloc);
     ptr_.reset();
     return result;
   }
