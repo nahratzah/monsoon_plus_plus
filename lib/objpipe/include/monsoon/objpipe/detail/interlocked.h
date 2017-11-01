@@ -8,6 +8,7 @@
 #include <monsoon/objpipe/detail/writer_intf.h>
 #include <monsoon/objpipe/errc.h>
 #include <mutex>
+#include <memory>
 #include <condition_variable>
 
 namespace monsoon {
@@ -69,17 +70,17 @@ class interlocked final
     }
     while (offered_ != nullptr) {
       write_avail_.wait();
-      if (!has_writer()) {
+      if (!has_reader()) {
         e = objpipe_errc::closed;
         return;
       }
     }
 
-    offered_ = &v;
+    pointer v_addr = std::addressof(v);
+    offered_ = v_addr;
     read_avail_.notify_one();
-    do {
-      write_done_.wait(lck)
-    } while (offered_ == &v);
+    continuation_notify_(continuation_, lck);
+    write_done_.wait(lck, [this, v_addr]() { return offered_ != v_addr; })
   }
 
   ///@copydoc reader_intf<T>::wait()
@@ -94,7 +95,7 @@ class interlocked final
 
   ///@copydoc reader_intf<T>::empty()
   auto empty() const noexcept -> bool {
-    std::unique_lock<std::mutex> lck{ mtx_ };
+    std::lock_guard<std::mutex> lck{ mtx_ };
     return offered_ == nullptr;
   }
 
@@ -197,6 +198,11 @@ class interlocked final
   ///@copydoc reader_intf<T>::add_continuation(std::unique_ptr<continuation_intf,writer_release>&&)
   void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) {
     std::lock_guard<std::mutex> lck{ mtx_ };
+
+    // Note: by the end of the swap operation, the writers may have gone.
+    // This is fine, as the last writer disappearing will invoke
+    // on_last_writer_gone_(), which grabs the lck prior to releasing the
+    // continuation_, which in this case (due to blocking) will be `c`.
     if (has_writer()) swap(continuation_, c);
   }
 
@@ -217,9 +223,9 @@ class interlocked final
     std::unique_ptr<continuation_intf, writer_release> old_c;
     std::unique_lock<std::mutex> lck{ mtx_ };
     old_c = std::move(continuation_);
+    // Implied: old_c::~unique_ptr(), after unlocking of lck;
 
     lck.unlock(); // Unlock prior to destruction of old_c pointee.
-    // Implied: old_c::~unique_ptr();
 
     // Signal any blocking readers.
     read_avail_.notify_all();
@@ -233,6 +239,19 @@ class interlocked final
     // Signal any blocking writers.
     write_done_.notify_all();
     write_avail_.notify_all();
+  }
+
+  void continuation_notify_(
+      std::unique_ptr<continuation_intf, writer_release>& continuation,
+      std::unique_lock<std::mutex>& lck) noexcept {
+    if (continuation != nullptr) {
+      std::unique_ptr<continuation_intf, writer_release> live_continuation =
+          writer_release::link(continuation_.get());
+      lck.unlock();
+      live_continuation->notify();
+      live_continuation.reset();
+      lck.lock();
+    }
   }
 
   mutable std::mutex mtx_;

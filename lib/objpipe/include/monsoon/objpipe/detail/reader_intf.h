@@ -29,6 +29,8 @@ class monsoon_objpipe_export_ continuation_intf
  public:
   ~continuation_intf() noexcept override;
 
+  virtual void notify() noexcept = 0;
+
  private:
   /**
    * copydoc base_objpipe::on_last_writer_gone_()
