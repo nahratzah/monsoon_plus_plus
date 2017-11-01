@@ -96,6 +96,25 @@ class reader_intf
   virtual auto pull() -> value_type = 0;
 
   /**
+   * Removes and returns an object from the pipe, if one is available.
+   *
+   * This call will synchronize as appropriate, but not wait for any writer to
+   * push a value.
+   * @param[out] e a variable for indicating success/failure conditions.
+   * @return the pulled value, or an empty optional if none is available.
+   */
+  virtual auto try_pull(objpipe_errc& e) -> std::optional<value_type> = 0;
+
+  /**
+   * Removes and returns an object from the pipe, if one is available.
+   *
+   * This call will synchronize as appropriate, but not wait for any writer to
+   * push a value.
+   * @return the pulled value, or an empty optional if none is available.
+   */
+  virtual auto try_pull() -> std::optional<value_type> = 0;
+
+  /**
    * Acquire a reference to the next value in the pipe, without removing it.
    * @return a variant with a pointer upon success, or an indication of failure.
    */

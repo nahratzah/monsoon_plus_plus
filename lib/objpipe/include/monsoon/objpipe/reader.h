@@ -70,6 +70,17 @@ class reader {
   }
 
   /**
+   * \brief Pull an object from the objpipe.
+   *
+   * \return a pulled value, if one is available without waiting;
+   *   an empty optional otherwise.
+   */
+  auto try_pull() -> std::optional<value_type> {
+    assert(ptr_ != nullptr);
+    return ptr_->try_pull();
+  }
+
+  /**
    * \brief Wait for the next element to become available.
    *
    * \return an enum indicating success or failure.
@@ -163,7 +174,7 @@ class reader {
    * \return \p fn
    */
   template<typename Fn>
-  Fn visit(Fn fn) && {
+  Fn for_each(Fn fn) && {
     objpipe_errc e;
     for (std::optional<value_type> v = pull(e);
         e == objpipe_errc::success;

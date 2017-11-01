@@ -77,7 +77,9 @@ class filter_operation final
   auto pull(objpipe_errc& e) -> std::optional<value_type> override {
     if (offered_ != nullptr) {
       e = objpipe_errc::success;
-      return std::move(*std::exchange(offered_, nullptr));
+      value_type result = std::move(*std::exchange(offered_, nullptr));
+      src_->pop_front();
+      return result;
     }
 
     for (;;) {
@@ -89,12 +91,46 @@ class filter_operation final
 
   ///@copydoc reader_intf<T>::pull()
   auto pull() -> value_type override {
-    if (offered_ != nullptr)
-      return std::move(*std::exchange(offered_, nullptr));
+    if (offered_ != nullptr) {
+      value_type result = std::move(*std::exchange(offered_, nullptr));
+      src_->pop_front();
+      return result;
+    }
 
     for (;;) {
       value_type result = src_->pull();
       if (test_predicate_(result))
+        return result;
+    }
+  }
+
+  ///@copydoc reader_intf<T>::try_pull(objpipe_errc&)
+  auto try_pull(objpipe_errc& e) -> std::optional<value_type> override {
+    if (offered_ != nullptr) {
+      e = objpipe_errc::success;
+      value_type result = std::move(*std::exchange(offered_, nullptr));
+      src_->pop_front();
+      return result;
+    }
+
+    for (;;) {
+      std::optional<value_type> result = src_->pull(e);
+      if (!result.has_value() || test_predicate_(result.value()))
+        return result;
+    }
+  }
+
+  ///@copydoc reader_intf<T>::try_pull()
+  auto try_pull() -> std::optional<value_type> override {
+    if (offered_ != nullptr) {
+      value_type result = std::move(*std::exchange(offered_, nullptr));
+      src_->pop_front();
+      return result;
+    }
+
+    for (;;) {
+      std::optional<value_type> result = src_->try_pull();
+      if (!result.has_value() || test_predicate_(result.value()))
         return result;
     }
   }

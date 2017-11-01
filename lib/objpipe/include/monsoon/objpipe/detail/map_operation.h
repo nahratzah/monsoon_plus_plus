@@ -105,6 +105,38 @@ class map_operation final
     return map_apply_(std::move(src_value.value()));
   }
 
+  ///@copydoc reader_intf<T>::try_pull(objpipe_errc&)
+  std::optional<value_type> try_pull(objpipe_errc& e) override {
+    if (front_) {
+      value_type result = std::move_if_noexcept(*front_);
+      e = src_->pop_front();
+      if (e != objpipe_errc::success)
+        return {};
+      clear_front_();
+      return result;
+    }
+
+    auto src_value = src_->pull(e);
+    if (!src_value.has_value()) return {};
+    return map_apply_(std::move(src_value.value()));
+  }
+
+  ///@copydoc reader_intf<T>::try_pull()
+  std::optional<value_type> try_pull() override {
+    if (front_) {
+      value_type result = std::move_if_noexcept(*front_);
+      objpipe_errc e = src_->pop_front();
+      if (e != objpipe_errc::success)
+        return {};
+      clear_front_();
+      return result;
+    }
+
+    auto src_value = src_->try_pull();
+    if (!src_value.has_value()) return {};
+    return map_apply_(std::move(src_value.value()));
+  }
+
   ///@copydoc reader_intf<T>::front()
   auto front() const -> std::variant<pointer, objpipe_errc> override {
     objpipe_errc e = install_front_();

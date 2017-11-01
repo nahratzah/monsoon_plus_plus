@@ -117,6 +117,18 @@ class callbacked final
     return std::move(*std::exchange(offered_, nullptr));
   }
 
+  ///@copydoc reader_intf<T>::pull(objpipe_errc&)
+  auto try_pull(objpipe_errc& e) -> std::optional<value_type> override {
+    return pull(e);
+  }
+
+  ///@copydoc reader_intf<T>::try_pull()
+  auto try_pull() -> std::optional<value_type> override {
+    ensure_populated_();
+    if (offered_ == nullptr) return {};
+    return std::move(*std::exchange(offered_, nullptr));
+  }
+
   ///@copydoc reader_intf<T>::front()
   auto front() const -> std::variant<pointer, objpipe_errc> override {
     using result_type = std::variant<pointer, objpipe_errc>;

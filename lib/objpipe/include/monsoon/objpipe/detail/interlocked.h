@@ -135,6 +135,38 @@ class interlocked final
     return result;
   }
 
+  ///@copydoc reader_intf<T>::try_pull(objpipe_errc&)
+  auto try_pull(objpipe_errc& e) -> std::optional<value_type> {
+    e = objpipe_errc::success;
+
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    if (offered_ == nullptr) {
+      if (!this->has_writer())
+        e = objpipe_errc::closed;
+      return {};
+    }
+
+    std::optional<value_type> result =
+        std::make_optional<value_type>(std::move_if_noexcept(*std::exchange(offered_, nullptr)));
+    lck.unlock();
+    write_done_.notify_one();
+    write_avail_.notify_one();
+    return result;
+  }
+
+  ///@copydoc reader_intf<T>::try_pull()
+  auto try_pull() -> std::optional<value_type> {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    if (offered_ == nullptr) return {};
+
+    std::optional<value_type> result =
+        std::make_optional<value_type>(std::move_if_noexcept(*std::exchange(offered_, nullptr)));
+    lck.unlock();
+    write_done_.notify_one();
+    write_avail_.notify_one();
+    return result;
+  }
+
   ///@copydoc reader_intf<T>::front()
   auto front() const -> std::variant<pointer, objpipe_errc> {
     std::unique_lock<std::mutex> lck{ mtx_ };
