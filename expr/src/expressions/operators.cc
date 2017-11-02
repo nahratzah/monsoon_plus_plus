@@ -756,4 +756,303 @@ auto vector_accumulator::interpolate_(time_point tp) const
 }
 
 
+template<typename ObjPipe>
+class merger_managed {
+ public:
+  ///\brief The accumulator type managed by this.
+  using accumulator_type = std::conditional_t<
+      std::is_same_v<expression::scalar_objpipe, ObjPipe>,
+      scalar_accumulator,
+      std::enable_if_t<
+          std::is_same_v<expression::vector_objpipe, ObjPipe>,
+          vector_accumulator>>;
+
+  explicit merger_managed(ObjPipe&& input)
+  : input_(std::move(input))
+  {
+#if 0
+    input_.on_event(
+        std::bind(this, &managed_scalar::on_notify_),
+        std::bind(this, &managed_scalar::on_close_));
+#endif
+  }
+
+  /**
+   * \brief Load values until the next factual emition.
+   *
+   * \return true if a factual emition was loaded, false otherwise.
+   * A \p true return value also means the objpipe may have more data
+   * ready and should be pulled from without waiting for a notification.
+   *
+   * \param callback \parblock
+   *   Callback invoked with speculative data.
+   *
+   *   The callback signature for scalars should be similar to
+   *   \code
+   *   void(const expression::scalar_emit_type&)
+   *   \endcode
+   *
+   *   The callback signature for vectors should be similar to
+   *   \code
+   *   void(const expression::vector_emit_type&)
+   *   \endcode
+   * \endparblock
+   * \note \p callback may not access the accumulator.
+   */
+  template<typename Callback>
+  bool load_until_next_factual(Callback callback) {
+    if (!input_) return false;
+
+    for (auto val = input_.try_pull();
+        val.has_value();
+        val = input_.try_pull()) {
+      const bool is_factual = (val->data.index() == 1u);
+      const auto& c_val = *val;
+      std::invoke(callback, c_val);
+
+      accumulator.add(*std::move(val));
+      if (is_factual) return true;
+    }
+    return false;
+  }
+
+  /**
+   * \brief Load all values.
+   *
+   * \return true if a factual emition was loaded, false otherwise.
+   *
+   * \param callback \parblock
+   *   Callback invoked with speculative data.
+   *
+   *   The callback signature for scalars should be similar to
+   *   \code
+   *   void(const expression::scalar_emit_type&)
+   *   \endcode
+   *
+   *   The callback signature for vectors should be similar to
+   *   \code
+   *   void(const expression::vector_emit_type&)
+   *   \endcode
+   * \endparblock
+   * \note \p callback may not access the accumulator.
+   */
+  template<typename Callback>
+  bool load_all(Callback callback) {
+    if (!input_) return false;
+
+    bool factual_encountered = false;
+    // Use for_each, so data can be released after the call.
+    std::move(input_).for_each(
+        [&](auto&& val) {
+          const bool is_factual = (val.data.index() == 1u);
+          const auto& c_val = val;
+          std::invoke(callback, c_val);
+
+          accumulator.add(std::move(val));
+          if (is_factual) factual_encountered = true;
+        });
+    return factual_encountered;
+  }
+
+  accumulator_type accumulator;
+
+ private:
+  ObjPipe input_;
+};
+
+
+struct monsoon_expr_local_ unpack_scalar_ {
+  explicit unpack_scalar_(const expression::scalar_emit_type& v)
+  : tp(v.tp),
+    speculative(v.data.index() == 0u)
+  {}
+
+  auto operator()(const scalar_accumulator& m) -> std::optional<metric_value> {
+    std::optional<std::tuple<metric_value, bool>> opt_mv = m[tp];
+    if (!opt_mv.has_value()) return {};
+    speculative |= !std::get<1>(*opt_mv);
+    return std::get<0>(*std::move(opt_mv));
+  }
+
+  // XXX
+#if 0
+  auto operator()(const vector_accumulator& m) -> std::optional<...> {
+    const auto proxy = m[tp];
+    if (proxy.is_speculative()) speculative = true;
+    return m[tp].value();
+  }
+#endif
+
+  time_point tp;
+  bool speculative;
+};
+
+struct monsoon_expr_local_ unpack_vector_ {
+  using tag_set_t = std::variant<
+      const tags*,
+      std::pair<
+          expression::factual_vector::const_iterator,
+          expression::factual_vector::const_iterator>>;
+
+  explicit unpack_vector_(const expression::vector_emit_type& v)
+  : tp(v.tp),
+    tag_set(std::visit(
+          overload(
+              [](const expression::speculative_vector& mv) -> tag_set_t {
+                return &std::get<0>(mv);
+              },
+              [](const expression::factual_vector& mv) -> tag_set_t {
+                return std::make_pair(mv.cbegin(), mv.cend());
+              }),
+          v.data)),
+    speculative(v.data.index() == 0u)
+  {}
+
+  auto operator()(const scalar_accumulator& m) -> std::optional<metric_value> {
+    std::optional<std::tuple<metric_value, bool>> opt_mv = m[tp];
+    if (!opt_mv.has_value()) return {};
+    speculative |= !std::get<1>(*opt_mv);
+    return std::get<0>(*std::move(opt_mv));
+  }
+
+  // XXX
+#if 0
+  auto operator()(const vector_accumulator& m) -> std::optional<...> {
+    using result_type = std::optional<...>;
+
+    const auto proxy = m[tp];
+    return std::visit(
+        overload(
+            [&proxy, this](const tags* t) -> result_type {
+              std::optional<std::tuple<metric_value, bool>> opt_mv = proxy[*t];
+              if (!opt_mv) return {};
+              speculative |= (std::get<1>(*opt_mv));
+              return std::get<0>(*opt_mv);
+            },
+            [&proxy, this](const std::pair<expression::factual_vector::const_iterator, expression::factual_vector::const_iterator>& iters) -> result_type {
+              if (proxy.is_speculative()) speculative = true;
+              return m[tp].value();
+            }),
+        tag_set);
+  }
+#endif
+
+  time_point tp;
+  tag_set_t tag_set;
+  bool speculative;
+};
+
+monsoon_expr_local_
+auto make_unpack_(const expression::scalar_emit_type& v)
+-> unpack_scalar_ {
+  return unpack_scalar_(v);
+}
+
+monsoon_expr_local_
+auto make_unpack_(const expression::vector_emit_type& v)
+-> unpack_vector_ {
+  return unpack_vector_(v);
+}
+
+template<std::size_t CbIdx>
+struct merger_invocation {
+  template<typename Fn, typename... Managed, typename Value>
+  void operator()(time_point tp, Fn& fn, const std::tuple<Managed...>& managed,
+      const Value& v) {
+    static_assert(sizeof...(Managed) > CbIdx, "Index out of range of managed objpipes.");
+    invoke_(tp, fn, managed, v, std::index_sequence_for<Managed...>());
+  }
+
+ private:
+  template<typename Fn, typename... Managed, typename Value,
+      std::size_t... Indices>
+  void invoke_(time_point tp, Fn& fn, const std::tuple<Managed...>& managed,
+      const Value& v,
+      std::index_sequence<Indices...> indices) {
+    const auto& unpack = make_unpack_(v);
+    unpack_invoke_(
+        fn,
+        tp,
+        indices,
+        this->template apply_unpack_<Indices>(
+            unpack,
+            this->template choose_value_<Indices>(
+                std::get<Indices>(managed),
+                v))...);
+  }
+
+  template<typename Fn, typename... Values, std::size_t... Indices>
+  void unpack_invoke_(Fn& fn, time_point tp,
+      std::index_sequence<Indices...>,
+      Values&... values) {
+    std::invoke(
+        fn,
+        tp,
+        values...); // XXX
+  }
+
+  template<std::size_t Idx, typename Unpack, typename Value>
+  auto apply_unpack_(const Unpack& unpack, const Value& value)
+  -> std::conditional_t<
+      Idx == CbIdx,
+      const Value&,
+      decltype(std::declval<const Unpack&>()(std::declval<const Value&>()))> {
+    if constexpr(Idx == CbIdx)
+      return value;
+    else
+      return unpack(value);
+  }
+
+  template<std::size_t Idx, typename Managed, typename Value>
+  constexpr auto choose_value_(Managed& managed, const Value& value)
+  -> std::conditional_t<Idx == CbIdx, const Value&, Managed&> {
+    if constexpr(Idx == CbIdx) {
+      return value;
+    } else {
+      return managed;
+    }
+  }
+
+  ///\deprecated Unused.
+  static constexpr bool all_of_() noexcept {
+    return true;
+  }
+
+  ///\deprecated Unused.
+  template<typename... Tail>
+  static constexpr bool all_of_(bool head, Tail... tail) noexcept {
+    return head && all_of_(tail...);
+  }
+};
+
+
+template<typename Fn, typename... ObjPipes>
+class merger {
+ public:
+  merger(Fn&& fn, ObjPipes&&... inputs)
+  : managed_(std::move(inputs)...),
+    fn_(std::move(fn))
+  {}
+
+ private:
+  template<std::size_t CbIdx>
+  void load_until_next_factual_() {
+    using namespace std::placeholders;
+
+    std::get<CbIdx>(managed_)
+        .load_until_next_factual(
+            std::bind(merger_invocation<CbIdx>(),
+                _1,
+                [this](auto&&... args) {
+                  // XXX
+                },
+                std::ref(managed_),
+                _2));
+  }
+
+  std::tuple<merger_managed<ObjPipes>...> managed_;
+  Fn fn_;
+};
+
+
 }} /* namespace monsoon::expressions */
