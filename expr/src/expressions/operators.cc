@@ -11,6 +11,7 @@
 #include <set>
 #include <deque>
 #include <iterator>
+#include <mutex>
 #include "../overload.h"
 
 namespace monsoon {
@@ -312,6 +313,19 @@ bool binop_t<Fn>::is_scalar() const noexcept {
 template<typename Fn>
 bool binop_t<Fn>::is_vector() const noexcept {
   return x_->is_vector() || y_->is_vector();
+}
+
+template<typename Fn>
+auto binop_t<Fn>::operator()(const metric_source& src,
+    const time_range& tr, time_point::duration slack) const
+-> std::variant<scalar_objpipe, vector_objpipe> {
+  return std::visit(
+      [](auto&&... pipes) -> std::variant<scalar_objpipe, vector_objpipe> {
+        return make_merger(
+            std::forward<std::decay_t<decltype(pipes)>>(pipes)...);
+      },
+      (*x_)(src, tr, slack),
+      (*y_)(src, tr, slack));
 }
 
 template<typename Fn>
@@ -821,6 +835,18 @@ class merger_managed {
     return false;
   }
 
+  auto factual_until() const noexcept -> std::optional<time_point> {
+    return accumulator.factual_until();
+  }
+
+  bool is_pullable() const noexcept {
+    return bool(input_);
+  }
+
+  void advance_factual(time_point tp) {
+    accumulator.advance_factual(tp);
+  }
+
   accumulator_type accumulator;
 
  private:
@@ -1160,28 +1186,58 @@ struct merger_invocation {
 };
 
 
-template<typename Fn, bool, std::size_t> class merger_acceptor;
+template<bool> class merger_acceptor_data;
+template<typename, typename, bool, std::size_t> class merger_acceptor;
 
-template<typename Fn, std::size_t N>
-class merger_acceptor<Fn, false, N> {
+template<bool IsTagged>
+class merger_acceptor_data {
  private:
-  using speculative_type = expression::speculative_scalar;
-  using factual_type = expression::factual_scalar;
+  using speculative_type = std::conditional_t<
+      !IsTagged,
+      expression::speculative_scalar,
+      expression::speculative_vector>;
+  using factual_type = std::conditional_t<
+      !IsTagged,
+      expression::factual_scalar,
+      expression::factual_vector>;
+
+ protected:
+  merger_acceptor_data() = default;
+  merger_acceptor_data(const merger_acceptor_data&) = default;
+  merger_acceptor_data(merger_acceptor_data&&) = default;
+  merger_acceptor_data& operator=(const merger_acceptor_data&) = default;
+  merger_acceptor_data& operator=(merger_acceptor_data&&) = default;
+  ~merger_acceptor_data() = default;
 
  public:
-  explicit merger_acceptor(Fn& fn)
-  : fn_(fn)
+  using speculative_entry = std::pair<time_point, speculative_type>;
+  using factual_entry = std::pair<time_point, factual_type>;
+
+  std::optional<factual_entry> factual;
+};
+
+template<typename Fn, typename SpecInsIter, std::size_t N>
+class merger_acceptor<Fn, SpecInsIter, false, N>
+: public merger_acceptor_data<false>
+{
+ public:
+  merger_acceptor(Fn& fn, SpecInsIter speculative)
+  : fn_(fn),
+    speculative(std::move(speculative))
   {}
 
   void operator()(
       bool is_factual,
       time_point tp,
       const std::array<metric_value, N>& values) {
+    using speculative_entry =
+        typename merger_acceptor_data<false>::speculative_entry;
+
     if (is_factual) {
-      assert(!factual_.has_value());
-      factual_.emplace(tp, std::apply(fn_, values));
+      assert(!this->factual.has_value());
+      this->factual.emplace(tp, std::apply(fn_, values));
     } else {
-      speculative_.emplace_back(
+      *speculative++ = speculative_entry(
           std::piecewise_construct,
           tp,
           std::apply(fn_, values));
@@ -1189,20 +1245,18 @@ class merger_acceptor<Fn, false, N> {
   }
 
  private:
-  std::vector<std::pair<time_point, speculative_type>> speculative_;
-  std::optional<std::pair<time_point, factual_type>> factual_;
+  SpecInsIter speculative;
   Fn& fn_;
 };
 
-template<typename Fn, std::size_t N>
-class merger_acceptor<Fn, true, N> {
- private:
-  using speculative_type = expression::speculative_vector;
-  using factual_type = expression::factual_vector;
-
+template<typename Fn, typename SpecInsIter, std::size_t N>
+class merger_acceptor<Fn, SpecInsIter, true, N>
+: public merger_acceptor_data<true>
+{
  public:
-  explicit merger_acceptor(Fn& fn)
-  : fn_(fn)
+  merger_acceptor(Fn& fn, SpecInsIter speculative)
+  : fn_(fn),
+    speculative(std::move(speculative))
   {}
 
   void operator()(
@@ -1211,16 +1265,20 @@ class merger_acceptor<Fn, true, N> {
       const tags& tag_set,
       const std::array<metric_value, N>& values) {
     if (is_factual) {
-      if (!factual_.has_value())
-        factual_.emplace(tp, factual_type());
-      assert(std::get<0>(*factual_) == tp);
+      if (!this->factual.has_value()) {
+        this->factual.emplace(
+            std::piecewise_construct,
+            std::tie(tp),
+            std::forward_as_tuple());
+      }
+      assert(std::get<0>(*this->factual) == tp);
 
-      std::get<1>(*factual_).emplace(
+      std::get<1>(*this->factual).emplace(
           std::piecewise_construct,
           tp,
           std::forward_as_tuple(tag_set, std::apply(fn_, values)));
     } else {
-      speculative_.emplace_back(
+      *speculative++ = speculative_entry(
           std::piecewise_construct,
           tp,
           std::forward_as_tuple(tag_set, std::apply(fn_, values)));
@@ -1228,8 +1286,7 @@ class merger_acceptor<Fn, true, N> {
   }
 
  private:
-  std::vector<std::pair<time_point, speculative_type>> speculative_;
-  std::optional<std::pair<time_point, factual_type>> factual_;
+  SpecInsIter speculative;
   Fn& fn_;
 };
 
@@ -1240,7 +1297,14 @@ constexpr bool tagged_v =
 
 
 template<typename Fn, typename... ObjPipes>
-class merger {
+class merger final
+: public monsoon::objpipe::detail::reader_intf<
+      typename std::conditional_t<
+         tagged_v<ObjPipes...>,
+         expression::vector_objpipe,
+         expression::scalar_objpipe
+      >::value_type>
+{
   static_assert(
       std::conjunction_v<
           std::disjunction<
@@ -1249,33 +1313,228 @@ class merger {
       "Merger requires that all object pipes are either scalar or vector object pipes.");
 
  public:
+  using objpipe_errc = monsoon::objpipe::objpipe_errc;
+  using value_type =
+      typename std::conditional_t<
+         tagged_v<ObjPipes...>,
+         expression::vector_objpipe,
+         expression::scalar_objpipe
+      >::value_type;
   static constexpr bool tagged = tagged_v<ObjPipes...>;
 
+ private:
+  class read_invocation_ {
+    using invocation_fn = void (merger::*)();
+
+   public:
+    read_invocation_() = default;
+
+    explicit read_invocation_(invocation_fn fn) noexcept
+    : invocation_(fn)
+    {
+      assert(invocation_ != nullptr);
+    }
+
+    bool is_pullable() const noexcept {
+      return invocation_ != nullptr;
+    }
+
+    void operator()(merger& self) {
+      assert(invocation_ != nullptr);
+
+      bool pullable;
+      std::tie(factual_until_, pullable) = std::invoke(invocation_, self);
+      if (!pullable) invocation_ = nullptr;
+    }
+
+    // Equality comparison makes no sense and is thus omitted.
+
+    bool operator<(const read_invocation_& other) const noexcept {
+      if (invocation_ == nullptr) return other.invocation_ != nullptr;
+      if (other.invocation_ == nullptr) return false;
+      return factual_until_ < other.factual_until_;
+    }
+
+    bool operator>(const read_invocation_& other) const noexcept {
+      return other < *this;
+    }
+
+   private:
+    std::optional<time_point> factual_until_;
+    invocation_fn invocation_ = nullptr;
+  };
+
+  using read_invoc_array = std::array<read_invocation_, sizeof...(ObjPipes)>;
+  using speculative_entry =
+      typename merger_acceptor_data<tagged>::speculative_entry;
+  using factual_entry =
+      typename merger_acceptor_data<tagged>::factual_entry;
+
+ public:
   explicit merger(Fn&& fn, ObjPipes&&... inputs)
   : managed_(std::move(inputs)...),
     fn_(std::move(fn))
-  {}
-
- private:
-  template<std::size_t CbIdx>
-  void load_until_next_factual_() {
+  {
     using namespace std::placeholders;
 
-    merger_acceptor<Fn, tagged, sizeof...(ObjPipes)> acceptor{ fn_ };
-    const bool found_factual = std::get<CbIdx>(managed_)
-        .load_until_next_factual(
-            std::bind(
-                merger_invocation<CbIdx>(),
-                std::ref(acceptor),
-                std::cref(managed_),
-                _1));
+    assert(std::all_of(
+            read_invocations_.begin(),
+            read_invocations_.end(),
+            std::bind(&read_invocation_::is_pullable, _1)));
+  }
 
-    // XXX acceptor.commit(...)
+  ///\copydoc monsoon::objpipe::reader_intf<T>::is_pullable()
+  auto is_pullable() const noexcept -> bool override {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    return !speculative_pending_.empty()
+        || !factual_pending_.empty()
+        || ex_pending_ != nullptr
+        || read_invocations_.front().is_pullable();
+  }
+
+  ///\copydoc monsoon::objpipe::reader_intf<T>::empty()
+  auto empty() const noexcept -> bool override {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    return speculative_pending_.empty()
+        && factual_pending_.empty()
+        && ex_pending_ == nullptr;
+  }
+
+  ///\copydoc monsoon::objpipe::pull(objpipe_errc&)
+  auto pull(objpipe_errc& e) -> std::optional<value_type> override {
+    e = objpipe_errc::success;
+    std::optional<value_type> result;
+    std::unique_lock<std::mutex> lck{ mtx_ };
+
+    do {
+      try_fill_();
+      if (ex_pending_) std::rethrow_exception(ex_pending_);
+
+      if (!factual_pending_.empty()) {
+        result.emplace(
+            std::move(factual_pending_.front().first),
+            std::in_place_index<1>,
+            std::move(factual_pending_.front().second));
+        factual_pending_.pop_front();
+      } else if (!speculative_pending_.empty()) {
+        result.emplace(
+            std::move(speculative_pending_.front().first),
+            std::in_place_index<1>,
+            std::move(speculative_pending_.front().second));
+        speculative_pending_.pop_front();
+      } else {
+        e = wait_(lck);
+      }
+    } while (e == objpipe_errc::success && !result.has_value());
+    return result;
+  }
+
+ private:
+  ///\brief Try to read elements until we encounter a factual entry.
+  void try_fill_() {
+    if (!factual_pending_.empty()) return;
+
+    auto end = read_invocations_.end();
+    while (factual_pending_.empty()
+        && ex_pending_ == nullptr
+        && end != read_invocations_.begin()
+        && read_invocations_.front().is_pullable()) {
+      std::pop_heap(read_invocations_.begin(), end, std::greater<>());
+      --end;
+
+      try {
+        (*end)(*this);
+      } catch (...) {
+        ex_pending_ = std::current_exception();
+      }
+    }
+
+    while (end != read_invocations_.end())
+      std::push_heap(read_invocations_.begin(), ++end, std::greater<>());
+  }
+
+  void wait_(std::unique_lock<std::mutex>& lck) const;
+
+  ///\brief Invocation for a specific managed accumulator, to retrieve values.
+  template<std::size_t CbIdx>
+  auto load_until_next_factual_()
+  -> std::tuple<std::optional<time_point>, bool> {
+    using namespace std::placeholders;
+    using spec_insert_iter =
+        decltype(std::back_inserter(speculative_pending_));
+
+    merger_acceptor<Fn, spec_insert_iter, tagged, sizeof...(ObjPipes)> acceptor{
+        fn_,
+        std::back_inserter(speculative_pending_)
+    };
+    auto& managed = std::get<CbIdx>(managed_);
+    const bool found_factual = managed.load_until_next_factual(
+        std::bind(
+            merger_invocation<CbIdx>(),
+            std::ref(acceptor),
+            std::cref(managed_),
+            _1));
+
+    // Commit acceptor.
+    if (acceptor.factual.has_value()) {
+      assert(found_factual);
+      const time_point tp = acceptor.factual->first;
+      factual_pending_.push_back(*std::move(acceptor.factual));
+
+      for_each_managed_([tp](auto& m) { m.advance_factual(tp); });
+      speculative_pending_.erase(
+          std::remove_if(
+              speculative_pending_.begin(),
+              speculative_pending_.end(),
+              [tp](const auto& entry) {
+                return entry.first <= tp;
+              }),
+          speculative_pending_.end());
+    }
+
+    return std::make_tuple(managed.factual_until(), managed.is_pullable());
+  }
+
+  ///\brief Invoke \p fn on each element of tuple managed_.
+  template<typename ManFn>
+  void for_each_managed_(ManFn fn) {
+    for_each_managed_impl_(fn, std::index_sequence_for<ObjPipes...>());
+  }
+
+  ///\brief Sentinel recursive invocation of \ref for_each_managed_().
+  template<typename ManFn>
+  void for_each_managed_impl_(ManFn& fn, std::index_sequence<>) {}
+
+  ///\brief Recursing invoker implementation of \ref for_each_managed_().
+  template<typename ManFn, std::size_t Idx, std::size_t... Tail>
+  void for_each_managed_impl_(ManFn& fn, std::index_sequence<Idx, Tail...>) {
+    std::invoke(fn, std::get<Idx>(managed_));
+    for_each_managed_impl_(fn, std::index_sequence<Tail...>());
+  }
+
+  ///\brief Initializer for read_invocations_ member variable.
+  template<std::size_t... Indices>
+  static constexpr auto new_read_invocations_(
+      std::index_sequence<Indices...> = std::index_sequence_for<ObjPipes...>())
+      noexcept
+  -> std::array<read_invocation_, sizeof...(Indices)> {
+    return { read_invocation_(&merger::template load_until_next_factual_<Indices>)... };
   }
 
   std::tuple<merger_managed<ObjPipes>...> managed_;
-  Fn fn_;
+  const Fn fn_;
+  read_invoc_array read_invocations_ = new_read_invocations_();
+  std::deque<speculative_entry> speculative_pending_;
+  std::deque<factual_entry> factual_pending_;
+  mutable std::mutex mtx_;
+  std::exception_ptr ex_pending_;
 };
+
+template<typename... ObjPipe>
+auto make_merger(ObjPipe&&... inputs)
+-> objpipe::reader<typename merger<std::decay_t<ObjPipe>...>::value_type> {
+  return { new merger<std::decay_t<ObjPipe>...>{ std::forward<ObjPipe>(inputs)... } };
+}
 
 
 }} /* namespace monsoon::expressions */
