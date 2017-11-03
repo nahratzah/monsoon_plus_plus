@@ -243,6 +243,16 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
 }
 
 template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Tags, std::size_t N, typename Head, typename... Tail>
+void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+    const Tags& tags,
+    std::array<metric_value, N>& values,
+    const std::reference_wrapper<Head>& head,
+    Tail&&... tail) {
+  this->recursive_apply_(tags, values, head.get(), std::forward<Tail>(tail)...);
+}
+
+template<typename Fn, typename TagEqual, typename TagCombine>
 template<typename Tags, std::size_t N, typename... Head, typename... Tail>
 void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
     const Tags& tags,
@@ -409,7 +419,7 @@ void merger_invocation<CbIdx>::unpack_invoke_(
             fn,
             factual,
             tp,
-            std::forward<std::decay_t<decltype(args)>>(args)...);
+            std::forward<decltype(args)>(args)...);
       })
       (std::forward<Values>(values)...);
 }
@@ -464,7 +474,6 @@ void merger_acceptor<Fn, SpecInsIter, false, N>::operator()(
     this->factual.emplace(tp, std::apply(fn_, values));
   } else {
     *speculative++ = speculative_entry(
-        std::piecewise_construct,
         tp,
         std::apply(fn_, values));
   }
@@ -487,19 +496,16 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
     if (!this->factual.has_value()) {
       this->factual.emplace(
           std::piecewise_construct,
-          std::tie(tp),
+          std::forward_as_tuple(tp),
           std::forward_as_tuple());
     }
     assert(std::get<0>(*this->factual) == tp);
 
-    std::get<1>(*this->factual).emplace(
-        std::piecewise_construct,
-        tp,
-        std::forward_as_tuple(tag_set, std::apply(fn_, values)));
+    std::get<1>(*this->factual).emplace(tag_set, std::apply(fn_, values));
   } else {
     *speculative++ = speculative_entry(
         std::piecewise_construct,
-        tp,
+        std::forward_as_tuple(tp),
         std::forward_as_tuple(tag_set, std::apply(fn_, values)));
   }
 }
@@ -724,7 +730,7 @@ template<std::size_t... Indices>
 constexpr auto merger<Fn, ObjPipes...>::new_read_invocations_(
     std::index_sequence<Indices...>) noexcept
 -> std::array<read_invocation_, sizeof...(Indices)> {
-  return { read_invocation_(&merger::template load_until_next_factual_<Indices>)... };
+  return {{ read_invocation_(&merger::template load_until_next_factual_<Indices>)... }};
 }
 
 

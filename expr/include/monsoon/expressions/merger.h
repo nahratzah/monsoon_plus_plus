@@ -287,6 +287,13 @@ class recursive_apply {
       std::array<metric_value, N>& values,
       const std::optional<Head>& head,
       Tail&&... tail);
+  ///\brief Unpack reference wrapper.
+  template<typename Tags, std::size_t N, typename Head, typename... Tail>
+  void recursive_apply_(
+      const Tags& tags,
+      std::array<metric_value, N>& values,
+      const std::reference_wrapper<Head>& head,
+      Tail&&... tail);
   ///\brief Unpack variant.
   template<typename Tags, std::size_t N, typename... Head, typename... Tail>
   void recursive_apply_(
@@ -454,8 +461,8 @@ class merger_acceptor<Fn, SpecInsIter, false, N>
       const std::array<metric_value, N>& values);
 
  private:
-  SpecInsIter speculative;
   Fn& fn_;
+  SpecInsIter speculative;
 };
 
 template<typename Fn, typename SpecInsIter, std::size_t N>
@@ -472,8 +479,8 @@ class merger_acceptor<Fn, SpecInsIter, true, N>
       const std::array<metric_value, N>& values);
 
  private:
-  SpecInsIter speculative;
   Fn& fn_;
+  SpecInsIter speculative;
 };
 
 
