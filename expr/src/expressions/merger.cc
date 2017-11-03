@@ -276,7 +276,8 @@ auto vector_accumulator::interpolate_(time_point tp) const
   // Iterate the before map, interpolating each value with the at_after map.
   // Result is stored in 'interpolated' variable.
   std::for_each(before->second.begin(), before->second.end(),
-      [&interpolated, tp, before_tp, after_tp, &after_map](const auto& tagged_metric_before) {
+      [&interpolated, tp, before_tp, after_tp, &after_map](
+	  const auto& tagged_metric_before) {
         auto tagged_metric_after = after_map.find(tagged_metric_before.first);
         if (tagged_metric_after != after_map.end()) {
           auto interpolated_value = interpolate(tp,
@@ -291,6 +292,20 @@ auto vector_accumulator::interpolate_(time_point tp) const
       });
   return interpolated;
 }
+
+
+template class monsoon_expr_export_ merger<
+    expression::scalar_objpipe,
+    expression::scalar_objpipe>;
+template class monsoon_expr_export_ merger<
+    expression::scalar_objpipe,
+    expression::vector_objpipe>;
+template class monsoon_expr_export_ merger<
+    expression::vector_objpipe,
+    expression::scalar_objpipe>;
+template class monsoon_expr_export_ merger<
+    expression::vector_objpipe,
+    expression::vector_objpipe>;
 
 
 }} /* namespace monsoon::expressions */

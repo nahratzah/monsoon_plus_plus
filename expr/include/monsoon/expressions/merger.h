@@ -607,6 +607,20 @@ auto make_merger(ObjPipe&&... inputs)
     -> objpipe::reader<typename merger<std::decay_t<ObjPipe>...>::value_type>;
 
 
+extern template class monsoon_expr_export_ merger<
+    expression::scalar_objpipe,
+    expression::scalar_objpipe>;
+extern template class monsoon_expr_export_ merger<
+    expression::scalar_objpipe,
+    expression::vector_objpipe>;
+extern template class monsoon_expr_export_ merger<
+    expression::vector_objpipe,
+    expression::scalar_objpipe>;
+extern template class monsoon_expr_export_ merger<
+    expression::vector_objpipe,
+    expression::vector_objpipe>;
+
+
 }} /* namespace monsoon::expressions */
 
 #include "merger-inl.h"
