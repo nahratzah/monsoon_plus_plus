@@ -182,6 +182,7 @@ auto binop_t<Fn>::operator()(const metric_source& src,
   return std::visit(
       [](auto&&... pipes) -> std::variant<scalar_objpipe, vector_objpipe> {
         return make_merger(
+            fn_,
             std::forward<std::decay_t<decltype(pipes)>>(pipes)...);
       },
       (*x_)(src, tr, slack),

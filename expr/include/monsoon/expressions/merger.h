@@ -266,7 +266,7 @@ class recursive_apply {
       TagEqual equal = TagEqual(),
       TagCombine combine = TagCombine());
 
-  template<typename Tags, typename... Values>
+  template<typename... Values>
   void operator()(Values&&... values);
 
  private:
@@ -286,6 +286,13 @@ class recursive_apply {
       const Tags& tags,
       std::array<metric_value, N>& values,
       const std::optional<Head>& head,
+      Tail&&... tail);
+  ///\brief Unpack variant.
+  template<typename Tags, std::size_t N, typename... Head, typename... Tail>
+  void recursive_apply_(
+      const Tags& tags,
+      std::array<metric_value, N>& values,
+      const std::variant<Head...>& head,
       Tail&&... tail);
   ///\brief Unpack tagged metric.
   template<std::size_t N, typename... Tail>
@@ -357,7 +364,7 @@ struct merger_invocation {
   ///\brief Helper for operator(), uses indices to handle value extraction.
   template<typename Fn, typename... Managed, typename Value,
       std::size_t... Indices>
-  void invoke_(time_point tp, Fn& fn, const std::tuple<Managed...>& managed,
+  void invoke_(Fn& fn, const std::tuple<Managed...>& managed,
       const Value& v,
       std::index_sequence<Indices...> indices);
 
@@ -370,18 +377,27 @@ struct merger_invocation {
       time_point tp,
       Values&&... values);
 
+  template<typename Value, bool ApplyUnpack>
+  struct unpack_result_type {
+    using type = decltype(std::declval<unpack_&>()(std::declval<Value>()));
+  };
+  template<typename Value>
+  struct unpack_result_type<Value, true> {
+    using type = Value;
+  };
+
   ///\brief Apply unpack on managed object, but pass value through unmodified.
   template<std::size_t Idx, typename Value>
-  auto apply_unpack_(unpack_& unpack, const Value& value)
-      -> std::conditional_t<
-          Idx == CbIdx,
-          const Value&,
-          decltype(std::declval<unpack_&>()(std::declval<const Value&>()))>;
+  auto apply_unpack_(unpack_& unpack, Value& value)
+      -> typename unpack_result_type<Value&, Idx == CbIdx>::type;
 
   ///\brief Return the managed accumulator, expect for the indexed value.
   template<std::size_t Idx, typename Managed, typename Value>
-  constexpr auto choose_value_(Managed& managed, const Value& value)
-      -> std::conditional_t<Idx == CbIdx, const Value&, Managed&>;
+  constexpr auto choose_value_(const Managed& managed, const Value& value)
+      -> std::conditional_t<
+          Idx == CbIdx,
+          const Value&,
+          const typename Managed::accumulator_type&>;
 };
 
 
@@ -497,40 +513,19 @@ class merger final
 
  private:
   class read_invocation_ {
-    using invocation_fn = void (merger::*)();
+    using invocation_fn = auto (merger::*)()
+        -> std::tuple<std::optional<time_point>, bool>;
 
    public:
     read_invocation_() = default;
+    explicit read_invocation_(invocation_fn fn) noexcept;
 
-    explicit read_invocation_(invocation_fn fn) noexcept
-    : invocation_(fn)
-    {
-      assert(invocation_ != nullptr);
-    }
-
-    bool is_pullable() const noexcept {
-      return invocation_ != nullptr;
-    }
-
-    void operator()(merger& self) {
-      assert(invocation_ != nullptr);
-
-      bool pullable;
-      std::tie(factual_until_, pullable) = std::invoke(invocation_, self);
-      if (!pullable) invocation_ = nullptr;
-    }
+    bool is_pullable() const noexcept;
+    void operator()(merger& self);
 
     // Equality comparison makes no sense and is thus omitted.
-
-    bool operator<(const read_invocation_& other) const noexcept {
-      if (invocation_ == nullptr) return other.invocation_ != nullptr;
-      if (other.invocation_ == nullptr) return false;
-      return factual_until_ < other.factual_until_;
-    }
-
-    bool operator>(const read_invocation_& other) const noexcept {
-      return other < *this;
-    }
+    bool operator<(const read_invocation_& other) const noexcept;
+    bool operator>(const read_invocation_& other) const noexcept;
 
    private:
     std::optional<time_point> factual_until_;
@@ -563,7 +558,7 @@ class merger final
   void try_fill_() noexcept;
 
   ///\brief Wait for data to become available.
-  void wait_(std::unique_lock<std::mutex>& lck) const;
+  objpipe_errc wait_(std::unique_lock<std::mutex>& lck) const;
 
   ///\brief Attempt to pull a value.
   auto try_pull_(objpipe_errc& e) -> std::optional<value_type>;
@@ -587,14 +582,14 @@ class merger final
 
   ///\brief Initializer for read_invocations_ member variable.
   template<std::size_t... Indices>
-  static constexpr auto new_read_invocations_(
-      std::index_sequence<Indices...> = std::index_sequence_for<ObjPipes...>())
+  static constexpr auto new_read_invocations_(std::index_sequence<Indices...>)
       noexcept
       -> std::array<read_invocation_, sizeof...(Indices)>;
 
   std::tuple<merger_managed<ObjPipes>...> managed_;
   const Fn fn_;
-  read_invoc_array read_invocations_ = new_read_invocations_();
+  read_invoc_array read_invocations_ =
+      new_read_invocations_(std::index_sequence_for<ObjPipes...>());
   std::deque<speculative_entry> speculative_pending_;
   std::deque<factual_entry> factual_pending_;
   mutable std::mutex mtx_;
@@ -602,21 +597,27 @@ class merger final
   std::exception_ptr ex_pending_;
 };
 
-template<typename... ObjPipe>
-auto make_merger(ObjPipe&&... inputs)
-    -> objpipe::reader<typename merger<std::decay_t<ObjPipe>...>::value_type>;
+template<typename Fn, typename... ObjPipe>
+auto make_merger(Fn&& fn, ObjPipe&&... inputs)
+    -> objpipe::reader<typename merger<
+        std::decay_t<Fn>,
+        std::decay_t<ObjPipe>...>::value_type>;
 
 
 extern template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::scalar_objpipe,
     expression::scalar_objpipe>;
 extern template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::scalar_objpipe,
     expression::vector_objpipe>;
 extern template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::vector_objpipe,
     expression::scalar_objpipe>;
 extern template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::vector_objpipe,
     expression::vector_objpipe>;
 

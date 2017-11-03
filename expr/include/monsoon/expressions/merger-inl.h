@@ -205,7 +205,7 @@ recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply(Fn fn,
 {}
 
 template<typename Fn, typename TagEqual, typename TagCombine>
-template<typename Tags, typename... Values>
+template<typename... Values>
 void recursive_apply<Fn, TagEqual, TagCombine>::operator()(
     Values&&... values) {
   std::array<metric_value, sizeof...(Values)> args;
@@ -220,7 +220,7 @@ template<std::size_t N>
 void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
     const untagged&,
     const std::array<metric_value, N>& values) {
-  std::invoke(fn_, std::move(values));
+  std::invoke(fn_, values);
 }
 
 template<typename Fn, typename TagEqual, typename TagCombine>
@@ -228,7 +228,7 @@ template<std::size_t N>
 void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
     const tags& tags,
     const std::array<metric_value, N>& values) {
-  std::invoke(fn_, tags, std::move(values));
+  std::invoke(fn_, tags, values);
 }
 
 template<typename Fn, typename TagEqual, typename TagCombine>
@@ -238,10 +238,22 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
     std::array<metric_value, N>& values,
     const std::optional<Head>& head,
     Tail&&... tail) {
-  if (head.has_value()) {
-    this->recursive_apply_(tags, std::move(values),
-        *head, std::forward<Tail>(tail)...);
-  }
+  if (head.has_value())
+    this->recursive_apply_(tags, values, *head, std::forward<Tail>(tail)...);
+}
+
+template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Tags, std::size_t N, typename... Head, typename... Tail>
+void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+    const Tags& tags,
+    std::array<metric_value, N>& values,
+    const std::variant<Head...>& head,
+    Tail&&... tail) {
+  std::visit(
+      [&](const auto& head_val) {
+        this->recursive_apply_(tags, values, head_val, std::forward<Tail>(tail)...);
+      },
+      head);
 }
 
 template<typename Fn, typename TagEqual, typename TagCombine>
@@ -253,7 +265,7 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
     Tail&&... tail) {
   this->recursive_apply_(
       std::get<0>(head),
-      std::move(values),
+      values,
       std::get<1>(head),
       std::forward<Tail>(tail)...);
 }
@@ -268,7 +280,7 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
   if (tag_equal_(tag_set, std::get<0>(head))) {
     this->recursive_apply_(
         tag_combine_(tag_set, std::get<0>(head)),
-        std::move(values),
+        values,
         std::get<1>(head),
         std::forward<Tail>(tail)...);
   }
@@ -298,7 +310,7 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
   for (const auto& head_elem : head) {
     this->recursive_apply_(
         std::get<0>(head_elem),
-        std::move(values),
+        values,
         std::get<1>(head_elem),
         std::forward<Tail>(tail)...);
   }
@@ -315,7 +327,7 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
   if (head_elem != head.end()) {
     this->recursive_apply_(
         tag_combine_(tag_set, std::get<0>(*head_elem)),
-        std::move(values),
+        values,
         std::get<1>(*head_elem),
         std::forward<Tail>(tail)...);
   }
@@ -329,16 +341,21 @@ inline auto make_recursive_apply(Fn&& fn,
     std::decay_t<Fn>,
     std::decay_t<TagEqual>,
     std::decay_t<TagCombine>> {
-  return {
+  using result_type = recursive_apply<
+      std::decay_t<Fn>,
+      std::decay_t<TagEqual>,
+      std::decay_t<TagCombine>>;
+  return result_type(
       std::forward<Fn>(fn),
       std::forward<TagEqual>(equal),
-      std::forward<TagCombine>(tag_combine) };
+      std::forward<TagCombine>(tag_combine));
 }
 
 template<typename Fn>
 inline auto make_recursive_apply(Fn&& fn)
 -> recursive_apply<std::decay_t<Fn>> {
-  return { std::forward<Fn>(fn) };
+  using result_type = recursive_apply<std::decay_t<Fn>>;
+  return result_type(std::forward<Fn>(fn));
 }
 
 
@@ -352,14 +369,13 @@ void merger_invocation<CbIdx>::operator()(
   static_assert(std::is_same_v<expression::scalar_emit_type, Value>
       || std::is_same_v<expression::vector_emit_type, Value>,
       "Value must be a scalar or vector emit type.");
-  invoke_(v.tp, fn, managed, v.data, std::index_sequence_for<Managed...>());
+  invoke_(fn, managed, v, std::index_sequence_for<Managed...>());
 }
 
 template<std::size_t CbIdx>
 template<typename Fn, typename... Managed, typename Value,
     std::size_t... Indices>
 void merger_invocation<CbIdx>::invoke_(
-    time_point tp,
     Fn& fn,
     const std::tuple<Managed...>& managed,
     const Value& v,
@@ -369,12 +385,12 @@ void merger_invocation<CbIdx>::invoke_(
       unpack,
       indices,
       fn,
-      tp,
+      v.tp,
       this->template apply_unpack_<Indices>(
           unpack,
           this->template choose_value_<Indices>(
               std::get<Indices>(managed),
-              v))...);
+              v.data))...);
 }
 
 template<std::size_t CbIdx>
@@ -402,11 +418,8 @@ template<std::size_t CbIdx>
 template<std::size_t Idx, typename Value>
 auto merger_invocation<CbIdx>::apply_unpack_(
     unpack_& unpack,
-    const Value& value)
--> std::conditional_t<
-    Idx == CbIdx,
-    const Value&,
-    decltype(std::declval<unpack_&>()(std::declval<const Value&>()))> {
+    Value& value)
+-> typename unpack_result_type<Value&, Idx == CbIdx>::type {
   if constexpr(Idx == CbIdx)
     return value;
   else
@@ -416,9 +429,12 @@ auto merger_invocation<CbIdx>::apply_unpack_(
 template<std::size_t CbIdx>
 template<std::size_t Idx, typename Managed, typename Value>
 constexpr auto merger_invocation<CbIdx>::choose_value_(
-    Managed& managed,
+    const Managed& managed,
     const Value& value)
--> std::conditional_t<Idx == CbIdx, const Value&, Managed&> {
+-> std::conditional_t<
+    Idx == CbIdx,
+    const Value&,
+    const typename Managed::accumulator_type&> {
   if constexpr(Idx == CbIdx) {
     return value;
   } else {
@@ -493,6 +509,42 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
 
 
 template<typename Fn, typename... ObjPipes>
+merger<Fn, ObjPipes...>::read_invocation_::read_invocation_(invocation_fn fn) noexcept
+: invocation_(fn)
+{
+  assert(invocation_ != nullptr);
+}
+
+template<typename Fn, typename... ObjPipes>
+bool merger<Fn, ObjPipes...>::read_invocation_::is_pullable() const noexcept {
+  return invocation_ != nullptr;
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::read_invocation_::operator()(merger& self) {
+  assert(invocation_ != nullptr);
+
+  bool pullable;
+  std::tie(factual_until_, pullable) = std::invoke(invocation_, self);
+  if (!pullable) invocation_ = nullptr;
+}
+
+template<typename Fn, typename... ObjPipes>
+bool merger<Fn, ObjPipes...>::read_invocation_::operator<(
+    const read_invocation_& other) const noexcept {
+  if (invocation_ == nullptr) return other.invocation_ != nullptr;
+  if (other.invocation_ == nullptr) return false;
+  return factual_until_ < other.factual_until_;
+}
+
+template<typename Fn, typename... ObjPipes>
+bool merger<Fn, ObjPipes...>::read_invocation_::operator>(
+    const read_invocation_& other) const noexcept {
+  return other < *this;
+}
+
+
+template<typename Fn, typename... ObjPipes>
 merger<Fn, ObjPipes...>::merger(Fn&& fn, ObjPipes&&... inputs)
 : managed_(std::move(inputs)...),
   fn_(std::move(fn))
@@ -521,7 +573,7 @@ auto merger<Fn, ObjPipes...>::empty() const noexcept -> bool {
       || !factual_pending_.empty()
       || ex_pending_ != nullptr) return false;
 
-  try_fill_();
+  const_cast<merger&>(*this).try_fill_();
   return speculative_pending_.empty()
       && factual_pending_.empty()
       && ex_pending_ == nullptr;
@@ -567,7 +619,7 @@ auto merger<Fn, ObjPipes...>::try_pull_(objpipe_errc& e)
   } else if (!speculative_pending_.empty()) {
     result.emplace(
         std::move(speculative_pending_.front().first),
-        std::in_place_index<1>,
+        std::in_place_index<0>,
         std::move(speculative_pending_.front().second));
     speculative_pending_.pop_front();
   } else {
@@ -613,7 +665,7 @@ auto merger<Fn, ObjPipes...>::load_until_next_factual_()
   using spec_insert_iter =
       decltype(std::back_inserter(speculative_pending_));
 
-  merger_acceptor<Fn, spec_insert_iter, tagged, sizeof...(ObjPipes)> acceptor{
+  merger_acceptor<const Fn, spec_insert_iter, tagged, sizeof...(ObjPipes)> acceptor{
       fn_,
       std::back_inserter(speculative_pending_)
   };
@@ -676,13 +728,16 @@ constexpr auto merger<Fn, ObjPipes...>::new_read_invocations_(
 }
 
 
-#if 0 // XXX finish implementing overriding methods of merger class.
-template<typename... ObjPipe>
-auto make_merger(ObjPipe&&... inputs)
--> objpipe::reader<typename merger<std::decay_t<ObjPipe>...>::value_type> {
-  return { new merger<std::decay_t<ObjPipe>...>{ std::forward<ObjPipe>(inputs)... } };
+template<typename Fn, typename... ObjPipe>
+auto make_merger(Fn&& fn, ObjPipe&&... inputs)
+-> objpipe::reader<typename merger<
+    std::decay_t<Fn>,
+    std::decay_t<ObjPipe>...>::value_type> {
+  return {
+      std::forward<Fn>(fn),
+      new merger<std::decay_t<ObjPipe>...>{ std::forward<ObjPipe>(inputs)... }
+  };
 }
-#endif
 
 
 }} /* namespace monsoon::expressions */

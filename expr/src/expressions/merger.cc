@@ -295,15 +295,19 @@ auto vector_accumulator::interpolate_(time_point tp) const
 
 
 template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::scalar_objpipe,
     expression::scalar_objpipe>;
 template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::scalar_objpipe,
     expression::vector_objpipe>;
 template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::vector_objpipe,
     expression::scalar_objpipe>;
 template class monsoon_expr_export_ merger<
+    metric_value (*)(const metric_value&, const metric_value&),
     expression::vector_objpipe,
     expression::vector_objpipe>;
 
