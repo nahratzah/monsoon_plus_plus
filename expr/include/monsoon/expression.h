@@ -88,8 +88,10 @@ class monsoon_expr_export_ expression {
    * Scalars are untagged values.
    */
   struct scalar_emit_type {
+    using data_type = std::variant<speculative_scalar, factual_scalar>;
+
     time_point tp;
-    std::variant<speculative_scalar, factual_scalar> data;
+    data_type data;
 
     template<typename... Args>
     scalar_emit_type(time_point tp, Args&&... args)
@@ -103,8 +105,10 @@ class monsoon_expr_export_ expression {
    * Vectors are tagged values.
    */
   struct vector_emit_type {
+    using data_type = std::variant<speculative_vector, factual_vector>;
+
     time_point tp;
-    std::variant<speculative_vector, factual_vector> data;
+    data_type data;
 
     template<typename... Args>
     vector_emit_type(time_point tp, Args&&... args)
