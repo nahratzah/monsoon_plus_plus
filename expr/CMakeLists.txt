@@ -4,6 +4,7 @@ include_directories (include)
 include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_expr
   src/expression.cc
+  src/expressions/merger.cc
   src/expressions/selector.cc
   src/expressions/constant.cc
   src/expressions/operators.cc
