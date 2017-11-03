@@ -564,99 +564,80 @@ merger<Fn, ObjPipes...>::merger(Fn&& fn, ObjPipes&&... inputs)
 }
 
 template<typename Fn, typename... ObjPipes>
-auto merger<Fn, ObjPipes...>::is_pullable() const noexcept -> bool {
-  std::unique_lock<std::mutex> lck{ mtx_ };
-  return !speculative_pending_.empty()
-      || !factual_pending_.empty()
-      || ex_pending_ != nullptr
-      || read_invocations_.front().is_pullable();
+merger<Fn, ObjPipes...>::merger(const Fn& fn, ObjPipes&&... inputs)
+: managed_(std::move(inputs)...),
+  fn_(fn)
+{
+  using namespace std::placeholders;
+
+  assert(std::all_of(
+          read_invocations_.begin(),
+          read_invocations_.end(),
+          std::bind(&read_invocation_::is_pullable, _1)));
 }
 
 template<typename Fn, typename... ObjPipes>
-auto merger<Fn, ObjPipes...>::empty() const noexcept -> bool {
-  std::unique_lock<std::mutex> lck{ mtx_ };
-  if (!speculative_pending_.empty()
-      || !factual_pending_.empty()
-      || ex_pending_ != nullptr) return false;
-
-  const_cast<merger&>(*this).try_fill_();
-  return speculative_pending_.empty()
-      && factual_pending_.empty()
-      && ex_pending_ == nullptr;
-}
-
-template<typename Fn, typename... ObjPipes>
-auto merger<Fn, ObjPipes...>::pull(objpipe_errc& e)
--> std::optional<value_type> {
-  std::unique_lock<std::mutex> lck{ mtx_ };
-
-  do {
-    std::optional<value_type> result = try_pull_(e);
-    if (result.has_value()) return result;
-    if (!result.has_value() && e == objpipe_errc::success)
-      e = wait_(lck);
-  } while (e == objpipe_errc::success);
-  return {};
-}
-
-template<typename Fn, typename... ObjPipes>
-auto merger<Fn, ObjPipes...>::try_pull(objpipe_errc& e)
--> std::optional<value_type> {
-  std::unique_lock<std::mutex> lck{ mtx_ };
-
-  return try_pull_(e);
-}
-
-template<typename Fn, typename... ObjPipes>
-auto merger<Fn, ObjPipes...>::try_pull_(objpipe_errc& e)
--> std::optional<value_type> {
-  e = objpipe_errc::success;
-  std::optional<value_type> result;
-
+auto merger<Fn, ObjPipes...>::try_next()
+-> std::variant<value_type, objpipe::no_value_reason> {
   try_fill_();
-  if (ex_pending_) std::rethrow_exception(ex_pending_);
 
   if (!factual_pending_.empty()) {
-    result.emplace(
+    auto result = std::variant<value_type, objpipe::no_value_reason>(
+        std::in_place_index<0>,
         std::move(factual_pending_.front().first),
         std::in_place_index<1>,
         std::move(factual_pending_.front().second));
     factual_pending_.pop_front();
+    return result;
   } else if (!speculative_pending_.empty()) {
-    result.emplace(
+    auto result = std::variant<value_type, objpipe::no_value_reason>(
+        std::in_place_index<0>,
         std::move(speculative_pending_.front().first),
         std::in_place_index<0>,
         std::move(speculative_pending_.front().second));
     speculative_pending_.pop_front();
+    return result;
   } else {
     bool all_closed = true;
     for_each_managed_(
         [&all_closed](const auto& man) {
           all_closed &= !man.is_pullable();
         });
-    if (all_closed) e = objpipe_errc::closed;
+    if (all_closed) return objpipe::END_OF_DATA;
   }
 
-  return result;
+  return objpipe::TEMPORARY;
 }
 
 template<typename Fn, typename... ObjPipes>
-void merger<Fn, ObjPipes...>::try_fill_() noexcept {
+auto merger<Fn, ObjPipes...>::is_pullable_impl() const -> bool {
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  return !speculative_pending_.empty()
+      || !factual_pending_.empty()
+      || read_invocations_.front().is_pullable();
+}
+
+template<typename Fn, typename... ObjPipes>
+auto merger<Fn, ObjPipes...>::empty_impl() const -> bool {
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  if (!speculative_pending_.empty() || !factual_pending_.empty()) return false;
+
+  const_cast<merger&>(*this).try_fill_();
+  return speculative_pending_.empty() && factual_pending_.empty();
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::try_fill_() {
   if (!factual_pending_.empty()) return;
 
   auto end = read_invocations_.end();
   while (factual_pending_.empty()
-      && ex_pending_ == nullptr
       && end != read_invocations_.begin()
       && read_invocations_.front().is_pullable()) {
     std::pop_heap(read_invocations_.begin(), end, std::greater<>());
     --end;
 
-    try {
-      (*end)(*this);
-    } catch (...) {
-      ex_pending_ = std::current_exception();
-    }
+    (*end)(*this);
   }
 
   while (end != read_invocations_.end())
@@ -739,10 +720,11 @@ auto make_merger(Fn&& fn, ObjPipe&&... inputs)
 -> objpipe::reader<typename merger<
     std::decay_t<Fn>,
     std::decay_t<ObjPipe>...>::value_type> {
-  return {
+  return objpipe::new_pull_reader<merger<
+          std::decay_t<Fn>,
+          std::decay_t<ObjPipe>...>>(
       std::forward<Fn>(fn),
-      new merger<std::decay_t<ObjPipe>...>{ std::forward<ObjPipe>(inputs)... }
-  };
+      std::forward<ObjPipe>(inputs)...);
 }
 
 

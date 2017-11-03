@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup expr
 
+#include <monsoon/objpipe/pull_reader.h>
 #include <monsoon/expr_export_.h>
 #include <monsoon/expression.h>
 #include <monsoon/time_point.h>
@@ -494,7 +495,7 @@ constexpr bool tagged_v =
 
 template<typename Fn, typename... ObjPipes>
 class merger final
-: public monsoon::objpipe::detail::reader_intf<
+: public monsoon::objpipe::pull_reader<
       typename std::conditional_t<
          tagged_v<ObjPipes...>,
          expression::vector_objpipe,
@@ -546,29 +547,21 @@ class merger final
       typename merger_acceptor_data<tagged>::factual_entry;
 
  public:
+  explicit merger(const Fn& fn, ObjPipes&&... inputs);
   explicit merger(Fn&& fn, ObjPipes&&... inputs);
 
-  ///\copydoc monsoon::objpipe::reader_intf<T>::is_pullable()
-  auto is_pullable() const noexcept -> bool override;
-
-  ///\copydoc monsoon::objpipe::reader_intf<T>::empty()
-  auto empty() const noexcept -> bool override;
-
-  ///\copydoc monsoon::objpipe::pull(objpipe_errc&)
-  auto pull(objpipe_errc& e) -> std::optional<value_type> override;
-
-  ///\copydoc monsoon::objpipe::try_pull(objpipe_errc&)
-  auto try_pull(objpipe_errc& e) -> std::optional<value_type> override;
-
  private:
+  auto try_next() -> std::variant<value_type, objpipe::no_value_reason>
+      override;
+  auto is_pullable_impl() const -> bool override;
+  auto empty_impl() const -> bool override;
+
   ///\brief Try to read elements until we encounter a factual entry.
-  void try_fill_() noexcept;
+  void try_fill_();
 
   ///\brief Wait for data to become available.
-  objpipe_errc wait_(std::unique_lock<std::mutex>& lck) const;
-
-  ///\brief Attempt to pull a value.
-  auto try_pull_(objpipe_errc& e) -> std::optional<value_type>;
+  auto wait_for_data() const -> std::optional<objpipe::no_value_reason>
+      override;
 
   ///\brief Invocation for a specific managed accumulator, to retrieve values.
   template<std::size_t CbIdx>
@@ -601,7 +594,6 @@ class merger final
   std::deque<factual_entry> factual_pending_;
   mutable std::mutex mtx_;
   mutable std::condition_variable read_avail_;
-  std::exception_ptr ex_pending_;
 };
 
 template<typename Fn, typename... ObjPipe>
@@ -609,24 +601,6 @@ auto make_merger(Fn&& fn, ObjPipe&&... inputs)
     -> objpipe::reader<typename merger<
         std::decay_t<Fn>,
         std::decay_t<ObjPipe>...>::value_type>;
-
-
-extern template class monsoon_expr_export_ merger<
-    metric_value (*)(const metric_value&, const metric_value&),
-    expression::scalar_objpipe,
-    expression::scalar_objpipe>;
-extern template class monsoon_expr_export_ merger<
-    metric_value (*)(const metric_value&, const metric_value&),
-    expression::scalar_objpipe,
-    expression::vector_objpipe>;
-extern template class monsoon_expr_export_ merger<
-    metric_value (*)(const metric_value&, const metric_value&),
-    expression::vector_objpipe,
-    expression::scalar_objpipe>;
-extern template class monsoon_expr_export_ merger<
-    metric_value (*)(const metric_value&, const metric_value&),
-    expression::vector_objpipe,
-    expression::vector_objpipe>;
 
 
 }} /* namespace monsoon::expressions */

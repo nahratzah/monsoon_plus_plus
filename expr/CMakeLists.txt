@@ -23,4 +23,6 @@ install (FILES
   include/monsoon/expressions/selector.h
   include/monsoon/expressions/constant.h
   include/monsoon/expressions/operators.h
+  include/monsoon/expressions/merger.h
+  include/monsoon/expressions/merger-inl.h
   DESTINATION include/monsoon/expressions)
