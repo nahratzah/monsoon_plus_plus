@@ -33,3 +33,5 @@ install (FILES
   include/monsoon/objpipe/detail/reader_intf.h
   include/monsoon/objpipe/detail/writer_intf.h
   DESTINATION include/monsoon/objpipe/detail)
+
+add_subdirectory (tests)
