@@ -146,6 +146,41 @@ TEST(filter_operation) {
   CHECK_EQUAL(objpipe_errc::closed, e);
 }
 
+TEST(transform_operation) {
+  auto reader = monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 })
+      .transform([](int x) { return 2 * x; });
+
+  CHECK_EQUAL(false, reader.empty());
+
+  // Element 0 access, using front() and pop_front().
+  CHECK_EQUAL(0, reader.front());
+  reader.pop_front();
+
+  // Element 1 access, using front() and pull().
+  CHECK_EQUAL(2, reader.front());
+  CHECK_EQUAL(2, reader.pull());
+
+  // Element 2 access, using pull().
+  CHECK_EQUAL(4, reader.pull());
+
+  // Element 3 access, using try_pull().
+  CHECK_EQUAL(6, reader.try_pull());
+
+  // Element 4 access, using wait(), then pull().
+  CHECK_EQUAL(objpipe_errc::success, reader.wait());
+  CHECK_EQUAL(8, reader.pull());
+
+  // No more elements.
+  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(true, reader.empty());
+  CHECK_EQUAL(objpipe_errc::closed, reader.wait());
+
+  objpipe_errc e;
+  std::optional<int> failed_pull = reader.pull(e);
+  CHECK_EQUAL(false, failed_pull.has_value());
+  CHECK_EQUAL(objpipe_errc::closed, e);
+}
+
 int main() {
   return UnitTest::RunAllTests();
 }
