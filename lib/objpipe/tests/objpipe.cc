@@ -3,7 +3,7 @@
 #include <monsoon/objpipe/interlock.h>
 #include <monsoon/objpipe/errc.h>
 #include "UnitTest++/UnitTest++.h"
-#include "test_hacks.h"
+#include "test_hacks.ii"
 #include <vector>
 #include <tuple>
 #include <thread>
