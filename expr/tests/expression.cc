@@ -65,12 +65,12 @@ TEST(constant) {
   auto reader = std::get<0>(std::move(reader_variant));
 
   for (time_point tp : mms.result_emit_time.value()) {
-  CHECK_EQUAL(
-      expression::scalar_emit_type(
-          tp,
-          std::in_place_index<1>,
-          metric_value(42)),
-      reader.pull());
+    CHECK_EQUAL(
+        expression::scalar_emit_type(
+            tp,
+            std::in_place_index<1>,
+            metric_value(42)),
+        reader.pull());
   }
   CHECK_EQUAL(false, bool(reader));
 }
