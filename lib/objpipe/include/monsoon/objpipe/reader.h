@@ -209,9 +209,9 @@ class reader {
    * \param[in] alloc The allocator to use for the vector.
    */
   template<typename Alloc = std::allocator<value_type>>
-  auto to_vector(const Alloc& alloc = Alloc()) &&
+  auto to_vector(Alloc alloc = Alloc()) &&
   -> std::vector<value_type, Alloc> {
-    auto result = std::vector<value_type, Alloc>(begin(), end(), alloc);
+    auto result = std::vector<value_type, Alloc>(begin(), end(), std::move(alloc));
     ptr_.reset();
     return result;
   }
