@@ -3,11 +3,10 @@
 #include <vector>
 
 namespace std {
-namespace {
 
 
 template<typename T>
-std::ostream& operator<<(std::ostream& out, const std::optional<T>& opt) {
+inline std::ostream& operator<<(std::ostream& out, const std::optional<T>& opt) {
   if (opt.has_value())
     return out << "optional[" << *opt << "]";
   else
@@ -15,7 +14,7 @@ std::ostream& operator<<(std::ostream& out, const std::optional<T>& opt) {
 }
 
 template<typename T>
-std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
+inline std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
   bool first = true;
   for (const auto& e : v)
     out << (std::exchange(first, false) ? "[" : ", ") << e;
@@ -23,4 +22,4 @@ std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
 }
 
 
-}} /* namespace std::<unnamed> */
+} /* namespace std */
