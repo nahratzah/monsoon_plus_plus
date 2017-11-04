@@ -44,7 +44,7 @@ class monsoon_dirhistory_local_ basic_emit_visitor {
  protected:
   std::optional<time_point> sel_begin_, sel_end_;
   const time_point::duration slack_;
-  const time_range& tr_;
+  const time_range tr_;
   selected_files_heap files_;
 };
 

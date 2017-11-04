@@ -1,12 +1,19 @@
 #include <monsoon/expressions/operators.h>
+#include <monsoon/expressions/merger.h>
 #include <monsoon/metric_value.h>
+#include <monsoon/interpolate.h>
+#include <monsoon/overload.h>
 #include <type_traits>
 #include <string_view>
 #include <ostream>
 #include <utility>
 #include <algorithm>
 #include <functional>
-#include "../overload.h"
+#include <map>
+#include <set>
+#include <deque>
+#include <iterator>
+#include <mutex>
 
 namespace monsoon {
 namespace expressions {
@@ -16,21 +23,25 @@ template<typename Fn>
 class monsoon_expr_local_ unop_t final
 : public expression
 {
- private:
-  class application;
-
  public:
   unop_t(Fn&&, std::string_view, expression_ptr&&);
   ~unop_t() noexcept override;
 
-  void operator()(acceptor<emit_type>&, const metric_source&,
-      const time_range&, time_point::duration) const override;
+  auto operator()(const metric_source&,
+      const time_range&, time_point::duration) const
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
+
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
 
  private:
   void do_ostream(std::ostream&) const override;
 
-  expression_ptr nested_;
+  static auto apply_scalar_(scalar_emit_type&, const Fn&) -> scalar_emit_type&;
+  static auto apply_vector_(vector_emit_type&, const Fn&) -> vector_emit_type&;
+
   Fn fn_;
+  expression_ptr nested_;
   std::string_view sign_;
 };
 
@@ -46,40 +57,27 @@ class monsoon_expr_local_ binop_t final
   binop_t(Fn&&, std::string_view, expression_ptr&&, expression_ptr&&);
   ~binop_t() noexcept override;
 
-  void operator()(acceptor<emit_type>&, const metric_source&,
-      const time_range&, time_point::duration) const override;
+  auto operator()(const metric_source&,
+      const time_range&, time_point::duration) const
+      -> std::variant<scalar_objpipe, vector_objpipe> override;
+
+  bool is_scalar() const noexcept override;
+  bool is_vector() const noexcept override;
 
  private:
   void do_ostream(std::ostream&) const override;
 
-  expression_ptr x_, y_;
   Fn fn_;
+  expression_ptr x_, y_;
   std::string_view sign_;
-};
-
-
-template<typename Fn>
-class monsoon_expr_local_ unop_t<Fn>::application final
-: public acceptor<emit_type>
-{
- public:
-  application(acceptor<emit_type>&, const Fn&) noexcept;
-  ~application() noexcept override;
-
-  void accept_speculative(time_point, const emit_type&) override;
-  void accept(time_point, vector_type) override;
-
- private:
-  acceptor<emit_type>& accept_fn_;
-  const Fn& fn_;
 };
 
 
 template<typename Fn>
 unop_t<Fn>::unop_t(Fn&& fn, std::string_view sign, expression_ptr&& nested)
 : fn_(std::move(fn)),
-  sign_(std::move(sign)),
-  nested_(std::move(nested))
+  nested_(std::move(nested)),
+  sign_(std::move(sign))
 {
   if (nested_ == nullptr) throw std::invalid_argument("null expression_ptr");
 }
@@ -88,12 +86,35 @@ template<typename Fn>
 unop_t<Fn>::~unop_t() noexcept {}
 
 template<typename Fn>
-void unop_t<Fn>::operator()(
-    acceptor<emit_type>& accept_fn,
+auto unop_t<Fn>::operator()(
     const metric_source& src,
-    const time_range& tr, time_point::duration slack) const {
-  auto app = application(accept_fn, fn_);
-  (*nested_)(app, src, tr, std::move(slack));
+    const time_range& tr, time_point::duration slack) const
+-> std::variant<scalar_objpipe, vector_objpipe> {
+  using namespace std::placeholders;
+
+  return std::visit(
+      overload(
+          [this](scalar_objpipe&& s)
+          -> std::variant<scalar_objpipe, vector_objpipe> {
+            return std::move(s)
+                .transform_copy(std::bind(&unop_t::apply_scalar_, _1, fn_));
+          },
+          [this](vector_objpipe&& s)
+          -> std::variant<scalar_objpipe, vector_objpipe> {
+            return std::move(s)
+                .transform_copy(std::bind(&unop_t::apply_vector_, _1, fn_));
+          }),
+      std::invoke(*nested_, src, tr, std::move(slack)));
+}
+
+template<typename Fn>
+bool unop_t<Fn>::is_scalar() const noexcept {
+  return nested_->is_scalar();
+}
+
+template<typename Fn>
+bool unop_t<Fn>::is_vector() const noexcept {
+  return nested_->is_scalar();
 }
 
 template<typename Fn>
@@ -101,48 +122,31 @@ void unop_t<Fn>::do_ostream(std::ostream& out) const {
   out << sign_ << *nested_;
 }
 
-
 template<typename Fn>
-unop_t<Fn>::application::application(acceptor<emit_type>& accept_fn,
-    const Fn& fn) noexcept
-: accept_fn_(accept_fn),
-  fn_(fn)
-{}
-
-template<typename Fn>
-unop_t<Fn>::application::~application() noexcept {}
-
-template<typename Fn>
-void unop_t<Fn>::application::accept_speculative(time_point tp,
-    const emit_type& emt) {
+auto unop_t<Fn>::apply_scalar_(scalar_emit_type& emt, const Fn& fn)
+-> scalar_emit_type& {
   std::visit(
-      overload(
-          [tp, this](const metric_value& mv) {
-            accept_fn_.accept_speculative(std::move(tp), fn_(std::move(mv)));
-          },
-          [tp, this](std::tuple<tags, metric_value> mv_tpl) {
-            std::get<1>(mv_tpl) = fn_(std::get<1>(std::move(mv_tpl)));
-            accept_fn_.accept_speculative(std::move(tp), std::move(mv_tpl));
-          }),
-      emt);
+      [&fn](metric_value& v) {
+        v = std::invoke(fn, std::move(v));
+      },
+      emt.data);
+  return emt;
 }
 
 template<typename Fn>
-void unop_t<Fn>::application::accept(time_point tp, vector_type v) {
-  std::for_each(v.begin(), v.end(),
-      [this](std::tuple<emit_type>& outer_tpl) {
-        auto& emt = std::get<0>(outer_tpl);
-        std::visit(
-            overload(
-                [this](metric_value& mv) {
-                  mv = fn_(std::move(mv));
-                },
-                [this](std::tuple<tags, metric_value>& mv_tpl) {
-                  std::get<1>(mv_tpl) = fn_(std::get<1>(std::move(mv_tpl)));
-                }),
-            emt);
-      });
-  accept_fn_.accept(std::move(tp), std::move(v));
+auto unop_t<Fn>::apply_vector_(vector_emit_type& emt, const Fn& fn)
+-> vector_emit_type& {
+  std::visit(
+      overload(
+          [&fn](speculative_vector& v) {
+            std::get<1>(v) = std::invoke(fn, std::move(std::get<1>(v)));
+          },
+          [&fn](factual_vector& map) {
+            for (auto& elem : map)
+              elem.second = std::invoke(fn, std::move(elem.second));
+          }),
+      emt.data);
+  return emt;
 }
 
 
@@ -150,9 +154,9 @@ template<typename Fn>
 binop_t<Fn>::binop_t(Fn&& fn, std::string_view sign,
     expression_ptr&& x, expression_ptr&& y)
 : fn_(std::move(fn)),
-  sign_(std::move(sign)),
   x_(std::move(x)),
-  y_(std::move(y))
+  y_(std::move(y)),
+  sign_(std::move(sign))
 {
   if (x_ == nullptr) throw std::invalid_argument("null expression_ptr x");
   if (y_ == nullptr) throw std::invalid_argument("null expression_ptr y");
@@ -160,6 +164,30 @@ binop_t<Fn>::binop_t(Fn&& fn, std::string_view sign,
 
 template<typename Fn>
 binop_t<Fn>::~binop_t() noexcept {}
+
+template<typename Fn>
+bool binop_t<Fn>::is_scalar() const noexcept {
+  return x_->is_scalar() && y_->is_scalar();
+}
+
+template<typename Fn>
+bool binop_t<Fn>::is_vector() const noexcept {
+  return x_->is_vector() || y_->is_vector();
+}
+
+template<typename Fn>
+auto binop_t<Fn>::operator()(const metric_source& src,
+    const time_range& tr, time_point::duration slack) const
+-> std::variant<scalar_objpipe, vector_objpipe> {
+  return std::visit(
+      [this](auto&&... pipes) -> std::variant<scalar_objpipe, vector_objpipe> {
+        return make_merger(
+            fn_,
+            std::forward<std::decay_t<decltype(pipes)>>(pipes)...);
+      },
+      (*x_)(src, tr, slack),
+      (*y_)(src, tr, slack));
+}
 
 template<typename Fn>
 void binop_t<Fn>::do_ostream(std::ostream& out) const {

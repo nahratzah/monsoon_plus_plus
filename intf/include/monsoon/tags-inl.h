@@ -6,15 +6,6 @@
 namespace monsoon {
 
 
-inline tags::tags(tags&& other) noexcept
-: map_(std::move(other.map_))
-{}
-
-inline auto tags::operator=(tags&& other) noexcept -> tags& {
-  map_ = std::move(other.map_);
-  return *this;
-}
-
 template<typename Iter>
 tags::tags(Iter b, Iter e)
 : map_(b, e)

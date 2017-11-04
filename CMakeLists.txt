@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 2.8)
+cmake_minimum_required (VERSION 3.3)
 project (monsoon)
 include (CTest)
 
@@ -91,3 +91,5 @@ add_subdirectory (expr)
 if (BUILD_EXAMPLES)
   add_subdirectory (examples)
 endif()
+
+add_subdirectory (doc)

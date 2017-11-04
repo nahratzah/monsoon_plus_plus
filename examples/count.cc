@@ -5,7 +5,6 @@
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
-#include <monsoon/acceptor.h>
 #include <cstdint>
 #include <iostream>
 
@@ -21,10 +20,9 @@ int main(int argc, char** argv) {
   }
 
   auto history = open_dir(argv[1]);
-  std::uintmax_t counter;
-  history->emit_time(
-      [&counter](monsoon::time_point tp) { ++counter; },
-      monsoon::time_range());
+  std::uintmax_t counter = 0u;
+  for (auto e : history->emit_time(monsoon::time_range()))
+    ++counter;
   std::cout << counter << " scrapes\n";
   return 0;
 }

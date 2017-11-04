@@ -1,6 +1,9 @@
 #ifndef MONSOON_METRIC_NAME_H
 #define MONSOON_METRIC_NAME_H
 
+///\file
+///\ingroup intf
+
 #include <monsoon/intf_export_.h>
 #include <cstddef>
 #include <functional>
@@ -12,10 +15,19 @@
 namespace monsoon {
 
 
+/**
+ * \brief The name of a metric.
+ * \ingroup intf
+ *
+ * Metric names are always local to a group.
+ */
 class monsoon_intf_export_ metric_name {
  public:
+  ///\brief The collection type holding path segments.
   using path_type = std::vector<std::string>;
+  ///\brief Iterator over path segments.
   using iterator = path_type::iterator;
+  ///\brief Const iterator over path segments.
   using const_iterator = path_type::const_iterator;
 
   metric_name() = default;
@@ -24,35 +36,91 @@ class monsoon_intf_export_ metric_name {
   metric_name& operator=(const metric_name&) = default;
   metric_name& operator=(metric_name&&) noexcept;
 
-  explicit metric_name(path_type&&) noexcept;
-  explicit metric_name(const path_type&);
-  metric_name(std::initializer_list<const char*>);
-  metric_name(std::initializer_list<std::string>);
-  template<typename Iter> metric_name(Iter, Iter);
+  /**
+   * \brief Create a new metric name.
+   *
+   * \param path The path of the metric name.
+   */
+  explicit metric_name(path_type&& path) noexcept;
+  /**
+   * \brief Create a new metric name.
+   *
+   * \param path The path of the metric name.
+   */
+  explicit metric_name(const path_type& path);
+  /**
+   * \brief Create a new metric name.
+   *
+   * \param path The path of the metric name.
+   */
+  metric_name(std::initializer_list<const char*> path);
+  /**
+   * \brief Create a new metric name.
+   *
+   * \param path The path of the metric name.
+   */
+  metric_name(std::initializer_list<std::string> path);
+  /**
+   * \brief Create a new metric name.
+   *
+   * \param[in] b,e Iteration of path segments.
+   */
+  template<typename Iter> metric_name(Iter b, Iter e);
 
+  /**
+   * @return the path of this metric name.
+   */
   const path_type& get_path() const noexcept;
+
+  ///@{
+  ///\brief Iterate over path segments.
   iterator begin();
+  ///\brief Iterate over path segments.
   iterator end();
+  ///\brief Iterate over path segments.
   const_iterator begin() const;
+  ///\brief Iterate over path segments.
   const_iterator end() const;
+  ///\brief Iterate over path segments.
   const_iterator cbegin() const;
+  ///\brief Iterate over path segments.
   const_iterator cend() const;
+  ///@}
 
+  ///@{
+  ///\brief Comparison.
   bool operator==(const metric_name&) const noexcept;
+  ///\brief Comparison.
   bool operator!=(const metric_name&) const noexcept;
+  ///\brief Comparison.
   bool operator<(const metric_name&) const noexcept;
+  ///\brief Comparison.
   bool operator>(const metric_name&) const noexcept;
+  ///\brief Comparison.
   bool operator<=(const metric_name&) const noexcept;
+  ///\brief Comparison.
   bool operator>=(const metric_name&) const noexcept;
+  ///@}
 
+  /**
+   * \brief The textual representation of the metric name.
+   */
   std::string config_string() const;
 
  private:
   path_type path_;
 };
 
+/**
+ * \brief Write metric name to a stream.
+ * \ingroup intf_io
+ *
+ * @param n The metric name of which to write the textual representation.
+ * @param out The destination stream.
+ * @return out
+ */
 monsoon_intf_export_
-std::ostream& operator<<(std::ostream&, const metric_name&);
+std::ostream& operator<<(std::ostream& out, const metric_name& n);
 
 
 } /* namespace monsoon */
@@ -61,11 +129,17 @@ std::ostream& operator<<(std::ostream&, const metric_name&);
 namespace std {
 
 
+///\brief STL Hash support.
+///\ingroup intf_stl
+///\relates metric_name
 template<>
 struct hash<monsoon::metric_name> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::metric_name&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for metric_name.
   monsoon_intf_export_
   size_t operator()(const monsoon::metric_name&) const noexcept;
 };

@@ -1,0 +1,55 @@
+#ifndef MONSOON_OBJPIPE_ERRC_H
+#define MONSOON_OBJPIPE_ERRC_H
+
+///\file
+///\ingroup objpipe objpipe_errors
+
+#include <monsoon/objpipe/objpipe_export_.h>
+#include <string>
+#include <system_error>
+#include <type_traits>
+
+namespace monsoon {
+namespace objpipe {
+
+
+/**
+ * \brief Object pipe error conditions.
+ * \ingroup objpipe_errors
+ */
+enum class objpipe_errc {
+  success=0, ///< Status code indicating successful completion.
+  closed ///< Status code indicating failure, due to a closed object pipe.
+};
+
+/**
+ * \brief Reference to the \ref objpipe_category().
+ * \ingroup objpipe_errors
+ * \return the object pipe error category.
+ */
+monsoon_objpipe_export_
+const std::error_category& objpipe_category();
+
+/**
+ * \brief Create an \ref objpipe_category() error condition.
+ * \ingroup objpipe_errors
+ * \param e The error code for which to create an error condition.
+ */
+monsoon_objpipe_export_
+std::error_condition make_error_condition(objpipe_errc e);
+
+
+}} /* namespace monsoon::objpipe */
+
+namespace std {
+
+
+template<>
+struct is_error_condition_enum<monsoon::objpipe::objpipe_errc>
+: true_type
+{};
+
+
+} /* namespace std */
+
+#endif /* MONSOON_OBJPIPE_ERRC_H */

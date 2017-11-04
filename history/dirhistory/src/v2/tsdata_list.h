@@ -23,13 +23,6 @@ class monsoon_dirhistory_local_ tsdata_v2_list
   bool is_writable() const noexcept override;
   void push_back(const time_series&) override;
 
-  std::unordered_set<simple_group> simple_groups() const override;
-  std::unordered_set<group_name> group_names() const override;
-  std::unordered_set<std::tuple<simple_group, metric_name>, metrics_hash>
-      untagged_metrics() const override;
-  std::unordered_set<std::tuple<group_name, metric_name>, metrics_hash>
-      tagged_metrics() const override;
-
   void emit(
       const std::function<void(time_point, emit_map&&)>&,
       std::optional<time_point>,

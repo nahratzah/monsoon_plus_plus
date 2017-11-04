@@ -1,5 +1,5 @@
-#ifndef OVERLOAD_H
-#define OVERLOAD_H
+#ifndef MONSOON_OVERLOAD_H
+#define MONSOON_OVERLOAD_H
 
 #include <type_traits>
 #include <utility>
@@ -31,4 +31,4 @@ constexpr auto overload(Fn&&... fn)
 
 }}} /* namespace monsoon::expressions::(inline)support */
 
-#endif /* OVERLOAD_H */
+#endif /* MONSOON_OVERLOAD_H */

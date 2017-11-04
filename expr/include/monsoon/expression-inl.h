@@ -6,7 +6,7 @@ namespace monsoon {
 
 template<typename Expr, typename... Args>
 expression_ptr expression::make_ptr(Args&&... args) {
-  return std::make_shared<Expr>(std::forward<Args>(args)...);
+  return std::make_unique<Expr>(std::forward<Args>(args)...);
 }
 
 

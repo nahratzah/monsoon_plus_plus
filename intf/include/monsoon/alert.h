@@ -63,11 +63,17 @@ class monsoon_intf_export_ alert {
 namespace std {
 
 
+///\brief STL Hash support.
+///\ingroup intf_stl
+///\relates alert
 template<>
 struct hash<monsoon::alert> {
+  ///\brief Argument type for hash function.
   using argument_type = const monsoon::alert&;
+  ///\brief Result type for hash function.
   using result_type = size_t;
 
+  ///\brief Compute hash code for alert.
   monsoon_intf_export_
   size_t operator()(const monsoon::alert&) const noexcept;
 };

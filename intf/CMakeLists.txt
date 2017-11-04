@@ -4,6 +4,7 @@ find_package (Boost COMPONENTS date_time REQUIRED)
 include_directories (include)
 include_directories (${Boost_INCLUDE_DIR})
 include_directories($<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
+include_directories($<TARGET_PROPERTY:monsoon_objpipe,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_intf
   src/collector.cc
   src/group_name.cc
@@ -23,8 +24,11 @@ add_library (monsoon_intf
 )
 target_link_libraries (monsoon_intf ${extra_libs})
 target_link_libraries (monsoon_intf monsoon_lib)
+target_link_libraries (monsoon_intf monsoon_objpipe)
 target_link_libraries (monsoon_intf ${Boost_DATE_TIME_LIBRARY})
-target_include_directories (monsoon_intf PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES> include)
+target_include_directories (monsoon_intf PUBLIC include)
+target_include_directories (monsoon_intf PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
+target_include_directories (monsoon_intf PUBLIC $<TARGET_PROPERTY:monsoon_objpipe,INTERFACE_INCLUDE_DIRECTORIES>)
 set_property (TARGET monsoon_intf PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_intf PROPERTY SOVERSION "0.0")
 
@@ -33,8 +37,6 @@ install (FILES
   include/monsoon/intf_export_.h
   include/monsoon/interpolate.h
   include/monsoon/metric_source.h
-  include/monsoon/acceptor.h
-  include/monsoon/acceptor-inl.h
   include/monsoon/alert-inl.h
   include/monsoon/alert.h
   include/monsoon/collector.h
