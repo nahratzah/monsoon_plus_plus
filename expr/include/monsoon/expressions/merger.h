@@ -497,6 +497,27 @@ constexpr bool tagged_v =
 } /* namespace monsoon::expressions::<unnamed> */
 
 
+/**
+ * \brief A template that handles merging of two or more metric streams,
+ * using a function.
+ * \ingroup expr
+ *
+ * \details
+ * The merger takes elements from each stream and attempts to combine them
+ * based on time point (interpolating where necessary) and tag matching.
+ *
+ * When a value is determined for each stream, a function is used to reduce
+ * that to a single value.
+ *
+ * Matcher implements an objpipe::reader, by which it exposes the derived
+ * values.
+ *
+ * \tparam Fn An invocable taking N metric values as arguments and returning
+ * a single metric value.
+ * \tparam ObjPipes Two or more object pipes, derived from other expressions.
+ *
+ * \todo Tag matching needs support for a by/without clause.
+ */
 template<typename Fn, typename... ObjPipes>
 class merger final
 : public monsoon::objpipe::pull_reader<
