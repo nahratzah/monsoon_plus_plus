@@ -223,6 +223,18 @@ class reader {
     ptr_.reset();
   }
 
+  ///\copydoc detail::reader_intf<T>::add_continuation()
+  void add_continuation(std::unique_ptr<detail::continuation_intf, detail::writer_release>&& c) {
+    assert(ptr_ != nullptr);
+    ptr_->add_continuation(std::move(c));
+  }
+
+  ///\copydoc detail::reader_intf<T>::erase_continuation()
+  void erase_continuation(detail::continuation_intf* c) {
+    assert(ptr_ != nullptr);
+    ptr_->erase_continuation(c);
+  }
+
  private:
   std::unique_ptr<detail::reader_intf<T>, detail::reader_release> ptr_;
 };

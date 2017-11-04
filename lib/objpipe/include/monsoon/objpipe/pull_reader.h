@@ -224,7 +224,7 @@ class pull_reader
   }
 
   void on_last_reader_gone_() noexcept override {}
-  void on_last_writer_gone_() noexcept override final {}
+  void on_last_writer_gone_() noexcept override {}
 
   std::optional<T> pending_;
   std::exception_ptr ex_pending_;

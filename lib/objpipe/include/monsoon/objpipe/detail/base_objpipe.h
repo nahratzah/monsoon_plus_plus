@@ -99,10 +99,10 @@ struct monsoon_objpipe_export_ writer_release {
   static auto link(T* w) noexcept
   -> std::enable_if_t<
         std::is_base_of_v<base_objpipe, T>,
-        std::unique_ptr<T, reader_release>> {
+        std::unique_ptr<T, writer_release>> {
     w->refcnt_.fetch_add(1u, std::memory_order_acquire);
-    w->reader_refcnt_.fetch_add(1u, std::memory_order_acquire);
-    return std::unique_ptr<T, reader_release>(w);
+    w->writer_refcnt_.fetch_add(1u, std::memory_order_acquire);
+    return std::unique_ptr<T, writer_release>(w);
   }
 
   /**

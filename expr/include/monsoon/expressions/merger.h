@@ -200,6 +200,10 @@ class merger_managed {
    */
   void advance_factual(time_point tp);
 
+  void add_continuation(
+      std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release>&& c);
+  void erase_continuation(objpipe::detail::continuation_intf* c);
+
   ///\brief The managed accumulator state.
   accumulator_type accumulator;
 
@@ -500,7 +504,8 @@ class merger final
          tagged_v<ObjPipes...>,
          expression::vector_objpipe,
          expression::scalar_objpipe
-      >::value_type>
+      >::value_type>,
+  public objpipe::detail::continuation_intf
 {
   static_assert(
       std::conjunction_v<
@@ -550,6 +555,10 @@ class merger final
   explicit merger(const Fn& fn, ObjPipes&&... inputs);
   explicit merger(Fn&& fn, ObjPipes&&... inputs);
 
+  void add_continuation(
+      std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release>&& c) override;
+  void erase_continuation(objpipe::detail::continuation_intf* c) override;
+
  private:
   auto try_next() -> std::variant<value_type, objpipe::no_value_reason>
       override;
@@ -571,20 +580,33 @@ class merger final
   ///\brief Invoke \p fn on each element of tuple managed_.
   template<typename ManFn>
   void for_each_managed_(ManFn fn);
+  ///\brief Invoke \p fn on each element of tuple managed_.
+  template<typename ManFn>
+  void for_each_managed_(ManFn fn) const;
 
   ///\brief Sentinel recursive invocation of \ref for_each_managed_().
   template<typename ManFn>
-  void for_each_managed_impl_(ManFn& fn, std::index_sequence<>) noexcept;
+  void for_each_managed_impl_(ManFn& fn, std::index_sequence<>) const noexcept;
 
   ///\brief Recursing invoker implementation of \ref for_each_managed_().
   template<typename ManFn, std::size_t Idx, std::size_t... Tail>
   void for_each_managed_impl_(ManFn& fn, std::index_sequence<Idx, Tail...>);
+
+  ///\brief Recursing invoker implementation of \ref for_each_managed_().
+  template<typename ManFn, std::size_t Idx, std::size_t... Tail>
+  void for_each_managed_impl_(ManFn& fn, std::index_sequence<Idx, Tail...>)
+      const;
 
   ///\brief Initializer for read_invocations_ member variable.
   template<std::size_t... Indices>
   static constexpr auto new_read_invocations_(std::index_sequence<Indices...>)
       noexcept
       -> std::array<read_invocation_, sizeof...(Indices)>;
+
+  void notify() noexcept override;
+  void on_last_reader_gone_() noexcept override;
+  void on_last_writer_gone_() noexcept override;
+  void add_continuations_();
 
   std::tuple<merger_managed<ObjPipes>...> managed_;
   const Fn fn_;
@@ -594,6 +616,8 @@ class merger final
   std::deque<factual_entry> factual_pending_;
   mutable std::mutex mtx_;
   mutable std::condition_variable read_avail_;
+  std::once_flag install_guard_;
+  std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> continuation_ptr_;
 };
 
 template<typename Fn, typename... ObjPipe>

@@ -124,6 +124,18 @@ void merger_managed<ObjPipe>::advance_factual(time_point tp) {
   accumulator.advance_factual(tp);
 }
 
+template<typename ObjPipe>
+void merger_managed<ObjPipe>::add_continuation(
+    std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release>&& c) {
+  input_.add_continuation(std::move(c));
+}
+
+template<typename ObjPipe>
+void merger_managed<ObjPipe>::erase_continuation(
+    objpipe::detail::continuation_intf* c) {
+  input_.erase_continuation(c);
+}
+
 
 inline unpack_::unpack_(const expression::vector_emit_type& v)
 : tp(v.tp),
@@ -577,6 +589,30 @@ merger<Fn, ObjPipes...>::merger(const Fn& fn, ObjPipes&&... inputs)
 }
 
 template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::add_continuation(
+    std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release>&& c) {
+  // Ensure existing continuation is destroyed after lock is released.
+  std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> old_c;
+
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  add_continuations_();
+  if (has_writer()) {
+    old_c = std::move(continuation_ptr_);
+    continuation_ptr_ = std::move(c);
+  }
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::erase_continuation(objpipe::detail::continuation_intf* c) {
+  // Ensure existing continuation is destroyed after lock is released.
+  std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> old_c;
+
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  if (continuation_ptr_.get() == c)
+    old_c = std::move(continuation_ptr_);
+}
+
+template<typename Fn, typename... ObjPipes>
 auto merger<Fn, ObjPipes...>::try_next()
 -> std::variant<value_type, objpipe::no_value_reason> {
   try_fill_();
@@ -642,6 +678,28 @@ void merger<Fn, ObjPipes...>::try_fill_() {
 
   while (end != read_invocations_.end())
     std::push_heap(read_invocations_.begin(), ++end, std::greater<>());
+
+  if (factual_pending_.empty()) add_continuations_();
+}
+
+template<typename Fn, typename... ObjPipes>
+auto merger<Fn, ObjPipes...>::wait_for_data() const
+-> std::optional<objpipe::no_value_reason> {
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  if (!speculative_pending_.empty() || !factual_pending_.empty()) return {};
+
+  const_cast<merger&>(*this).add_continuations_();
+  read_avail_.wait(lck);
+
+  if (!speculative_pending_.empty() || !factual_pending_.empty()) return {};
+
+  bool all_closed = true;
+  for_each_managed_(
+      [&all_closed](const auto& man) {
+        all_closed &= !man.is_pullable();
+      });
+  if (all_closed) return objpipe::END_OF_DATA;
+  return objpipe::TEMPORARY;
 }
 
 template<typename Fn, typename... ObjPipes>
@@ -692,9 +750,15 @@ void merger<Fn, ObjPipes...>::for_each_managed_(ManFn fn) {
 
 template<typename Fn, typename... ObjPipes>
 template<typename ManFn>
+void merger<Fn, ObjPipes...>::for_each_managed_(ManFn fn) const {
+  for_each_managed_impl_(fn, std::index_sequence_for<ObjPipes...>());
+}
+
+template<typename Fn, typename... ObjPipes>
+template<typename ManFn>
 void merger<Fn, ObjPipes...>::for_each_managed_impl_(
     ManFn&,
-    std::index_sequence<>) noexcept
+    std::index_sequence<>) const noexcept
 {}
 
 template<typename Fn, typename... ObjPipes>
@@ -707,11 +771,69 @@ void merger<Fn, ObjPipes...>::for_each_managed_impl_(
 }
 
 template<typename Fn, typename... ObjPipes>
+template<typename ManFn, std::size_t Idx, std::size_t... Tail>
+void merger<Fn, ObjPipes...>::for_each_managed_impl_(
+    ManFn& fn,
+    std::index_sequence<Idx, Tail...>) const {
+  std::invoke(fn, std::get<Idx>(managed_));
+  for_each_managed_impl_(fn, std::index_sequence<Tail...>());
+}
+
+template<typename Fn, typename... ObjPipes>
 template<std::size_t... Indices>
 constexpr auto merger<Fn, ObjPipes...>::new_read_invocations_(
     std::index_sequence<Indices...>) noexcept
 -> std::array<read_invocation_, sizeof...(Indices)> {
   return {{ read_invocation_(&merger::template load_until_next_factual_<Indices>)... }};
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::notify() noexcept {
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  if (!factual_pending_.empty() || !speculative_pending_.empty())
+    return;
+
+  try_fill_();
+  if (factual_pending_.empty() && speculative_pending_.empty()) {
+    // SKIP
+  } else if (factual_pending_.size() + speculative_pending_.size() == 1u) {
+    read_avail_.notify_one();
+  } else {
+    read_avail_.notify_all();
+  }
+
+  if (continuation_ptr_ != nullptr) {
+    auto existing_continuation =
+        objpipe::detail::writer_release::link(continuation_ptr_.get());
+    lck.unlock();
+    existing_continuation->notify();
+  }
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::on_last_reader_gone_() noexcept {
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  for_each_managed_([this](auto& man) -> void { man.erase_continuation(this); });
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::on_last_writer_gone_() noexcept {
+  read_avail_.notify_all();
+}
+
+template<typename Fn, typename... ObjPipes>
+void merger<Fn, ObjPipes...>::add_continuations_() {
+  if (has_reader()) {
+    // Ensure continuations are installed at least once.
+    std::call_once(
+        install_guard_,
+        [this]() {
+          for_each_managed_(
+              [this](auto& man) -> void {
+                man.add_continuation(objpipe::detail::writer_release::link(this));
+              });
+        });
+  }
 }
 
 
