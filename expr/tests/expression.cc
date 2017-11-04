@@ -6,6 +6,7 @@
 #include <optional>
 #include <tuple>
 #include <stdexcept>
+#include "test_hacks.ii"
 
 using namespace monsoon;
 
@@ -53,6 +54,10 @@ TEST(constant) {
 
   auto reader_variant =
       (*expr_ptr)(mms, time_range(), time_point::duration(10 * 1000));
+  CHECK_EQUAL(
+      std::make_tuple(time_range(), time_point::duration(10 * 1000)),
+      mms.last_emit_time.value());
+
   // Created queue is independant of lifetime of expression.
   expr_ptr.reset();
 

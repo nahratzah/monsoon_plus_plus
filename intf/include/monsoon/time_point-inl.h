@@ -59,6 +59,36 @@ constexpr std::int64_t time_point::duration::millis() const noexcept {
   return millis_;
 }
 
+constexpr bool time_point::duration::operator==(const time_point::duration& y)
+    const noexcept {
+  return millis_ == y.millis_;
+}
+
+constexpr bool time_point::duration::operator!=(const time_point::duration& y)
+    const noexcept {
+  return !(*this == y);
+}
+
+constexpr bool time_point::duration::operator<(const time_point::duration& y)
+    const noexcept {
+  return millis_ < y.millis_;
+}
+
+constexpr bool time_point::duration::operator>(const time_point::duration& y)
+    const noexcept {
+  return millis_ > y.millis_;
+}
+
+constexpr bool time_point::duration::operator<=(const time_point::duration& y)
+    const noexcept {
+  return millis_ <= y.millis_;
+}
+
+constexpr bool time_point::duration::operator>=(const time_point::duration& y)
+    const noexcept {
+  return millis_ >= y.millis_;
+}
+
 constexpr auto time_point::duration::operator+=(duration y) noexcept
 -> duration& {
   millis_ += y.millis_;

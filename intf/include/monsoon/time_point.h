@@ -114,6 +114,21 @@ class time_point::duration {
   constexpr std::int64_t millis() const noexcept;
 
   ///@{
+  ///\brief Compare durations.
+  constexpr bool operator==(const duration&) const noexcept;
+  ///\brief Compare durations.
+  constexpr bool operator!=(const duration&) const noexcept;
+  ///\brief Compare durations.
+  constexpr bool operator<(const duration&) const noexcept;
+  ///\brief Compare durations.
+  constexpr bool operator>(const duration&) const noexcept;
+  ///\brief Compare durations.
+  constexpr bool operator<=(const duration&) const noexcept;
+  ///\brief Compare durations.
+  constexpr bool operator>=(const duration&) const noexcept;
+  ///@}
+
+  ///@{
   ///\brief Add a duration to this duration.
   constexpr duration& operator+=(duration) noexcept;
   ///\brief Subtract a duration to this duration.
@@ -199,6 +214,26 @@ std::string to_string(time_point);
  */
 monsoon_intf_export_
 auto operator<<(std::ostream& out, time_point tp) -> std::ostream&;
+
+/**
+ * \brief Yield a string representation of the duration.
+ * \ingroup intf_io
+ * \relates time_point::duration
+ * \return The string representation of the duration.
+ */
+monsoon_intf_export_
+std::string to_string(time_point::duration);
+
+/**
+ * \brief Write the text representation of the duration to a stream.
+ * \ingroup intf_io
+ * \relates time_point::duration
+ * \param out The output stream to which to write.
+ * \param d The time point for which to write a textual representation.
+ * \return \p out
+ */
+monsoon_intf_export_
+auto operator<<(std::ostream& out, time_point::duration d) -> std::ostream&;
 
 
 } /* namespace monsoon */

@@ -1,0 +1,67 @@
+#ifndef TEST_HACKS_II
+#define TEST_HACKS_II
+
+#include <functional>
+#include <optional>
+#include <ostream>
+#include <tuple>
+#include <utility>
+#include <vector>
+
+namespace std {
+
+
+template<typename T>
+inline std::ostream& operator<<(std::ostream& out, const std::optional<T>& opt) {
+  if (opt.has_value())
+    return out << "optional[" << *opt << "]";
+  else
+    return out << "empty.optional";
+}
+
+template<typename T>
+inline std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
+  bool first = true;
+  for (const auto& e : v)
+    out << (std::exchange(first, false) ? "[" : ", ") << e;
+  return out << "]";
+}
+
+
+namespace test_hacks_ {
+
+struct printer {
+ public:
+  template<typename... T>
+  auto operator()(const T&... v) -> std::ostream& {
+    return _(out, v...);
+  }
+
+ private:
+  static auto _(std::ostream& out) noexcept
+  -> std::ostream& {
+    return out;
+  }
+
+  template<typename Head, typename... Tail>
+  static auto _(std::ostream& out, const Head& head, const Tail&... tail)
+  -> std::ostream& {
+    return _(out << head << (sizeof...(Tail) > 0 ? ", " : ""), tail...);
+  }
+
+ public:
+  std::ostream& out;
+};
+
+};
+
+
+template<typename... T>
+inline std::ostream& operator<<(std::ostream& out, const std::tuple<T...>& v) {
+  return std::apply(test_hacks_::printer{out << "("}, v) << ")";
+}
+
+
+} /* namespace std */
+
+#endif /* TEST_HACKS_II */

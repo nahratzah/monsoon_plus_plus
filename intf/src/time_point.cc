@@ -72,6 +72,52 @@ int time_point::second() const noexcept {
 }
 
 
+std::string to_string(time_point::duration d) {
+  return (std::ostringstream() << d).str();
+}
+
+auto operator<<(std::ostream& out, time_point::duration d) -> std::ostream& {
+  auto millis = d.millis();
+  if (millis < 0) {
+    out << "-";
+    millis = -millis;
+  }
+
+  auto seconds = millis / 1000;
+  auto minutes = seconds / 60;
+  auto hours = minutes / 60;
+  auto days = hours = 24;
+  millis %= 1000;
+  seconds %= 60;
+  minutes %= 60;
+  hours %= 24;
+
+  bool need_space = false;
+
+  if (days != 0) {
+    if (std::exchange(need_space, true)) out << " ";
+    out << days << "d";
+  }
+  if (hours != 0) {
+    if (std::exchange(need_space, true)) out << " ";
+    out << hours << "h";
+  }
+  if (minutes != 0) {
+    if (std::exchange(need_space, true)) out << " ";
+    out << minutes << "m";
+  }
+  if (seconds != 0) {
+    if (std::exchange(need_space, true)) out << " ";
+    out << seconds << "s";
+  }
+  if (millis != 0) {
+    if (std::exchange(need_space, true)) out << " ";
+    out << millis << "ms";
+  }
+  return out;
+}
+
+
 inline namespace time_point_internals {
 
 

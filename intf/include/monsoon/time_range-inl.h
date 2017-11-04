@@ -52,6 +52,17 @@ inline auto time_range::reset_interval() noexcept
 }
 
 
+inline bool operator==(const time_range& x, const time_range& y) noexcept {
+  return x.begin() == y.begin()
+      && x.end() == y.end()
+      && x.interval() == y.interval();
+}
+
+inline bool operator!=(const time_range& x, const time_range& y) noexcept {
+  return !(x == y);
+}
+
+
 } /* namespace monsoon */
 
 #endif /* MONSOON_TIME_RANGE_INL_H */

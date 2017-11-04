@@ -7,6 +7,7 @@
 #include <monsoon/intf_export_.h>
 #include <monsoon/time_point.h>
 #include <optional>
+#include <iosfwd>
 
 namespace monsoon {
 
@@ -99,6 +100,37 @@ class monsoon_intf_export_ time_range {
   std::optional<time_point> begin_, end_;
   std::optional<time_point::duration> interval_;
 };
+
+/**
+ * \brief Compare time range for equality.
+ * \relates time_range
+ * \ingroup intf
+ */
+bool operator==(const time_range& x, const time_range& y) noexcept;
+/**
+ * \brief Compare time range for inequality.
+ * \relates time_range
+ * \ingroup intf
+ */
+bool operator!=(const time_range& x, const time_range& y) noexcept;
+
+/**
+ * \brief String representation of time_range.
+ * \ingroup intf_io
+ * \relates time_range
+ * \ingroup intf
+ */
+monsoon_intf_export_
+std::string to_string(const time_range& tr);
+
+/**
+ * \brief Print textual representation of time_range.
+ * \ingroup intf_io
+ * \relates time_range
+ * \ingroup intf
+ */
+monsoon_intf_export_
+std::ostream& operator<<(std::ostream& out, const time_range& tr);
 
 
 } /* namespace monsoon */
