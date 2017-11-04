@@ -606,7 +606,7 @@ class merger final
   void notify() noexcept override;
   void on_last_reader_gone_() noexcept override;
   void on_last_writer_gone_() noexcept override;
-  void add_continuations_();
+  bool add_continuations_();
 
   std::tuple<merger_managed<ObjPipes>...> managed_;
   const Fn fn_;

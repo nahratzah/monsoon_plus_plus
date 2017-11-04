@@ -648,7 +648,8 @@ auto merger<Fn, ObjPipes...>::try_next()
 template<typename Fn, typename... ObjPipes>
 auto merger<Fn, ObjPipes...>::is_pullable_impl() const -> bool {
   std::unique_lock<std::mutex> lck{ mtx_ };
-  return !speculative_pending_.empty()
+  return has_writer()
+      || !speculative_pending_.empty()
       || !factual_pending_.empty()
       || read_invocations_.front().is_pullable();
 }
@@ -666,6 +667,7 @@ template<typename Fn, typename... ObjPipes>
 void merger<Fn, ObjPipes...>::try_fill_() {
   if (!factual_pending_.empty()) return;
 
+restart:
   auto end = read_invocations_.end();
   while (factual_pending_.empty()
       && end != read_invocations_.begin()
@@ -679,7 +681,10 @@ void merger<Fn, ObjPipes...>::try_fill_() {
   while (end != read_invocations_.end())
     std::push_heap(read_invocations_.begin(), ++end, std::greater<>());
 
-  if (factual_pending_.empty()) add_continuations_();
+  if (factual_pending_.empty()) {
+    if (add_continuations_())
+      goto restart;
+  }
 }
 
 template<typename Fn, typename... ObjPipes>
@@ -822,18 +827,21 @@ void merger<Fn, ObjPipes...>::on_last_writer_gone_() noexcept {
 }
 
 template<typename Fn, typename... ObjPipes>
-void merger<Fn, ObjPipes...>::add_continuations_() {
+bool merger<Fn, ObjPipes...>::add_continuations_() {
+  bool installed = false;
   if (has_reader()) {
     // Ensure continuations are installed at least once.
     std::call_once(
         install_guard_,
-        [this]() {
+        [this, &installed]() {
+          installed = true;
           for_each_managed_(
               [this](auto& man) -> void {
                 man.add_continuation(objpipe::detail::writer_release::link(this));
               });
         });
   }
+  return installed;
 }
 
 
