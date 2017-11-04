@@ -594,12 +594,14 @@ void merger<Fn, ObjPipes...>::add_continuation(
   // Ensure existing continuation is destroyed after lock is released.
   std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> old_c;
 
-  std::unique_lock<std::mutex> lck{ mtx_ };
+  // Install while there are no continuation pointers.
+  // Note: add_continuations_ is thread safe, because of std::call_once().
   add_continuations_();
-  if (has_writer()) {
-    old_c = std::move(continuation_ptr_);
+
+  std::unique_lock<std::mutex> lck{ mtx_ };
+  old_c = std::move(continuation_ptr_);
+  if (has_writer())
     continuation_ptr_ = std::move(c);
-  }
 }
 
 template<typename Fn, typename... ObjPipes>
@@ -807,7 +809,10 @@ void merger<Fn, ObjPipes...>::notify() noexcept {
     read_avail_.notify_all();
   }
 
-  if (continuation_ptr_ != nullptr) {
+  if (continuation_ptr_ != nullptr
+      && !(factual_pending_.empty() && speculative_pending_.empty())) {
+    // Continuations must be notified without lock held.
+    // We do require the reference count incremented, so it stays live.
     auto existing_continuation =
         objpipe::detail::writer_release::link(continuation_ptr_.get());
     lck.unlock();
@@ -823,7 +828,14 @@ void merger<Fn, ObjPipes...>::on_last_reader_gone_() noexcept {
 
 template<typename Fn, typename... ObjPipes>
 void merger<Fn, ObjPipes...>::on_last_writer_gone_() noexcept {
+  std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> old_c;
   read_avail_.notify_all();
+
+  // Effectively a double-checked lock.
+  if (continuation_ptr_ != nullptr) {
+    std::unique_lock<std::mutex> lck{ mtx_ };
+    old_c = std::move(continuation_ptr_);
+  }
 }
 
 template<typename Fn, typename... ObjPipes>
