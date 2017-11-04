@@ -37,7 +37,9 @@ class monsoon_expr_export_ scalar_accumulator {
   void add(expression::scalar_emit_type&& v);
 
  private:
+  monsoon_expr_local_
   void add_speculative_(time_point tp, metric_value&& v);
+  monsoon_expr_local_
   void add_factual_(time_point tp, metric_value&& v);
 
   speculative_map speculative_;
@@ -98,6 +100,7 @@ class monsoon_expr_export_ vector_accumulator {
     auto operator[](const tags& tag_set) const
         -> std::optional<std::tuple<metric_value, bool>>;
     bool is_speculative() const noexcept;
+    ///\todo Speculative map interpolation is to be implemented.
     auto value() const
         -> std::variant<
             expression::factual_vector,
@@ -114,8 +117,11 @@ class monsoon_expr_export_ vector_accumulator {
   void add(expression::vector_emit_type&& v);
 
  private:
+  monsoon_expr_local_
   void add_speculative_(time_point tp, expression::speculative_vector&& v);
+  monsoon_expr_local_
   void add_factual_(time_point tp, expression::factual_vector&& v);
+
   auto interpolate_(time_point tp, const tags& tag_set) const
       -> std::optional<std::tuple<metric_value, bool>>;
   auto interpolate_(time_point tp) const
