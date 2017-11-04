@@ -53,6 +53,7 @@ class monsoon_expr_export_ expression {
   /**
    * \brief A speculative scalar.
    *
+   * \details
    * Speculative emitted values are emitted as early as possible.
    * Being speculative, they may be overriden or invalidated by later emitions.
    */
@@ -60,6 +61,7 @@ class monsoon_expr_export_ expression {
   /**
    * \brief A speculative vector.
    *
+   * \details
    * Speculative emitted values are emitted as early as possible.
    * Being speculative, they may be overriden or invalidated by later emitions.
    */
@@ -67,6 +69,7 @@ class monsoon_expr_export_ expression {
   /**
    * \brief A factual scalar.
    *
+   * \details
    * Factual emitions are known correct and will never be overriden, nor invalidated.
    * A factual emition will always contain all data for a given timestamp.
    * Speculative emitions shall never have a timestamp at/before the most recent
@@ -76,15 +79,20 @@ class monsoon_expr_export_ expression {
   /**
    * \brief A factual vector.
    *
+   * \details
    * Factual emitions are known correct and will never be overriden, nor invalidated.
    * A factual emition will always contain all data for a given timestamp.
    * Speculative emitions shall never have a timestamp at/before the most recent
    * factual emition.
+   *
+   * \todo Supply an implementation of hash and equal functors, that uses a
+   * tag name set for their computation. Thus allowing fast merging of by-clauses.
    */
   using factual_vector = std::unordered_map<tags, metric_value>;
   /**
    * \brief Emitted scalar values.
    *
+   * \details
    * Scalars are untagged values.
    */
   struct scalar_emit_type {
@@ -102,6 +110,7 @@ class monsoon_expr_export_ expression {
   /**
    * \brief Emitted vectors.
    *
+   * \details
    * Vectors are tagged values.
    */
   struct vector_emit_type {
@@ -128,6 +137,7 @@ class monsoon_expr_export_ expression {
   /**
    * \brief Create an expression pointer in place.
    *
+   * \details
    * Helper function for expression creation.
    *
    * \tparam Expr The expression type that is to be constructed.
@@ -171,10 +181,12 @@ class monsoon_expr_export_ expression {
 /**
  * \brief Convert an expression to its text representation.
  * \ingroup expr_io
+ * \relates expression
  *
+ * \details
  * The yielded expression is parsable into a new instance of expression.
  *
- * @return The text representation of the expression.
+ * \return The text representation of the expression.
  */
 std::string to_string(const expression&);
 
