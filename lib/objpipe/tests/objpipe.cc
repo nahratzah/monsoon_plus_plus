@@ -222,9 +222,9 @@ TEST(interlock) {
   CHECK_EQUAL(4, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
+  CHECK_EQUAL(false, bool(reader));
 
   objpipe_errc e;
   std::optional<int> failed_pull = reader.pull(e);
@@ -232,6 +232,14 @@ TEST(interlock) {
   CHECK_EQUAL(objpipe_errc::closed, e);
 
   th.join();
+}
+
+TEST(reader_to_vector) {
+
+  CHECK_EQUAL(
+      std::vector<int>({ 0, 1, 2, 3, 4 }),
+      monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 })
+          .to_vector());
 }
 
 int main() {
