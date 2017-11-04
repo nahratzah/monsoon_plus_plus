@@ -12,5 +12,5 @@ endmacro (do_test)
 if (UnitTest++_FOUND)
   include_directories(${UTPP_INCLUDE_DIRS})
 
-  do_test (constant)
+  do_test (expression)
 endif ()
