@@ -21,7 +21,7 @@ namespace {
 
 
 static void throw_last_error_(DWORD dwErrVal) {
-  const std::error_code ec(dwErrVal, std::generic_category());
+  const std::error_code ec(dwErrVal, std::system_category());
   throw std::system_error(ec, "File IO error");
 }
 
