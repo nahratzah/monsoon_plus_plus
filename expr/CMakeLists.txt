@@ -32,3 +32,5 @@ install (FILES
   include/monsoon/expressions/merger.h
   include/monsoon/expressions/merger-inl.h
   DESTINATION include/monsoon/expressions)
+
+add_subdirectory (tests)
