@@ -10,6 +10,19 @@ expression_ptr expression::make_ptr(Args&&... args) {
 }
 
 
+inline bool operator!=(
+    const expression::scalar_emit_type& x,
+    const expression::scalar_emit_type& y) noexcept {
+  return !(x == y);
+}
+
+inline bool operator!=(
+    const expression::vector_emit_type& x,
+    const expression::vector_emit_type& y) noexcept {
+  return !(x == y);
+}
+
+
 } /* namespace monsoon */
 
 #endif /* MONSOON_EXPRESSION_INL_H */

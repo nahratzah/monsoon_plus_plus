@@ -190,7 +190,35 @@ class monsoon_expr_export_ expression {
  *
  * \return The text representation of the expression.
  */
+monsoon_expr_export_
 std::string to_string(const expression&);
+
+monsoon_expr_export_
+bool operator==(
+    const expression::scalar_emit_type& x,
+    const expression::scalar_emit_type& y) noexcept;
+bool operator!=(
+    const expression::scalar_emit_type& x,
+    const expression::scalar_emit_type& y) noexcept;
+
+monsoon_expr_export_
+bool operator==(
+    const expression::vector_emit_type& x,
+    const expression::vector_emit_type& y) noexcept;
+bool operator!=(
+    const expression::vector_emit_type& x,
+    const expression::vector_emit_type& y) noexcept;
+
+///\brief Write scalar emit type to output.
+///\ingroup expr_io
+monsoon_expr_export_
+auto operator<<(std::ostream& out, const expression::scalar_emit_type& v)
+    -> std::ostream&;
+///\brief Write vector emit type to output.
+///\ingroup expr_io
+monsoon_expr_export_
+auto operator<<(std::ostream& out, const expression::vector_emit_type& v)
+    -> std::ostream&;
 
 
 } /* namespace monsoon */

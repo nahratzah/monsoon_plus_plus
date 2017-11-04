@@ -5,7 +5,6 @@
 #include <utility>
 
 namespace monsoon {
-namespace expressions {
 inline namespace support {
 
 
@@ -29,6 +28,6 @@ constexpr auto overload(Fn&&... fn)
 }
 
 
-}}} /* namespace monsoon::expressions::(inline)support */
+}} /* namespace monsoon::(inline)support */
 
 #endif /* MONSOON_OVERLOAD_H */
