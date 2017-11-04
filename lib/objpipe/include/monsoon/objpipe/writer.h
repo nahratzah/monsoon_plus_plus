@@ -29,7 +29,9 @@ class writer
   /** \brief Rvalue reference type for objects in this object pipe. */
   using rvalue_reference = std::add_rvalue_reference_t<value_type>;
   /** \brief const reference type for objects in this object pipe. */
-  using rvalue_reference = std::add_lvalue_reference_t<std::add_const_t<value_type>>;
+  using const_reference = std::add_lvalue_reference_t<std::add_const_t<value_type>>;
+
+  writer() = default;
 
   /**
    * \brief Construct a writer using the given pointer.

@@ -72,7 +72,8 @@ class writer_intf
   virtual void push(rvalue_reference v) {
     objpipe_errc e;
     push(std::move(v), e);
-    if (e) throw std::system_error(static_cast<int>(e), objpipe_category());
+    if (e != objpipe_errc::success)
+      throw std::system_error(static_cast<int>(e), objpipe_category());
   }
 
   /**
@@ -87,7 +88,8 @@ class writer_intf
   virtual void push(const_reference v) {
     objpipe_errc e;
     push(v, e);
-    if (e) throw std::system_error(static_cast<int>(e), objpipe_category());
+    if (e != objpipe_errc::success)
+      throw std::system_error(static_cast<int>(e), objpipe_category());
   }
 };
 

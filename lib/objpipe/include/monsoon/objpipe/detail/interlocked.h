@@ -64,13 +64,9 @@ class interlocked final
     e = objpipe_errc::success;
 
     std::unique_lock<std::mutex> lck{ mtx_ };
-    if (!has_writer()) {
-      e = objpipe_errc::closed;
-      return;
-    }
     while (offered_ != nullptr) {
-      write_avail_.wait();
-      if (!has_reader()) {
+      write_avail_.wait(lck);
+      if (!this->has_reader()) {
         e = objpipe_errc::closed;
         return;
       }
@@ -80,11 +76,11 @@ class interlocked final
     offered_ = v_addr;
     read_avail_.notify_one();
     continuation_notify_(continuation_, lck);
-    write_done_.wait(lck, [this, v_addr]() { return offered_ != v_addr; })
+    write_done_.wait(lck, [this, v_addr]() { return offered_ != v_addr; });
   }
 
   ///@copydoc reader_intf<T>::wait()
-  auto wait() const noexcept -> objpipe_errc {
+  auto wait() const noexcept -> objpipe_errc override {
     std::unique_lock<std::mutex> lck{ mtx_ };
     while (offered_ == nullptr) {
       if (!this->has_writer()) return objpipe_errc::closed;
@@ -94,13 +90,13 @@ class interlocked final
   }
 
   ///@copydoc reader_intf<T>::empty()
-  auto empty() const noexcept -> bool {
+  auto empty() const noexcept -> bool override {
     std::lock_guard<std::mutex> lck{ mtx_ };
     return offered_ == nullptr;
   }
 
   ///@copydoc reader_intf<T>::pull(objpipe_errc&)
-  auto pull(objpipe_errc& e) -> std::optional<value_type> {
+  auto pull(objpipe_errc& e) -> std::optional<value_type> override {
     e = objpipe_errc::success;
 
     std::unique_lock<std::mutex> lck{ mtx_ };
@@ -121,11 +117,14 @@ class interlocked final
   }
 
   ///@copydoc reader_intf<T>::pull()
-  auto pull() -> value_type {
+  auto pull() -> value_type override {
     std::unique_lock<std::mutex> lck{ mtx_ };
     while (offered_ == nullptr) {
-      if (!this->has_writer())
-        throw std::system_error(objpipe_errc::closed, objpipe_category());
+      if (!this->has_writer()) {
+        throw std::system_error(
+            static_cast<int>(objpipe_errc::closed),
+            objpipe_category());
+      }
       read_avail_.wait(lck);
     }
 
@@ -137,7 +136,7 @@ class interlocked final
   }
 
   ///@copydoc reader_intf<T>::try_pull(objpipe_errc&)
-  auto try_pull(objpipe_errc& e) -> std::optional<value_type> {
+  auto try_pull(objpipe_errc& e) -> std::optional<value_type> override {
     e = objpipe_errc::success;
 
     std::unique_lock<std::mutex> lck{ mtx_ };
@@ -156,7 +155,7 @@ class interlocked final
   }
 
   ///@copydoc reader_intf<T>::try_pull()
-  auto try_pull() -> std::optional<value_type> {
+  auto try_pull() -> std::optional<value_type> override {
     std::unique_lock<std::mutex> lck{ mtx_ };
     if (offered_ == nullptr) return {};
 
@@ -169,19 +168,21 @@ class interlocked final
   }
 
   ///@copydoc reader_intf<T>::front()
-  auto front() const -> std::variant<pointer, objpipe_errc> {
+  auto front() const -> std::variant<pointer, objpipe_errc> override {
+    using result_variant = std::variant<pointer, objpipe_errc>;
+
     std::unique_lock<std::mutex> lck{ mtx_ };
     while (offered_ == nullptr) {
       if (!this->has_writer())
-        return { std::in_place_index<1>, objpipe_errc::closed };
+        return result_variant(std::in_place_index<1>, objpipe_errc::closed);
       read_avail_.wait(lck);
     }
 
-    return { std::in_place_index<0>, offered_ };
+    return result_variant(std::in_place_index<0>, offered_);
   }
 
   ///@copydoc reader_intf<T>::pop_front()
-  auto pop_front() -> objpipe_errc {
+  auto pop_front() -> objpipe_errc override {
     std::unique_lock<std::mutex> lck{ mtx_ };
     while (offered_ == nullptr) {
       if (!this->has_writer()) return objpipe_errc::closed;
@@ -196,20 +197,22 @@ class interlocked final
   }
 
   ///@copydoc reader_intf<T>::add_continuation(std::unique_ptr<continuation_intf,writer_release>&&)
-  void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) {
+  void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c)
+      override {
     std::lock_guard<std::mutex> lck{ mtx_ };
 
     // Note: by the end of the swap operation, the writers may have gone.
     // This is fine, as the last writer disappearing will invoke
     // on_last_writer_gone_(), which grabs the lck prior to releasing the
     // continuation_, which in this case (due to blocking) will be `c`.
-    if (has_writer()) swap(continuation_, c);
+    if (this->has_writer()) swap(continuation_, c);
   }
 
   ///@copydoc reader_intf<T>::erase_continuation(continuation_intf*)
-  void erase_continuation(continuation_intf* c) {
+  void erase_continuation(continuation_intf* c) override {
+    std::unique_ptr<continuation_intf, writer_release> old_c;
     std::lock_guard<std::mutex> lck{ mtx_ };
-    if (continuation_ == c) continuation_.reset(); // No destruction.
+    if (continuation_.get() == c) old_c = std::move(continuation_);
   }
 
  private:

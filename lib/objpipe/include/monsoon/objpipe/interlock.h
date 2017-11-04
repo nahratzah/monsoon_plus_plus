@@ -24,10 +24,10 @@ namespace objpipe {
  */
 template<typename T>
 auto new_interlock() -> std::tuple<reader<T>, writer<T>> {
-  detail::interlocked* ptr = new detail::interlocked();
+  detail::interlocked<T>* ptr = new detail::interlocked<T>();
   return std::make_tuple( // Never throws.
-      reader<T>(reader_release::link(ptr)),
-      writer<T>(writer_release::link(ptr)));
+      reader<T>(detail::reader_release::link(ptr)),
+      writer<T>(detail::writer_release::link(ptr)));
 }
 
 

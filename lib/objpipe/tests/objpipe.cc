@@ -1,9 +1,12 @@
 #include <monsoon/objpipe/callback.h>
 #include <monsoon/objpipe/array.h>
+#include <monsoon/objpipe/interlock.h>
 #include <monsoon/objpipe/errc.h>
 #include "UnitTest++/UnitTest++.h"
 #include "test_hacks.h"
 #include <vector>
+#include <tuple>
+#include <thread>
 
 using monsoon::objpipe::objpipe_errc;
 
@@ -179,6 +182,56 @@ TEST(transform_operation) {
   std::optional<int> failed_pull = reader.pull(e);
   CHECK_EQUAL(false, failed_pull.has_value());
   CHECK_EQUAL(objpipe_errc::closed, e);
+}
+
+TEST(interlock) {
+  monsoon::objpipe::reader<int> reader;
+  monsoon::objpipe::writer<int> writer;
+  std::tie(reader, writer) = monsoon::objpipe::new_interlock<int>();
+
+  auto th = std::thread(std::bind(
+          [](monsoon::objpipe::writer<int>& writer) {
+            for (int i = 0; i < 5; ++i)
+              writer.push(i);
+          },
+          std::move(writer)));
+
+  CHECK_EQUAL(objpipe_errc::success, reader.wait());
+  CHECK_EQUAL(false, reader.empty());
+
+  // Element 0 access, using front() and pop_front().
+  CHECK_EQUAL(0, reader.front());
+  reader.pop_front();
+
+  // Element 1 access, using front() and pull().
+  CHECK_EQUAL(1, reader.front());
+  CHECK_EQUAL(1, reader.pull());
+
+  // Element 2 access, using pull().
+  CHECK_EQUAL(2, reader.pull());
+
+  // Element 3 access, using try_pull().
+  // Note: try_pull may yield empty optional, if the writer thread is not fast
+  // enough. So we spin on that.
+  std::optional<int> three = reader.try_pull();
+  while (!three.has_value()) three = reader.try_pull();
+  CHECK_EQUAL(3, three);
+
+  // Element 4 access, using wait(), then pull().
+  CHECK_EQUAL(objpipe_errc::success, reader.wait());
+  CHECK_EQUAL(4, reader.pull());
+
+  // No more elements.
+  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(true, reader.empty());
+  CHECK_EQUAL(objpipe_errc::closed, reader.wait());
+
+  objpipe_errc e;
+  std::optional<int> failed_pull = reader.pull(e);
+  CHECK_EQUAL(false, failed_pull.has_value());
+  CHECK_EQUAL(objpipe_errc::closed, e);
+
+  th.join();
 }
 
 int main() {
