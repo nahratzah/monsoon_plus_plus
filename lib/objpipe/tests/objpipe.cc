@@ -114,6 +114,38 @@ TEST(array_using_initializer_list) {
   CHECK_EQUAL(objpipe_errc::closed, e);
 }
 
+TEST(filter_operation) {
+  auto reader = monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 })
+      .filter([](int x) { return x % 2 == 0; });
+
+  CHECK_EQUAL(false, reader.empty());
+
+  // Element 0 access, using front() and pop_front().
+  CHECK_EQUAL(0, reader.front());
+  reader.pop_front();
+
+  // Element 1 is filtered out
+
+  // Element 2 access, using pull().
+  CHECK_EQUAL(2, reader.pull());
+
+  // Element 3 is filtered out
+
+  // Element 4 access, using wait(), then pull().
+  CHECK_EQUAL(objpipe_errc::success, reader.wait());
+  CHECK_EQUAL(4, reader.pull());
+
+  // No more elements.
+  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(true, reader.empty());
+  CHECK_EQUAL(objpipe_errc::closed, reader.wait());
+
+  objpipe_errc e;
+  std::optional<int> failed_pull = reader.pull(e);
+  CHECK_EQUAL(false, failed_pull.has_value());
+  CHECK_EQUAL(objpipe_errc::closed, e);
+}
+
 int main() {
   return UnitTest::RunAllTests();
 }
