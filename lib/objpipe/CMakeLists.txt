@@ -6,6 +6,7 @@ include_directories (include)
 include_directories ($<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_objpipe
   src/base_objpipe.cc
+  src/reader_intf.cc
   src/errc.cc)
 target_include_directories(monsoon_objpipe PUBLIC include)
 target_link_libraries (monsoon_objpipe monsoon_lib)

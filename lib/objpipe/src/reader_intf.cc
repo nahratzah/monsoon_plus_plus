@@ -1,4 +1,4 @@
-#include <monsoon/objpipe/reader_intf.h>
+#include <monsoon/objpipe/detail/reader_intf.h>
 
 namespace monsoon {
 namespace objpipe {
