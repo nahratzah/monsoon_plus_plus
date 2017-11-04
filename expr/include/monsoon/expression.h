@@ -25,6 +25,7 @@ class expression;
  * \brief A pointer to an expression.
  * \ingroup expr
  *
+ * \details
  * Since \ref monsoon::expression "expression" is an interface, it can only be held in a pointer.
  * This type represents the default pointer for an expression.
  */
@@ -34,6 +35,7 @@ using expression_ptr = std::unique_ptr<const expression>;
  * \brief Expressions represent a computation on zero or more metrics.
  * \ingroup expr
  *
+ * \details
  * Expressions allow for computing over time, using a metric source.
  * @note Expressions are immutable once constructed.
  * @headerfile monsoon/expression.h <monsoon/expression.h>
