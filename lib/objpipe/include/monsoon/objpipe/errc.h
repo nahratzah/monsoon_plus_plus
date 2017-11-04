@@ -8,6 +8,7 @@
 #include <string>
 #include <system_error>
 #include <type_traits>
+#include <iosfwd>
 
 namespace monsoon {
 namespace objpipe {
@@ -37,6 +38,13 @@ const std::error_category& objpipe_category();
  */
 monsoon_objpipe_export_
 std::error_condition make_error_condition(objpipe_errc e);
+
+/**
+ * \brief Write errc to output stream.
+ * \ingroup objpipe_errors
+ */
+monsoon_objpipe_export_
+std::ostream& operator<<(std::ostream& out, objpipe_errc e);
 
 
 }} /* namespace monsoon::objpipe */

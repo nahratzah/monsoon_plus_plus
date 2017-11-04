@@ -1,4 +1,5 @@
 #include <monsoon/objpipe/errc.h>
+#include <ostream>
 
 namespace monsoon {
 namespace objpipe {
@@ -49,6 +50,19 @@ const std::error_category& objpipe_category() {
 
 std::error_condition make_error_condition(objpipe_errc e) {
   return std::error_condition(static_cast<int>(e), objpipe_category());
+}
+
+std::ostream& operator<<(std::ostream& out, objpipe_errc e) {
+  using namespace std::string_view_literals;
+
+  std::string_view e_txt;
+  switch (e) {
+    case objpipe_errc::success:
+      e_txt = "objpipe_errc[success]"sv;
+    case objpipe_errc::closed:
+      e_txt = "objpipe_errc[closed]"sv;
+  }
+  return out << e_txt;
 }
 
 
