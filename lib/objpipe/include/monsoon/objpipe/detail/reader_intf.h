@@ -129,18 +129,18 @@ class reader_intf
   virtual auto pop_front() -> objpipe_errc = 0;
 
   /**
-   * Add a continuation.
+   * \brief Add a continuation.
    *
-   * @note If the object pipe has no writer, this may be a noop.
-   * @param c The continuation that is to be connected.
+   * \note If the object pipe has no writer, this may be a noop.
+   * \param c The continuation that is to be connected.
    */
   virtual void add_continuation(std::unique_ptr<continuation_intf, writer_release>&& c) = 0;
 
   /**
-   * Remove a continuation.
+   * \brief Remove a continuation.
    *
-   * @note If the object pipe has no writer, this may be a noop.
-   * @param c The continuation that is to be disconnected.
+   * \note If the object pipe has no writer, this may be a noop.
+   * \param c The continuation that is to be disconnected.
    */
   virtual void erase_continuation(continuation_intf* c) = 0;
 };
