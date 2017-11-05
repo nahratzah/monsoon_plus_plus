@@ -81,7 +81,7 @@ auto emit_visitor<Args...>::file_to_coroutine_(
               yield(
                   std::forward_as_tuple(
                       tp,
-                      std::forward<std::decay_t<decltype(args)>>(args)...));
+                      std::forward<decltype(args)>(args)...));
             },
             sel_begin_, sel_end_);
       });
@@ -167,7 +167,7 @@ void emit_visitor<Args...>::before_with_interval_(const callback& cb) {
 
   before_without_interval_(
       [this](auto&&... args) {
-        ival_pending_.emplace_back(std::forward<std::decay_t<decltype(args)>>(args)...);
+        ival_pending_.emplace_back(std::forward<decltype(args)>(args)...);
       },
       ival_iter_ + slack_);
 
@@ -187,7 +187,7 @@ void emit_visitor<Args...>::during_with_interval_(const callback& cb) {
           ival_iter_ += tr_.interval().value();
         }
 
-        ival_pending_.emplace_back(tp0, std::forward<std::decay_t<decltype(args)>>(args)...);
+        ival_pending_.emplace_back(tp0, std::forward<decltype(args)>(args)...);
       },
       sel_end_);
 
@@ -213,7 +213,7 @@ void emit_visitor<Args...>::after_with_interval_(const callback& cb) {
 
   after_without_interval_(
       [this](auto&&... args) {
-        ival_pending_.emplace_back(std::forward<std::decay_t<decltype(args)>>(args)...);
+        ival_pending_.emplace_back(std::forward<decltype(args)>(args)...);
       });
 
   std::apply(cb, std::invoke(reduce_at_, ival_iter_, ival_pending_));
@@ -230,7 +230,7 @@ void emit_visitor<Args...>::before_without_interval_(const callback& cb,
       itp = iteration_tp_()) {
     emit_without_interval_(
         [&iterations](auto&&... args) {
-          iterations.emplace_back(std::forward<std::decay_t<decltype(args)>>(args)...);
+          iterations.emplace_back(std::forward<decltype(args)>(args)...);
         });
   }
 
@@ -259,7 +259,7 @@ void emit_visitor<Args...>::after_without_interval_(const callback& cb) {
       itp = iteration_tp_()) {
     emit_without_interval_(
         [&iterations](auto&&... args) {
-          iterations.emplace_back(std::forward<std::decay_t<decltype(args)>>(args)...);
+          iterations.emplace_back(std::forward<decltype(args)>(args)...);
         });
   }
 

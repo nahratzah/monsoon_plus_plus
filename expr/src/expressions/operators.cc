@@ -172,7 +172,7 @@ auto binop_t::operator()(const metric_source& src,
       [this](auto&&... pipes) -> std::variant<scalar_objpipe, vector_objpipe> {
         return make_merger(
             fn_,
-            std::forward<std::decay_t<decltype(pipes)>>(pipes)...);
+            std::forward<decltype(pipes)>(pipes)...);
       },
       (*x_)(src, tr, slack),
       (*y_)(src, tr, slack));
