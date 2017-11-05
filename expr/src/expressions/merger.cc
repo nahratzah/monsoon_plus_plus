@@ -336,22 +336,45 @@ auto unpack_::operator()(const vector_accumulator& m)
 template class merger_managed<expression::scalar_objpipe>;
 template class merger_managed<expression::vector_objpipe>;
 
-template class merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::scalar_objpipe,
-    expression::scalar_objpipe>;
-template class merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::vector_objpipe,
-    expression::scalar_objpipe>;
-template class merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::scalar_objpipe,
-    expression::vector_objpipe>;
-template class merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::vector_objpipe,
-    expression::vector_objpipe>;
+template
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe&&,
+    expression::scalar_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::scalar_objpipe&&>,
+        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+
+template
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::vector_objpipe&&,
+    expression::scalar_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::vector_objpipe&&>,
+        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+
+template
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe&&,
+    expression::vector_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::scalar_objpipe&&>,
+        std::decay_t<expression::vector_objpipe&&>>::value_type>;
+
+template
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::vector_objpipe&&,
+    expression::vector_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::vector_objpipe&&>,
+        std::decay_t<expression::vector_objpipe&&>>::value_type>;
 
 
 }} /* namespace monsoon::expressions */

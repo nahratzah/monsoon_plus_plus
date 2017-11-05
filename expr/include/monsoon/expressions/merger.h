@@ -659,23 +659,51 @@ auto make_merger(Fn&& fn, ObjPipe&&... inputs)
         std::decay_t<Fn>,
         std::decay_t<ObjPipe>...>::value_type>;
 
+// Template instantiations, as used by binary operators.
 
-extern template class monsoon_expr_export_ merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::scalar_objpipe,
-    expression::scalar_objpipe>;
-extern template class monsoon_expr_export_ merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::vector_objpipe,
-    expression::scalar_objpipe>;
-extern template class monsoon_expr_export_ merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::scalar_objpipe,
-    expression::vector_objpipe>;
-extern template class monsoon_expr_export_ merger<
-    metric_value(*)(const metric_value&, const metric_value&),
-    expression::vector_objpipe,
-    expression::vector_objpipe>;
+extern template
+monsoon_expr_export_
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe&&,
+    expression::scalar_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::scalar_objpipe&&>,
+        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+
+extern template
+monsoon_expr_export_
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::vector_objpipe&&,
+    expression::scalar_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::vector_objpipe&&>,
+        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+
+extern template
+monsoon_expr_export_
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe&&,
+    expression::vector_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::scalar_objpipe&&>,
+        std::decay_t<expression::vector_objpipe&&>>::value_type>;
+
+extern template
+monsoon_expr_export_
+auto make_merger(
+    metric_value(*const&)(const metric_value&, const metric_value&),
+    expression::vector_objpipe&&,
+    expression::vector_objpipe&&)
+    -> objpipe::reader<typename merger<
+        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+        std::decay_t<expression::vector_objpipe&&>,
+        std::decay_t<expression::vector_objpipe&&>>::value_type>;
 
 
 }} /* namespace monsoon::expressions */
