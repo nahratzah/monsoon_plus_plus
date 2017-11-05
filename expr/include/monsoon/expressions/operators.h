@@ -97,6 +97,16 @@ expression_ptr numeric_divide(expression_ptr, expression_ptr);
 /// \code{.c} x % y \endcode
 monsoon_expr_export_
 expression_ptr numeric_modulo(expression_ptr, expression_ptr);
+///\brief algebra operation
+///
+/// \f$ x (2^{y}) \f$
+monsoon_expr_export_
+expression_ptr numeric_shift_left(expression_ptr, expression_ptr);
+///\brief algebra operation
+///
+/// \f$ x (2^{-y}) \f$
+monsoon_expr_export_
+expression_ptr numeric_shift_right(expression_ptr, expression_ptr);
 ///@}
 
 ///@}

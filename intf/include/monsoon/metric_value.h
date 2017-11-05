@@ -290,6 +290,18 @@ metric_value operator/(const metric_value& x, const metric_value& y) noexcept;
 ///\code x % y \endcode
 monsoon_intf_export_
 metric_value operator%(const metric_value& x, const metric_value& y) noexcept;
+///\brief Shift operation.
+///\ingroup intf
+///\relates metric_value
+///\code x << y \endcode
+monsoon_intf_export_
+metric_value operator<<(const metric_value& x, const metric_value& y) noexcept;
+///\brief Shift operation.
+///\ingroup intf
+///\relates metric_value
+///\code x >> y \endcode
+monsoon_intf_export_
+metric_value operator>>(const metric_value& x, const metric_value& y) noexcept;
 
 /**
  * \brief Emit metric value to output stream.

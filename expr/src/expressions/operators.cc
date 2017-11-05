@@ -354,5 +354,23 @@ expression_ptr numeric_modulo(expression_ptr x, expression_ptr y) {
       expression::precedence_multiply_divide);
 }
 
+expression_ptr numeric_shift_left(expression_ptr x, expression_ptr y) {
+  static constexpr std::string_view sign{" << "};
+  return binop(
+      [](const metric_value& x, const metric_value& y) { return x << y; },
+      sign,
+      std::move(x), std::move(y),
+      expression::precedence_shift);
+}
+
+expression_ptr numeric_shift_right(expression_ptr x, expression_ptr y) {
+  static constexpr std::string_view sign{" >> "};
+  return binop(
+      [](const metric_value& x, const metric_value& y) { return x >> y; },
+      sign,
+      std::move(x), std::move(y),
+      expression::precedence_shift);
+}
+
 
 }} /* namespace monsoon::expressions */

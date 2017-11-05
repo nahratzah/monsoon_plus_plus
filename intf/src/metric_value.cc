@@ -360,6 +360,144 @@ struct modulo { // Worst idea ever to create this...
   }
 };
 
+struct shift_left {
+  monsoon_intf_local_
+  metric_value operator()(unsigned_type x, unsigned_type y) const {
+    if (y >= std::numeric_limits<unsigned_type>::digits
+        || std::numeric_limits<unsigned_type>::max() >> y < x)
+      return (*this)(static_cast<fp_type>(x), y);
+    return metric_value(x << y);
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(signed_type x, unsigned_type y) const {
+    assert(x < 0); // Enforced by metric_value constructor.
+
+    if (y >= std::numeric_limits<signed_type>::digits - 1u
+        || std::numeric_limits<signed_type>::min() >> y > x)
+      return (*this)(static_cast<fp_type>(x), y);
+    return metric_value(x << y);
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(signed_type x, signed_type y) const {
+    assert(x < 0); // Enforced by metric_value constructor.
+    assert(y < 0); // Enforced by metric_value constructor.
+
+    if (y <= -std::numeric_limits<signed_type>::digits - 1u)
+      return metric_value(0);
+    return metric_value(x >> -y);
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(unsigned_type x, signed_type y) const {
+    assert(y < 0); // Enforced by metric_value constructor.
+
+    if (y <= -std::numeric_limits<unsigned_type>::digits)
+      return metric_value(0);
+    return metric_value(x >> -y);
+  }
+
+  template<typename X>
+  monsoon_intf_local_
+  metric_value operator()(X x, fp_type y) const {
+    return metric_value(static_cast<fp_type>(x * std::pow(2.0l, y)));
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(fp_type x, unsigned_type y) const {
+    long double tmp = x;
+    while (y > std::numeric_limits<long>::max()) {
+      tmp = scalblnl(tmp, std::numeric_limits<long>::max());
+      y -= std::numeric_limits<long>::max();
+    }
+    return metric_value(
+        static_cast<fp_type>(scalblnl(tmp, static_cast<long>(y))));
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(fp_type x, signed_type y) const {
+    assert(y < 0); // Enforced by metric_value constructor.
+
+    long double tmp = x;
+    while (y < std::numeric_limits<long>::min()) {
+      tmp = scalblnl(tmp, std::numeric_limits<long>::min());
+      y -= std::numeric_limits<long>::min();
+    }
+    return metric_value(
+        static_cast<fp_type>(scalblnl(tmp, static_cast<long>(y))));
+  }
+};
+
+struct shift_right {
+  monsoon_intf_local_
+  metric_value operator()(unsigned_type x, unsigned_type y) const {
+    if (y >= std::numeric_limits<unsigned_type>::digits)
+      return metric_value(0);
+    return metric_value(x >> y);
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(signed_type x, unsigned_type y) const {
+    assert(x < 0); // Enforced by metric_value constructor.
+
+    if (y >= std::numeric_limits<signed_type>::digits - 1u)
+      return metric_value(0);
+    return metric_value(x >> y);
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(signed_type x, signed_type y) const {
+    assert(x < 0); // Enforced by metric_value constructor.
+    assert(y < 0); // Enforced by metric_value constructor.
+
+    if (y <= -std::numeric_limits<signed_type>::digits - 1u
+        || std::numeric_limits<signed_type>::min() >> y > x)
+      return (*this)(static_cast<fp_type>(x), y);
+    return metric_value(x << -y);
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(unsigned_type x, signed_type y) const {
+    assert(y < 0); // Enforced by metric_value constructor.
+
+    if (y <= -std::numeric_limits<unsigned_type>::digits
+        || std::numeric_limits<unsigned_type>::max() >> y < x)
+      return (*this)(static_cast<fp_type>(x), y);
+    return metric_value(x << -y);
+  }
+
+  template<typename X>
+  monsoon_intf_local_
+  metric_value operator()(X x, fp_type y) const {
+    return metric_value(static_cast<fp_type>(x / std::pow(2.0l, y)));
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(fp_type x, unsigned_type y) const {
+    long double tmp = x;
+    while (y > std::numeric_limits<long>::max()) {
+      tmp = scalblnl(tmp, -std::numeric_limits<long>::max());
+      y -= std::numeric_limits<long>::max();
+    }
+    return metric_value(
+        static_cast<fp_type>(scalblnl(tmp, static_cast<long>(y))));
+  }
+
+  monsoon_intf_local_
+  metric_value operator()(fp_type x, signed_type y) const {
+    assert(y < 0); // Enforced by metric_value constructor.
+
+    long double tmp = x;
+    while (y < -std::numeric_limits<long>::max()) {
+      tmp = scalblnl(tmp, -std::numeric_limits<long>::max());
+      y += std::numeric_limits<long>::max();
+    }
+    return metric_value(
+        static_cast<fp_type>(scalblnl(tmp, static_cast<long>(y))));
+  }
+};
+
 
 } /* namespace monsoon::metric_value_ops */
 
@@ -680,6 +818,30 @@ auto operator%(const metric_value& x, const metric_value& y) noexcept
 
   return visit(
       metric_value_ops::modulo(), // Signed, unsigned types
+      std::move(x_num).value(), std::move(y_num).value());
+}
+
+auto operator<<(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  auto x_num = x.as_number();
+  if (!x_num.has_value()) return {};
+  auto y_num = y.as_number();
+  if (!y_num.has_value()) return {};
+
+  return visit(
+      metric_value_ops::shift_left(), // Signed, unsigned types
+      std::move(x_num).value(), std::move(y_num).value());
+}
+
+auto operator>>(const metric_value& x, const metric_value& y) noexcept
+->  metric_value {
+  auto x_num = x.as_number();
+  if (!x_num.has_value()) return {};
+  auto y_num = y.as_number();
+  if (!y_num.has_value()) return {};
+
+  return visit(
+      metric_value_ops::shift_right(), // Signed, unsigned types
       std::move(x_num).value(), std::move(y_num).value());
 }
 
