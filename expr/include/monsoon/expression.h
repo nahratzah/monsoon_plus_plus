@@ -170,7 +170,15 @@ class monsoon_expr_export_ expression {
    *   that was constructed using the argument list.
    */
   template<typename Expr, typename... Args>
-      static expression_ptr make_ptr(Args&&... args);
+  static expression_ptr make_ptr(Args&&... args);
+
+  /**
+   * \brief Parse expression.
+   * \param s A string representation of an expression.
+   * \return A pointer containing the parse expression type.
+   * \throw std::invalid_argument indicating \p s does not hold a valid expression.
+   */
+  static expression_ptr parse(std::string_view s);
 
   expression(precedence level) noexcept;
 

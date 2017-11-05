@@ -1,10 +1,26 @@
 #include <monsoon/expression.h>
+#include <monsoon/grammar/expression.h>
 #include <monsoon/overload.h>
 #include <sstream>
 #include <ostream>
 
 namespace monsoon {
 
+
+expression_ptr expression::parse(std::string_view s) {
+  std::string_view::iterator parse_end = s.begin();
+
+  expression_ptr result;
+  bool r = grammar::qi::phrase_parse(
+      parse_end, s.end(),
+      grammar::expression<std::string_view::iterator, grammar::qi::space_type>(),
+      grammar::qi::space,
+      grammar::qi::skip_flag::postskip,
+      result);
+  if (r && parse_end == s.end())
+    return result;
+  throw std::invalid_argument("invalid expression");
+}
 
 expression::~expression() noexcept {}
 
