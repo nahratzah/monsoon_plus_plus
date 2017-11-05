@@ -135,9 +135,6 @@ class monsoon_expr_export_ vector_accumulator {
 };
 
 
-namespace {
-
-
 /**
  * \brief Managed accumulator with associated input objpipe.
  *
@@ -217,17 +214,22 @@ class merger_managed {
   ObjPipe input_;
 };
 
+extern template class monsoon_expr_export_ merger_managed<expression::scalar_objpipe>;
+extern template class monsoon_expr_export_ merger_managed<expression::vector_objpipe>;
+
 
 /**
  * \brief Unpack operation.
  */
-struct unpack_ {
+struct monsoon_expr_local_ unpack_ {
   using tag_set_t = const tags*;
 
   explicit unpack_(const expression::vector_emit_type& v);
   explicit unpack_(const expression::scalar_emit_type& v);
 
+  monsoon_expr_export_
   auto operator()(const scalar_accumulator& m) -> std::optional<metric_value>;
+  monsoon_expr_export_
   auto operator()(const vector_accumulator& m)
       -> std::optional<std::variant<
           std::tuple<tags, metric_value>,
@@ -238,6 +240,10 @@ struct unpack_ {
   const tag_set_t tag_set = nullptr;
   bool speculative;
 };
+
+
+namespace {
+
 
 struct left_tag_combiner_ {
   auto operator()(const tags& x, const tags&) const noexcept -> const tags&;
@@ -652,6 +658,24 @@ auto make_merger(Fn&& fn, ObjPipe&&... inputs)
     -> objpipe::reader<typename merger<
         std::decay_t<Fn>,
         std::decay_t<ObjPipe>...>::value_type>;
+
+
+extern template class monsoon_expr_export_ merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe,
+    expression::scalar_objpipe>;
+extern template class monsoon_expr_export_ merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::vector_objpipe,
+    expression::scalar_objpipe>;
+extern template class monsoon_expr_export_ merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe,
+    expression::vector_objpipe>;
+extern template class monsoon_expr_export_ merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::vector_objpipe,
+    expression::vector_objpipe>;
 
 
 }} /* namespace monsoon::expressions */

@@ -82,9 +82,6 @@ inline auto vector_accumulator::operator[](time_point tp) const -> tp_proxy {
 }
 
 
-namespace {
-
-
 template<typename ObjPipe>
 merger_managed<ObjPipe>::merger_managed(ObjPipe&& input)
 : input_(std::move(input))
@@ -156,43 +153,8 @@ inline unpack_::unpack_(const expression::scalar_emit_type& v)
   speculative(v.data.index() == 0u)
 {}
 
-inline auto unpack_::operator()(const scalar_accumulator& m)
--> std::optional<metric_value> {
-  std::optional<std::tuple<metric_value, bool>> opt_mv = m[tp];
-  if (!opt_mv.has_value()) return {};
-  speculative |= !std::get<1>(*opt_mv);
-  return std::get<0>(*std::move(opt_mv));
-}
 
-inline auto unpack_::operator()(const vector_accumulator& m)
--> std::optional<std::variant<
-    std::tuple<tags, metric_value>,
-    expression::factual_vector,
-    std::reference_wrapper<const expression::factual_vector>>> {
-  using variant_type = std::variant<
-      std::tuple<tags, metric_value>,
-      expression::factual_vector,
-      std::reference_wrapper<const expression::factual_vector>>;
-
-  const auto proxy = m[tp];
-  speculative |= proxy.is_speculative();
-  if (tag_set != nullptr) {
-    std::optional<std::tuple<metric_value, bool>> opt_mv = proxy[*tag_set];
-    if (!opt_mv) return {};
-    assert(speculative || !std::get<1>(*opt_mv));
-    return std::make_tuple(*tag_set, std::get<0>(*std::move(opt_mv)));
-  } else {
-    return visit(
-        overload(
-            [](expression::factual_vector&& v) -> variant_type {
-              return std::move(v);
-            },
-            [](const expression::factual_vector& v) -> variant_type {
-              return std::cref(v);
-            }),
-        m[tp].value());
-  }
-}
+namespace {
 
 
 inline auto left_tag_combiner_::operator()(const tags& x, const tags&)

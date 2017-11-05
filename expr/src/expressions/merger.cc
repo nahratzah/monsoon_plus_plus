@@ -294,4 +294,64 @@ auto vector_accumulator::interpolate_(time_point tp) const
 }
 
 
+auto unpack_::operator()(const scalar_accumulator& m)
+-> std::optional<metric_value> {
+  std::optional<std::tuple<metric_value, bool>> opt_mv = m[tp];
+  if (!opt_mv.has_value()) return {};
+  speculative |= !std::get<1>(*opt_mv);
+  return std::get<0>(*std::move(opt_mv));
+}
+
+auto unpack_::operator()(const vector_accumulator& m)
+-> std::optional<std::variant<
+    std::tuple<tags, metric_value>,
+    expression::factual_vector,
+    std::reference_wrapper<const expression::factual_vector>>> {
+  using variant_type = std::variant<
+      std::tuple<tags, metric_value>,
+      expression::factual_vector,
+      std::reference_wrapper<const expression::factual_vector>>;
+
+  const auto proxy = m[tp];
+  speculative |= proxy.is_speculative();
+  if (tag_set != nullptr) {
+    std::optional<std::tuple<metric_value, bool>> opt_mv = proxy[*tag_set];
+    if (!opt_mv) return {};
+    assert(speculative || !std::get<1>(*opt_mv));
+    return std::make_tuple(*tag_set, std::get<0>(*std::move(opt_mv)));
+  } else {
+    return visit(
+        overload(
+            [](expression::factual_vector&& v) -> variant_type {
+              return std::move(v);
+            },
+            [](const expression::factual_vector& v) -> variant_type {
+              return std::cref(v);
+            }),
+        m[tp].value());
+  }
+}
+
+
+template class merger_managed<expression::scalar_objpipe>;
+template class merger_managed<expression::vector_objpipe>;
+
+template class merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe,
+    expression::scalar_objpipe>;
+template class merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::vector_objpipe,
+    expression::scalar_objpipe>;
+template class merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::scalar_objpipe,
+    expression::vector_objpipe>;
+template class merger<
+    metric_value(*)(const metric_value&, const metric_value&),
+    expression::vector_objpipe,
+    expression::vector_objpipe>;
+
+
 }} /* namespace monsoon::expressions */
