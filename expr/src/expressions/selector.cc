@@ -196,7 +196,8 @@ class monsoon_expr_local_ selector_with_tags
 {
  public:
   selector_with_tags(path_matcher&& g, tag_matcher&& t, path_matcher&& m)
-  : group_(std::move(g)),
+  : expression(precedence_value),
+    group_(std::move(g)),
     tags_(std::move(t)),
     metric_(std::move(m))
   {}
@@ -223,7 +224,8 @@ class monsoon_expr_local_ selector_without_tags
 {
  public:
   selector_without_tags(path_matcher&& g, path_matcher&& m)
-  : group_(std::move(g)),
+  : expression(precedence_value),
+    group_(std::move(g)),
     metric_(std::move(m))
   {}
 

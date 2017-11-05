@@ -25,7 +25,7 @@ class monsoon_expr_local_ unop_t final
  public:
   using functor = metric_value (*)(const metric_value&);
 
-  unop_t(functor, std::string_view, expression_ptr&&);
+  unop_t(functor, std::string_view, expression_ptr&&, precedence);
   ~unop_t() noexcept override;
 
   auto operator()(const metric_source&,
@@ -56,7 +56,8 @@ class monsoon_expr_local_ binop_t final
  public:
   using functor = metric_value(*)(const metric_value&, const metric_value&);
 
-  binop_t(functor, std::string_view, expression_ptr&&, expression_ptr&&);
+  binop_t(functor, std::string_view, expression_ptr&&, expression_ptr&&,
+      precedence);
   ~binop_t() noexcept override;
 
   auto operator()(const metric_source&,
@@ -75,8 +76,10 @@ class monsoon_expr_local_ binop_t final
 };
 
 
-unop_t::unop_t(functor fn, std::string_view sign, expression_ptr&& nested)
-: fn_(std::move(fn)),
+unop_t::unop_t(functor fn, std::string_view sign, expression_ptr&& nested,
+    precedence level)
+: expression(level),
+  fn_(std::move(fn)),
   nested_(std::move(nested)),
   sign_(std::move(sign))
 {
@@ -145,8 +148,10 @@ auto unop_t::apply_vector_(vector_emit_type& emt, functor fn)
 
 
 binop_t::binop_t(functor fn, std::string_view sign,
-    expression_ptr&& x, expression_ptr&& y)
-: fn_(std::move(fn)),
+    expression_ptr&& x, expression_ptr&& y,
+    precedence level)
+: expression(level),
+  fn_(std::move(fn)),
   x_(std::move(x)),
   y_(std::move(y)),
   sign_(std::move(sign))
@@ -185,18 +190,20 @@ void binop_t::do_ostream(std::ostream& out) const {
 
 inline auto unop(unop_t::functor fn,
     const std::string_view& sign,
-    expression_ptr&& nested)
+    expression_ptr&& nested,
+    expression::precedence level)
 -> expression_ptr {
   return expression::make_ptr<unop_t>(
-      fn, sign, std::move(nested));
+      fn, sign, std::move(nested), level);
 }
 
 inline auto binop(binop_t::functor fn,
     const std::string_view& sign,
-    expression_ptr&& x, expression_ptr&& y)
+    expression_ptr&& x, expression_ptr&& y,
+    expression::precedence level)
 -> expression_ptr {
   return expression::make_ptr<binop_t>(
-      fn, sign, std::move(x), std::move(y));
+      fn, sign, std::move(x), std::move(y), level);
 }
 
 
@@ -205,7 +212,8 @@ expression_ptr logical_not(expression_ptr ptr) {
   return unop(
       [](const metric_value& x) { return !x; },
       sign,
-      std::move(ptr));
+      std::move(ptr),
+      expression::precedence_negate);
 }
 
 expression_ptr logical_and(expression_ptr x, expression_ptr y) {
@@ -213,7 +221,8 @@ expression_ptr logical_and(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x && y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_logical_and);
 }
 
 expression_ptr logical_or(expression_ptr x, expression_ptr y) {
@@ -221,7 +230,8 @@ expression_ptr logical_or(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x || y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_logical_or);
 }
 
 expression_ptr cmp_eq(expression_ptr x, expression_ptr y) {
@@ -231,7 +241,8 @@ expression_ptr cmp_eq(expression_ptr x, expression_ptr y) {
         return equal(x, y);
       },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_equality);
 }
 
 expression_ptr cmp_ne(expression_ptr x, expression_ptr y) {
@@ -241,7 +252,8 @@ expression_ptr cmp_ne(expression_ptr x, expression_ptr y) {
         return unequal(x, y);
       },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_equality);
 }
 
 expression_ptr cmp_lt(expression_ptr x, expression_ptr y) {
@@ -251,7 +263,8 @@ expression_ptr cmp_lt(expression_ptr x, expression_ptr y) {
         return less(x, y);
       },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_compare);
 }
 
 expression_ptr cmp_gt(expression_ptr x, expression_ptr y) {
@@ -261,7 +274,8 @@ expression_ptr cmp_gt(expression_ptr x, expression_ptr y) {
         return greater(x, y);
       },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_compare);
 }
 
 expression_ptr cmp_le(expression_ptr x, expression_ptr y) {
@@ -271,7 +285,8 @@ expression_ptr cmp_le(expression_ptr x, expression_ptr y) {
         return less_equal(x, y);
       },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_compare);
 }
 
 expression_ptr cmp_ge(expression_ptr x, expression_ptr y) {
@@ -281,7 +296,8 @@ expression_ptr cmp_ge(expression_ptr x, expression_ptr y) {
         return greater_equal(x, y);
       },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_compare);
 }
 
 expression_ptr numeric_negate(expression_ptr ptr) {
@@ -289,7 +305,8 @@ expression_ptr numeric_negate(expression_ptr ptr) {
   return unop(
       [](const metric_value& x) { return -x; },
       sign,
-      std::move(ptr));
+      std::move(ptr),
+      expression::precedence_negate);
 }
 
 expression_ptr numeric_add(expression_ptr x, expression_ptr y) {
@@ -297,7 +314,8 @@ expression_ptr numeric_add(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x + y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_add_subtract);
 }
 
 expression_ptr numeric_subtract(expression_ptr x, expression_ptr y) {
@@ -305,7 +323,8 @@ expression_ptr numeric_subtract(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x - y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_add_subtract);
 }
 
 expression_ptr numeric_multiply(expression_ptr x, expression_ptr y) {
@@ -313,7 +332,8 @@ expression_ptr numeric_multiply(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x * y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_multiply_divide);
 }
 
 expression_ptr numeric_divide(expression_ptr x, expression_ptr y) {
@@ -321,7 +341,8 @@ expression_ptr numeric_divide(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x / y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_multiply_divide);
 }
 
 expression_ptr numeric_modulo(expression_ptr x, expression_ptr y) {
@@ -329,7 +350,8 @@ expression_ptr numeric_modulo(expression_ptr x, expression_ptr y) {
   return binop(
       [](const metric_value& x, const metric_value& y) { return x % y; },
       sign,
-      std::move(x), std::move(y));
+      std::move(x), std::move(y),
+      expression::precedence_multiply_divide);
 }
 
 

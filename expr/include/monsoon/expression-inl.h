@@ -9,6 +9,10 @@ expression_ptr expression::make_ptr(Args&&... args) {
   return std::make_unique<Expr>(std::forward<Args>(args)...);
 }
 
+inline expression::expression(precedence level) noexcept
+: level(level)
+{}
+
 
 inline bool operator!=(
     const expression::scalar_emit_type& x,

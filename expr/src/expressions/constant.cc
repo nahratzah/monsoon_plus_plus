@@ -10,7 +10,11 @@ class monsoon_expr_local_ constant_expr
 : public expression
 {
  public:
-  constant_expr(metric_value&& v) : v_(std::move(v)) {}
+  constant_expr(metric_value&& v)
+  : expression(precedence_value),
+    v_(std::move(v))
+  {}
+
   ~constant_expr() noexcept override;
 
   auto operator()(const metric_source&,

@@ -53,6 +53,27 @@ class monsoon_expr_export_ expression {
 
  public:
   /**
+   * \brief Operator precedence.
+   *
+   * \details
+   * Precedence levels are implicitly convertible to integers.
+   * A higher value indicates an expression binds more strongly.
+   */
+  enum precedence {
+    precedence_logical_or, ///< Logical or operator precedence.
+    precedence_logical_and, ///< Logical and operator precedence.
+    precedence_equality, ///< Precedence of == and != operators.
+    precedence_compare, ///< Precedence of <, >, <=, and >= operators.
+    precedence_shift, ///< Precedence of shift operators << and >>.
+    precedence_add_subtract, ///< Precedence of + and - binary operators.
+    precedence_multiply_divide, ///< Precedence of *, /, and % binary operators.
+    precedence_negate, ///< Precedence of ! and - unary operators.
+    precedence_braces, ///< Precedence of braces.
+    precedence_function = precedence_braces, ///< Precedence of function invocations.
+    precedence_value = precedence_braces ///< Precedence of variables and values.
+  };
+
+  /**
    * \brief A speculative scalar.
    *
    * \details
@@ -151,6 +172,8 @@ class monsoon_expr_export_ expression {
   template<typename Expr, typename... Args>
       static expression_ptr make_ptr(Args&&... args);
 
+  expression(precedence level) noexcept;
+
   /**
    * \brief Expressions are destructible.
    */
@@ -178,6 +201,9 @@ class monsoon_expr_export_ expression {
 
  private:
   virtual void do_ostream(std::ostream&) const = 0;
+
+ public:
+  const precedence level;
 };
 
 /**
