@@ -10,7 +10,7 @@
 
 using namespace monsoon;
 
-class mock_metric_source
+class mock_metric_source_for_emit_time
 : public metric_source
 {
  public:
@@ -39,7 +39,7 @@ class mock_metric_source
 };
 
 TEST(constant) {
-  mock_metric_source mms;
+  mock_metric_source_for_emit_time mms;
   mms.result_emit_time.emplace({
       time_point(10000),
       time_point(20000),
