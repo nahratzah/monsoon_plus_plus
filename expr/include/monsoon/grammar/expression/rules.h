@@ -43,6 +43,55 @@ inline const auto logical_or =
     x3::rule<class logical_or, ast::logical_or_expr>("logical or expression");
 
 
+struct muldiv_sym
+: x3::symbols<ast::muldiv_enum>
+{
+  muldiv_sym() {
+    add("*", ast::muldiv_enum::mul);
+    add("/", ast::muldiv_enum::div);
+    add("%", ast::muldiv_enum::mod);
+  }
+};
+
+struct addsub_sym
+: x3::symbols<ast::addsub_enum>
+{
+  addsub_sym() {
+    add("+", ast::addsub_enum::add);
+    add("-", ast::addsub_enum::sub);
+  }
+};
+
+struct shift_sym
+: x3::symbols<ast::shift_enum>
+{
+  shift_sym() {
+    add("<<", ast::shift_enum::left);
+    add(">>", ast::shift_enum::right);
+  }
+};
+
+struct compare_sym
+: x3::symbols<ast::compare_enum>
+{
+  compare_sym() {
+    add("<=", ast::compare_enum::le);
+    add(">=", ast::compare_enum::ge);
+    add("<", ast::compare_enum::lt);
+    add(">", ast::compare_enum::gt);
+  }
+};
+
+struct equality_sym
+: x3::symbols<ast::equality_enum>
+{
+  equality_sym() {
+    add("==", ast::equality_enum::eq);
+    add("!=", ast::equality_enum::ne);
+  }
+};
+
+
 inline const auto constant_def =
       x3::bool_
     | x3::uint_parser<metric_value::unsigned_type>()
@@ -59,34 +108,11 @@ inline const auto unary_def =
     | numeric_negate;
 inline const auto logical_negate_def = x3::lit('!') >> unary;
 inline const auto numeric_negate_def = x3::lit('-') >> unary;
-inline const auto muldiv_def = unary >>
-    *( ( x3::lit('*') >> x3::attr(ast::muldiv_enum::mul) >> unary
-       | x3::lit('/') >> x3::attr(ast::muldiv_enum::div) >> unary
-       | x3::lit('%') >> x3::attr(ast::muldiv_enum::mod) >> unary
-       )
-     );
-inline const auto addsub_def = muldiv >>
-    *( ( x3::lit('+') >> x3::attr(ast::addsub_enum::add) >> muldiv
-       | x3::lit('-') >> x3::attr(ast::addsub_enum::sub) >> muldiv
-       )
-     );
-inline const auto shift_def = addsub >>
-    *( ( x3::lit("<<") >> x3::attr(ast::shift_enum::left) >> addsub
-       | x3::lit(">>") >> x3::attr(ast::shift_enum::right) >> addsub
-       )
-     );
-inline const auto compare_def = shift >>
-    *( ( x3::lit("<=") >> x3::attr(ast::compare_enum::le) >> shift
-       | x3::lit(">=") >> x3::attr(ast::compare_enum::ge) >> shift
-       | x3::lit('<') >> x3::attr(ast::compare_enum::lt) >> shift
-       | x3::lit('>') >> x3::attr(ast::compare_enum::gt) >> shift
-       )
-     );
-inline const auto equality_def = compare >>
-    *( ( x3::lit("==") >> x3::attr(ast::equality_enum::eq) >> compare
-       | x3::lit("!=") >> x3::attr(ast::equality_enum::ne) >> compare
-       )
-     );
+inline const auto muldiv_def = unary >> *(muldiv_sym() >> unary);
+inline const auto addsub_def = muldiv >> *(addsub_sym() >> muldiv);
+inline const auto shift_def = addsub >> *(shift_sym() >> addsub);
+inline const auto compare_def = shift >> *(compare_sym() >> shift);
+inline const auto equality_def = compare >> *(equality_sym() >> compare);
 inline const auto logical_and_def = equality % "&&";
 inline const auto logical_or_def = logical_and % "||";
 BOOST_SPIRIT_DEFINE(
@@ -102,8 +128,7 @@ BOOST_SPIRIT_DEFINE(
     compare,
     equality,
     logical_and,
-    logical_or
-    );
+    logical_or);
 
 
 } /* namespace monsoon::grammar::parser */
