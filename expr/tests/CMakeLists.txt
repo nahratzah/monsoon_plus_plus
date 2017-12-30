@@ -13,4 +13,5 @@ if (UnitTest++_FOUND)
   include_directories(${UTPP_INCLUDE_DIRS})
 
   do_test (expression)
+  do_test (parser)
 endif ()
