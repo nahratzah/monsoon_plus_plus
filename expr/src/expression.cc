@@ -1,8 +1,9 @@
 #include <monsoon/expression.h>
-#include <monsoon/grammar/expression.h>
+#include <monsoon/grammar/expression/rules.h>
 #include <monsoon/overload.h>
 #include <sstream>
 #include <ostream>
+#include <utility>
 
 namespace monsoon {
 
@@ -10,12 +11,11 @@ namespace monsoon {
 expression_ptr expression::parse(std::string_view s) {
   std::string_view::iterator parse_end = s.begin();
 
-  expression_ptr result;
-  bool r = grammar::qi::phrase_parse(
+  grammar::expression_result result;
+  bool r = grammar::x3::phrase_parse(
       parse_end, s.end(),
-      grammar::expression<std::string_view::iterator, grammar::qi::space_type>(),
-      grammar::qi::space,
-      grammar::qi::skip_flag::postskip,
+      grammar::expression,
+      grammar::x3::space_type(),
       result);
   if (r && parse_end == s.end())
     return result;

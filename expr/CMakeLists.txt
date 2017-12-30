@@ -8,6 +8,7 @@ add_library (monsoon_expr
   src/expressions/selector.cc
   src/expressions/constant.cc
   src/expressions/operators.cc
+  src/grammar/expression/ast.cc
 )
 target_link_libraries (monsoon_expr ${extra_libs})
 target_link_libraries (monsoon_expr monsoon_lib)
