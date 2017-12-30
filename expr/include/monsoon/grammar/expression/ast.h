@@ -3,6 +3,7 @@
 
 #include <monsoon/expr_export_.h>
 #include <monsoon/metric_value.h>
+#include <monsoon/histogram.h>
 #include <monsoon/expression.h>
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/ast/variant.hpp>
@@ -33,7 +34,8 @@ struct constant_expr
       metric_value::signed_type,
       metric_value::unsigned_type,
       metric_value::fp_type,
-      std::string
+      std::string,
+      histogram
     >
 {
   using base_type::base_type;
