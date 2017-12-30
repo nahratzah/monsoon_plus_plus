@@ -114,11 +114,12 @@ bool unop_t::is_scalar() const noexcept {
 }
 
 bool unop_t::is_vector() const noexcept {
-  return nested_->is_scalar();
+  return nested_->is_vector();
 }
 
 void unop_t::do_ostream(std::ostream& out) const {
-  out << sign_ << *nested_;
+  bool need_braces = (nested_->level < level);
+  out << sign_ << (need_braces ? "(" : "") << *nested_ << (need_braces ? ")" : "");
 }
 
 auto unop_t::apply_scalar_(scalar_emit_type& emt, functor fn)
@@ -184,7 +185,16 @@ auto binop_t::operator()(const metric_source& src,
 }
 
 void binop_t::do_ostream(std::ostream& out) const {
-  out << *x_ << sign_ << *y_;
+  bool x_need_braces = (x_->level < level);
+  bool y_need_braces = (y_->level <= level);
+  out
+      << (x_need_braces ? "(" : "")
+      << *x_
+      << (x_need_braces ? ")" : "")
+      << sign_
+      << (y_need_braces ? "(" : "")
+      << *y_
+      << (y_need_braces ? ")" : "");
 }
 
 

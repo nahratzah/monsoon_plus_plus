@@ -46,11 +46,11 @@ TEST(constant) {
       time_point(30000)
   });
 
-  auto expr_ptr = expression::parse("(1 << 2) * 10 + 1 * 2");
+  auto expr_ptr = expression::parse("(1 << 2) * 10 + 1 * ----2");
 
   CHECK_EQUAL(true, expr_ptr->is_scalar());
   CHECK_EQUAL(false, expr_ptr->is_vector());
-  CHECK_EQUAL("(1 << 2) + 1 * 2", to_string(*expr_ptr));
+  CHECK_EQUAL("(1 << 2) * 10 + 1 * ----2", to_string(*expr_ptr));
 
   auto reader_variant =
       (*expr_ptr)(mms, time_range(), time_point::duration(10 * 1000));
