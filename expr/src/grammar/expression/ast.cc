@@ -77,7 +77,7 @@ tag_matcher_expr::operator expressions::tag_matcher() const {
                       [&result](
                           std::string_view tagname,
                           const expressions::tag_matcher::comparison& cmp,
-                          const auto& value) {
+                          const value_expr& value) {
                         result.check_comparison(tagname, cmp, value);
                       }),
                   v);
