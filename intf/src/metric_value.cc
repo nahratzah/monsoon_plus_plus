@@ -508,7 +508,6 @@ auto metric_value::operator==(const metric_value& other) const noexcept
   return value_ == other.value_;
 }
 
-
 metric_value metric_value::parse(std::string_view s) {
   std::string_view::iterator parse_end = s.begin();
 

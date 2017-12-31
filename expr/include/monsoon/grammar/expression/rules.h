@@ -121,7 +121,7 @@ inline const auto path_matcher_def =
 inline const auto tag_matcher_def =
     x3::lit('{') >>
     -(( (identifier | quoted_identifier) >> tag_matcher_comparison_sym() >>
-        value
+        tag_value
       | x3::lit('!') >> (identifier | quoted_identifier) >>
         x3::attr(expressions::tag_matcher::absence_match())
       | (identifier | quoted_identifier) >>

@@ -99,8 +99,12 @@ inline const auto histogram =
     x3::rule<class histogram_, ast::histogram_expr>("histogram");
 inline const auto value =
     x3::rule<class value, ast::value_expr>("value");
+inline const auto tag_value =
+    x3::rule<class tag_value, ast::value_expr>("value");
 inline const auto simple_path_lit =
     x3::rule<class simple_path_lit, ast::simple_path_lit_expr>("path");
+inline const auto tags_lit =
+    x3::rule<class tags_lit, ast::tags_lit_expr>("tags");
 
 inline const auto string_escape =
       x3::uint_parser<std::uint8_t, 8, 1, 3>()[append_utf8()]
@@ -143,6 +147,18 @@ inline const auto value_def =
     | x3::real_parser<metric_value::fp_type>()
     | string
     | histogram;
+inline const auto tag_value_def =
+      x3::bool_
+    | x3::uint_parser<metric_value::unsigned_type>() >> &!(x3::lit('.') | x3::lit('e'))
+    | x3::int_parser<metric_value::signed_type>() >> &!(x3::lit('.') | x3::lit('e'))
+    | x3::real_parser<metric_value::fp_type>()
+    | string;
+inline const auto tags_lit_def =
+    x3::lit('{') >>
+    -(( identifier >> x3::lit('=') >> tag_value
+      | quoted_identifier >> x3::lit('=') >> tag_value
+      ) % ',') >>
+    x3::lit('}');
 inline const auto simple_path_lit_def = (identifier | quoted_identifier) % '.';
 
 BOOST_SPIRIT_DEFINE(
@@ -152,7 +168,9 @@ BOOST_SPIRIT_DEFINE(
     histogram_range,
     histogram,
     value,
-    simple_path_lit);
+    simple_path_lit,
+    tag_value,
+    tags_lit);
 
 
 }}} /* namespace monsoon::grammar::parser */

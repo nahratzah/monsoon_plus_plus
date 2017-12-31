@@ -6,6 +6,7 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/metric_name.h>
+#include <monsoon/tags.h>
 #include <monsoon/histogram.h>
 #include <boost/spirit/home/x3.hpp>
 #include <string>
@@ -57,6 +58,12 @@ struct value_expr
   using base_type::operator=;
 
   monsoon_intf_export_ operator metric_value() const;
+};
+
+struct tags_lit_expr
+: std::vector<std::tuple<std::string, value_expr>>
+{
+  operator tags() const { return tags(begin(), end()); }
 };
 
 struct simple_path_lit_expr
