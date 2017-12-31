@@ -78,7 +78,7 @@ struct numeric_negate_expr {
 template<typename NestedExpr, typename Enum>
 struct binop_expr {
   NestedExpr head;
-  std::vector<std::pair<Enum, NestedExpr>> tail;
+  std::vector<std::tuple<Enum, NestedExpr>> tail;
 
   operator expression_ptr() const;
 };
