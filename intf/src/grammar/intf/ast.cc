@@ -15,5 +15,13 @@ value_expr::operator metric_value() const {
           _1));
 }
 
+histogram_range_expr::operator std::pair<histogram::range, std::double_t>() const {
+  return std::make_pair(histogram::range(lo, hi), count);
+}
+
+histogram_expr::operator histogram() const {
+  return histogram(begin(), end());
+}
+
 
 }}} /* namespace monsoon::grammar::ast */

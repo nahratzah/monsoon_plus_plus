@@ -8,6 +8,7 @@
 #include <iosfwd>
 #include <map>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -106,6 +107,8 @@ class monsoon_intf_export_ histogram {
   bool operator==(const histogram&) const noexcept;
   bool operator!=(const histogram&) const noexcept;
   static bool before(const histogram&, const histogram&) noexcept;
+
+  static histogram parse(std::string_view s);
 
  private:
   void add_immed_(range, std::double_t);
