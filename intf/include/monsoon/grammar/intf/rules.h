@@ -5,6 +5,7 @@
 #include <monsoon/grammar/intf/ast.h>
 #include <monsoon/grammar/intf/ast_adapted.h>
 #include <boost/spirit/home/x3.hpp>
+#include <boost/regex/pending/unicode_iterator.hpp>
 
 namespace monsoon {
 namespace grammar {
