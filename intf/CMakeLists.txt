@@ -65,5 +65,10 @@ install (FILES
   include/monsoon/time_series_value-inl.h
   include/monsoon/time_series_value.h
   DESTINATION include/monsoon)
+install (FILES
+  include/monsoon/grammar/intf/ast.h
+  include/monsoon/grammar/intf/ast_adapted.h
+  include/monsoon/grammar/intf/rules.h
+  DESTINATION include/monsoon/grammar/intf)
 
 add_subdirectory(tests)
