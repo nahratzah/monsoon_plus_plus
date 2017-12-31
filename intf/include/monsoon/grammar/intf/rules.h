@@ -11,22 +11,33 @@ namespace grammar {
 namespace parser {
 
 
+constexpr unsigned int MAX_UNICODE_CODEPOINT = 0x10ffff;
+
 namespace x3 = boost::spirit::x3;
 
 struct append_utf8 {
   template<typename Ctx>
-  void operator()(Ctx& ctx) {
+  void operator()(Ctx& ctx) const {
+    const auto& attr = x3::_attr(ctx);
+    if (attr > MAX_UNICODE_CODEPOINT) {
+      x3::_pass(ctx) = false;
+      return;
+    }
+
     using str_iter = std::back_insert_iterator<std::string>;
     auto iter = boost::utf8_output_iterator<str_iter>(str_iter(x3::_val(ctx)));
-    *iter++ = x3::_attr(ctx);
+    *iter++ = attr;
   }
 };
 
 struct append_esc {
   template<typename Ctx>
-  void operator()(Ctx& ctx) {
+  void operator()(Ctx& ctx) const {
     auto& s = x3::_val(ctx);
     switch (x3::_attr(ctx)) {
+      default:
+        x3::_pass(ctx) = false;
+        break;
       case 'a':
         s += '\a';
         break;
@@ -61,6 +72,19 @@ struct append_esc {
   }
 };
 
+struct append_char {
+  template<typename Ctx>
+  void operator()(Ctx& ctx) const {
+    const auto& attr = x3::_attr(ctx);
+    if (attr < 0x20 || attr > 0x7f) {
+      x3::_pass(ctx) = false;
+      return;
+    }
+
+    x3::_val(ctx) += attr;
+  }
+};
+
 inline const auto string =
     x3::rule<class string_, std::string>("string");
 inline const auto identifier =
@@ -74,12 +98,6 @@ inline const auto histogram =
 inline const auto value =
     x3::rule<class value, ast::value_expr>("value");
 
-inline const auto reject_chars_ =
-      x3::char_('\0') // Separate, since \0 is a string termination char.
-    | x3::char_(    "\x01\x02\x03\x04\x05\x06\x07"
-                "\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f"
-                "\x10\x11\x12\x13\x14\x15\x16\x17"
-                "\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f");
 inline const auto string_escape =
       x3::uint_parser<std::uint8_t, 8, 1, 3>()[append_utf8()]
     | 'x' >> x3::uint_parser<std::uint8_t, 16, 2, 2>()[append_utf8()]
@@ -89,14 +107,14 @@ inline const auto string_escape =
 inline const auto string_def = x3::lexeme[
     '"' >>
         *( '\\' >> string_escape
-         | (~x3::char_(R"(\")") - reject_chars_)[([](auto& ctx){ x3::_val(ctx) += x3::_attr(ctx); })]
+         | (~x3::char_(R"(\")"))[append_char()]
          ) >>
     '"'
     ];
 inline const auto quoted_identifier_def = x3::lexeme[
     '\'' >>
         *( '\\' >> string_escape
-         | (~x3::char_(R"(\')") - reject_chars_)[([](auto& ctx){ x3::_val(ctx) += x3::_attr(ctx); })]
+         | (~x3::char_(R"(\')"))[append_char()]
          ) >>
     '\''
     ];
