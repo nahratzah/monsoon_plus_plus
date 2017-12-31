@@ -143,11 +143,7 @@ inline const auto histogram_range_def =
 inline const auto histogram_def =
     x3::lit('[') >> -(histogram_range % ',') >> x3::lit(']');
 inline const auto value_def =
-      x3::bool_
-    | x3::uint_parser<metric_value::unsigned_type>() >> &!(x3::lit('.') | x3::lit('e'))
-    | x3::int_parser<metric_value::signed_type>() >> &!(x3::lit('.') | x3::lit('e'))
-    | x3::real_parser<metric_value::fp_type>()
-    | string
+      tag_value
     | histogram;
 inline const auto tag_value_def =
       x3::bool_
