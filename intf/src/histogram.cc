@@ -38,7 +38,7 @@ histogram histogram::parse(std::string_view s) {
   grammar::ast::histogram_expr result;
   bool r = grammar::x3::phrase_parse(
       parse_end, s.end(),
-      grammar::parser::histogram_txt,
+      grammar::parser::histogram,
       grammar::x3::space,
       result);
   if (r && parse_end == s.end())
