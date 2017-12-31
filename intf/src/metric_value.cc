@@ -1,5 +1,6 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/config_support.h>
+#include <monsoon/grammar/intf/rules.h>
 #include <cmath>
 #include <ostream>
 #include <cassert>
@@ -505,6 +506,20 @@ struct shift_right {
 auto metric_value::operator==(const metric_value& other) const noexcept
 ->  bool {
   return value_ == other.value_;
+}
+
+
+metric_value metric_value::parse(std::string_view s) {
+  std::string_view::iterator parse_end = s.begin();
+
+  grammar::ast::value_expr result;
+  bool r = grammar::x3::parse(
+      parse_end, s.end(),
+      grammar::parser::value,
+      result);
+  if (r && parse_end == s.end())
+    return result;
+  throw std::invalid_argument("invalid expression");
 }
 
 auto metric_value::as_bool() const noexcept -> std::optional<bool> {

@@ -4,6 +4,8 @@
 #include <monsoon/grammar/expression/ast.h>
 #include <boost/fusion/adapted.hpp>
 
+BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::constant_expr,
+    v);
 BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::logical_negate_expr,
     v);
 BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::numeric_negate_expr,

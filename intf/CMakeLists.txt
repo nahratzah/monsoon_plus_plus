@@ -22,6 +22,7 @@ add_library (monsoon_intf
   src/interpolate.cc
   src/histogram.cc
   src/config_support.cc
+  src/grammar/intf/ast.cc
 )
 target_link_libraries (monsoon_intf ${extra_libs})
 target_link_libraries (monsoon_intf monsoon_lib)

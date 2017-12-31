@@ -5,6 +5,7 @@
 #include <monsoon/grammar/expression/ast.h>
 #include <monsoon/grammar/expression/ast_adapted.h>
 #include <boost/spirit/home/x3.hpp>
+#include <monsoon/grammar/intf/rules.h>
 #include <type_traits>
 
 namespace monsoon {
@@ -13,7 +14,6 @@ namespace parser {
 
 
 namespace x3 = boost::spirit::x3;
-namespace ascii = x3::ascii;
 
 inline const auto constant =
     x3::rule<class constant, ast::constant_expr>("constant");
@@ -92,11 +92,7 @@ struct equality_sym
 };
 
 
-inline const auto constant_def =
-      x3::bool_
-    | x3::uint_parser<metric_value::unsigned_type>()
-    | x3::int_parser<metric_value::signed_type>()
-    | x3::double_;
+inline const auto constant_def = value;
 inline const auto braces_def =
     x3::lit('(') >> logical_or >> x3::lit(')');
 inline const auto primary_def =

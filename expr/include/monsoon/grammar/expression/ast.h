@@ -5,6 +5,7 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/histogram.h>
 #include <monsoon/expression.h>
+#include <monsoon/grammar/intf/ast.h>
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/ast/variant.hpp>
 #include <string>
@@ -16,7 +17,6 @@ namespace grammar {
 
 
 namespace x3 = boost::spirit::x3;
-namespace ascii = x3::ascii;
 
 
 namespace ast {
@@ -28,20 +28,10 @@ struct unary_expr;
 struct logical_or_expr;
 
 
-struct constant_expr
-: x3::variant<
-      bool,
-      metric_value::signed_type,
-      metric_value::unsigned_type,
-      metric_value::fp_type,
-      std::string,
-      histogram
-    >
-{
-  using base_type::base_type;
-  using base_type::operator=;
-
+struct constant_expr {
   monsoon_expr_export_ operator expression_ptr() const;
+
+  value_expr v;
 };
 
 struct primary_expr

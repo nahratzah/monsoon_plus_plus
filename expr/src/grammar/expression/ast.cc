@@ -29,13 +29,7 @@ struct resolve_expr {
 
 
 constant_expr::operator expression_ptr() const {
-  using std::bind;
-  using namespace std::placeholders;
-
-  return expressions::constant(this->apply_visitor(
-          bind<metric_value>(
-              [](const auto& v) { return metric_value(v); },
-              _1)));
+  return expressions::constant(v);
 }
 
 primary_expr::operator expression_ptr() const {
