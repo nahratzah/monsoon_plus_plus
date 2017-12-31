@@ -65,3 +65,5 @@ install (FILES
   include/monsoon/time_series_value-inl.h
   include/monsoon/time_series_value.h
   DESTINATION include/monsoon)
+
+add_subdirectory(tests)
