@@ -115,7 +115,7 @@ template<typename NestedExpr, typename Enum>
 binop_expr<NestedExpr, Enum>::operator expression_ptr() const {
   expression_ptr result = head;
   for (const auto& i : tail)
-    result = apply(i.first, std::move(result), i.second);
+    result = apply(std::get<0>(i), std::move(result), std::get<1>(i));
   return result;
 }
 
