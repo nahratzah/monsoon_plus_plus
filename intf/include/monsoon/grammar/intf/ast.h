@@ -6,6 +6,7 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/metric_name.h>
+#include <monsoon/group_name.h>
 #include <monsoon/tags.h>
 #include <monsoon/histogram.h>
 #include <boost/spirit/home/x3.hpp>
@@ -71,6 +72,13 @@ struct simple_path_lit_expr
 {
   monsoon_intf_export_ operator metric_name() const;
   monsoon_intf_export_ operator simple_group() const;
+};
+
+struct group_name_lit_expr {
+  simple_path_lit_expr path;
+  tags_lit_expr tags;
+
+  operator group_name() const { return group_name(path, tags); }
 };
 
 

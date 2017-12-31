@@ -105,6 +105,8 @@ inline const auto simple_path_lit =
     x3::rule<class simple_path_lit, ast::simple_path_lit_expr>("path");
 inline const auto tags_lit =
     x3::rule<class tags_lit, ast::tags_lit_expr>("tags");
+inline const auto group_name_lit =
+    x3::rule<class group_name_lit, ast::group_name_lit_expr>("group");
 
 inline const auto string_escape =
       x3::uint_parser<std::uint8_t, 8, 1, 3>()[append_utf8()]
@@ -160,6 +162,7 @@ inline const auto tags_lit_def =
       ) % ',') >>
     x3::lit('}');
 inline const auto simple_path_lit_def = (identifier | quoted_identifier) % '.';
+inline const auto group_name_lit_def = simple_path_lit >> -tags_lit;
 
 BOOST_SPIRIT_DEFINE(
     string,
@@ -170,7 +173,8 @@ BOOST_SPIRIT_DEFINE(
     value,
     simple_path_lit,
     tag_value,
-    tags_lit);
+    tags_lit,
+    group_name_lit);
 
 
 }}} /* namespace monsoon::grammar::parser */
