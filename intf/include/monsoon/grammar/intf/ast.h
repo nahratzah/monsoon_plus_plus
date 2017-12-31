@@ -8,9 +8,9 @@
 #include <monsoon/metric_name.h>
 #include <monsoon/histogram.h>
 #include <boost/spirit/home/x3.hpp>
-#include <boost/spirit/home/x3/support/ast/variant.hpp>
 #include <string>
 #include <vector>
+#include <variant>
 
 namespace monsoon {
 namespace grammar {
@@ -35,7 +35,7 @@ struct histogram_expr
 };
 
 struct value_expr
-: x3::variant<
+: std::variant<
       bool,
       metric_value::signed_type,
       metric_value::unsigned_type,
@@ -44,6 +44,15 @@ struct value_expr
       histogram_expr
     >
 {
+  using base_type = std::variant<
+      bool,
+      metric_value::signed_type,
+      metric_value::unsigned_type,
+      metric_value::fp_type,
+      std::string,
+      histogram_expr
+    >;
+
   using base_type::base_type;
   using base_type::operator=;
 

@@ -6,13 +6,9 @@ namespace ast {
 
 
 value_expr::operator metric_value() const {
-  using std::bind;
-  using namespace std::placeholders;
-
-  return this->apply_visitor(
-      bind<metric_value>(
-          [](const auto& v) { return metric_value(v); },
-          _1));
+  return std::visit(
+      [](const auto& v) { return metric_value(v); },
+      *this);
 }
 
 histogram_range_expr::operator std::pair<histogram::range, std::double_t>() const {
