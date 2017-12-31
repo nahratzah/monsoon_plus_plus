@@ -99,6 +99,8 @@ inline const auto histogram =
     x3::rule<class histogram_, ast::histogram_expr>("histogram");
 inline const auto value =
     x3::rule<class value, ast::value_expr>("value");
+inline const auto simple_path_lit =
+    x3::rule<class simple_path_lit, ast::simple_path_lit_expr>("path");
 
 inline const auto string_escape =
       x3::uint_parser<std::uint8_t, 8, 1, 3>()[append_utf8()]
@@ -141,6 +143,7 @@ inline const auto value_def =
     | x3::real_parser<metric_value::fp_type>()
     | string
     | histogram;
+inline const auto simple_path_lit_def = (identifier | quoted_identifier) % '.';
 
 BOOST_SPIRIT_DEFINE(
     string,
@@ -148,7 +151,8 @@ BOOST_SPIRIT_DEFINE(
     quoted_identifier,
     histogram_range,
     histogram,
-    value);
+    value,
+    simple_path_lit);
 
 
 }}} /* namespace monsoon::grammar::parser */

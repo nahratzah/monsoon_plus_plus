@@ -92,6 +92,14 @@ class monsoon_intf_export_ simple_group {
    */
   std::string config_string() const;
 
+  /**
+   * \brief Parse simple group expression.
+   * \param s A string representation of a simple group path.
+   * \return A simple group, as represented by the expression.
+   * \throw std::invalid_argument indicating \p s does not hold a valid expression.
+   */
+  static simple_group parse(std::string_view s);
+
  private:
   path_type path_;
 };

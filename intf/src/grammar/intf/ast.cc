@@ -23,5 +23,13 @@ histogram_expr::operator histogram() const {
   return histogram(begin(), end());
 }
 
+simple_path_lit_expr::operator metric_name() const {
+  return metric_name(begin(), end());
+}
+
+simple_path_lit_expr::operator simple_group() const {
+  return simple_group(begin(), end());
+}
+
 
 }}} /* namespace monsoon::grammar::ast */
