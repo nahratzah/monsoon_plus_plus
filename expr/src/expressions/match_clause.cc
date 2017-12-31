@@ -79,7 +79,7 @@ void by_match_clause::fixup_() noexcept {
 
 without_match_clause::~without_match_clause() noexcept {}
 
-bool without_match_clause::pass(const tags& x) const noexcept {
+bool without_match_clause::pass(const tags&) const noexcept {
   return true;
 }
 
@@ -130,6 +130,23 @@ tags without_match_clause::reduce(const tags& x, const tags& y) const {
         return tag_names_.count(std::get<0>(kv)) == 0;
       });
   return tags(std::move(result));
+}
+
+
+default_match_clause::~default_match_clause() noexcept {}
+
+bool default_match_clause::pass(const tags&) const noexcept {
+  return true;
+}
+
+bool default_match_clause::less_cmp(const tags& x, const tags& y)
+    const noexcept {
+  return x < y;
+}
+
+tags default_match_clause::reduce(const tags& x, const tags& y) const {
+  assert(x == y);
+  return x;
 }
 
 

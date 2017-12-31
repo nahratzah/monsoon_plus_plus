@@ -114,6 +114,20 @@ class monsoon_expr_export_ without_match_clause
   std::unordered_set<std::string> tag_names_;
 };
 
+class default_match_clause
+: public match_clause
+{
+ public:
+  ~default_match_clause() noexcept override;
+
+  ///\copydoc match_clause::pass(const tags&);
+  bool pass(const tags& x) const noexcept override;
+  ///\copydoc match_clause::less_cmp(const tags&, const tags&);
+  bool less_cmp(const tags& x, const tags& y) const noexcept override;
+  ///\copydoc match_clause::reduce(const tags&, const tags&);
+  tags reduce(const tags& x, const tags& y) const override;
+};
+
 
 }} /* namespace monsoon::expressions */
 
