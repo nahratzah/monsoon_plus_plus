@@ -1,4 +1,6 @@
 #include <monsoon/metric_value.h>
+#include <monsoon/metric_name.h>
+#include <monsoon/simple_group.h>
 #include <monsoon/histogram.h>
 #include <string_view>
 #include <utility>
@@ -8,7 +10,7 @@
 using namespace monsoon;
 using namespace std::string_view_literals;
 
-TEST(parse) {
+TEST(metric_value) {
   CHECK_EQUAL(metric_value("foobar"), metric_value::parse(R"("foobar")"));
   CHECK_EQUAL(metric_value("foo\nbar"), metric_value::parse(R"("foo\nbar")"));
   CHECK_EQUAL(metric_value("foo\tbar"), metric_value::parse(R"("foo\tbar")"));
@@ -50,6 +52,25 @@ TEST(parse) {
               std::make_tuple(histogram::range(3.0, 4.0), 5.0)
               })),
       metric_value::parse(R"([ 0 .. 1 = 1, 3 .. 4 = 5])"));
+}
+
+TEST(metric_name) {
+  CHECK_EQUAL(metric_name({"foo", "bar"}), metric_name::parse("foo.bar"));
+  CHECK_EQUAL(metric_name({"foo", "bar"}), metric_name::parse("'foo'.bar"));
+  CHECK_EQUAL(metric_name({"foo", "bar"}), metric_name::parse("foo.'bar'"));
+  CHECK_EQUAL(metric_name({"foo.bar"}), metric_name::parse("'foo.bar'"));
+}
+
+TEST(simple_group) {
+  CHECK_EQUAL(simple_group({"foo", "bar"}), simple_group::parse("foo.bar"));
+  CHECK_EQUAL(simple_group({"foo", "bar"}), simple_group::parse("'foo'.bar"));
+  CHECK_EQUAL(simple_group({"foo", "bar"}), simple_group::parse("foo.'bar'"));
+  CHECK_EQUAL(simple_group({"foo.bar"}), simple_group::parse("'foo.bar'"));
+  CHECK_EQUAL(simple_group({"foo\bbar"}), simple_group::parse(R"('foo\bbar')"));
+  CHECK_EQUAL(simple_group({"foo\x22""bar"}), simple_group::parse(R"('foo\x22bar')"));
+  CHECK_EQUAL(simple_group({u8"foo\u1022bar"}), simple_group::parse(R"('foo\u1022bar')"));
+  CHECK_EQUAL(simple_group({u8"foo\U00101022bar"}), simple_group::parse(R"('foo\U00101022bar')"));
+  CHECK_EQUAL(simple_group({u8"foo\022bar"}), simple_group::parse(R"('foo\022bar')"));
 }
 
 int main() {
