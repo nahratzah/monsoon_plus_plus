@@ -6,6 +6,10 @@
 
 BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::constant_expr,
     v);
+BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::selector_expr,
+    groupname,
+    tagset,
+    metricname);
 BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::logical_negate_expr,
     v);
 BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::numeric_negate_expr,

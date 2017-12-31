@@ -1,6 +1,7 @@
 #include <monsoon/grammar/expression/ast.h>
 #include <monsoon/expressions/constant.h>
 #include <monsoon/expressions/operators.h>
+#include <monsoon/overload.h>
 
 namespace monsoon {
 namespace grammar {
@@ -30,6 +31,66 @@ struct resolve_expr {
 
 constant_expr::operator expression_ptr() const {
   return expressions::constant(v);
+}
+
+path_matcher_expr::operator expressions::path_matcher() const {
+  expressions::path_matcher result;
+  for (const auto& i : *this) {
+    std::visit(
+        overload(
+            [&result](const expressions::path_matcher::wildcard&) {
+              result.push_back_wildcard();
+            },
+            [&result](const expressions::path_matcher::double_wildcard&) {
+              result.push_back_double_wildcard();
+            },
+            [&result](std::string_view s) {
+              result.push_back_literal(s);
+            }),
+        i);
+  }
+  return result;
+}
+
+tag_matcher_expr::operator expressions::tag_matcher() const {
+  using std::bind;
+  using namespace std::placeholders;
+
+  expressions::tag_matcher result;
+  for (const auto& i : *this) {
+    i.apply_visitor(
+        bind<void>(
+            [&result](const auto& v) {
+              std::apply(
+                  overload(
+                      [&result](
+                          std::string_view tagname,
+                          const expressions::tag_matcher::presence_match&) {
+                        result.check_presence(tagname);
+                      },
+                      [&result](
+                          std::string_view tagname,
+                          const expressions::tag_matcher::absence_match&) {
+                        result.check_absence(tagname);
+                      },
+                      [&result](
+                          std::string_view tagname,
+                          const expressions::tag_matcher::comparison& cmp,
+                          const auto& value) {
+                        result.check_comparison(tagname, cmp, value);
+                      }),
+                  v);
+            },
+            _1));
+  }
+  return result;
+}
+
+selector_expr::operator expression_ptr() const {
+  return expressions::selector(
+      groupname,
+      tagset,
+      metricname);
 }
 
 primary_expr::operator expression_ptr() const {

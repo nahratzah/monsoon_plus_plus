@@ -5,12 +5,14 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/histogram.h>
 #include <monsoon/expression.h>
+#include <monsoon/expressions/selector.h>
 #include <monsoon/grammar/intf/ast.h>
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/ast/variant.hpp>
 #include <string>
 #include <vector>
 #include <utility>
+#include <optional>
 
 namespace monsoon {
 namespace grammar {
@@ -34,10 +36,37 @@ struct constant_expr {
   value_expr v;
 };
 
+struct path_matcher_expr
+: std::vector<expressions::path_matcher::match_element>
+{
+  monsoon_expr_export_ operator expressions::path_matcher() const;
+};
+
+struct tag_matcher_expr
+: std::vector<
+    x3::variant<
+      std::tuple<std::string, expressions::tag_matcher::presence_match>,
+      std::tuple<std::string, expressions::tag_matcher::absence_match>,
+      std::tuple<std::string, expressions::tag_matcher::comparison, value_expr>
+    >
+  >
+{
+  monsoon_expr_export_ operator expressions::tag_matcher() const;
+};
+
+struct selector_expr {
+  path_matcher_expr groupname;
+  std::optional<tag_matcher_expr> tagset;
+  path_matcher_expr metricname;
+
+  monsoon_expr_export_ operator expression_ptr() const;
+};
+
 struct primary_expr
 : x3::variant<
       constant_expr,
-      x3::forward_ast<logical_or_expr>
+      x3::forward_ast<logical_or_expr>,
+      x3::forward_ast<selector_expr>
     >
 {
   using base_type::base_type;

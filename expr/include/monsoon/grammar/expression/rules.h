@@ -17,6 +17,12 @@ namespace x3 = boost::spirit::x3;
 
 inline const auto constant =
     x3::rule<class constant, ast::constant_expr>("constant");
+inline const auto path_matcher =
+    x3::rule<class path_matcher, ast::path_matcher_expr>("path selector");
+inline const auto tag_matcher =
+    x3::rule<class tag_matcher, ast::tag_matcher_expr>("tag selector");
+inline const auto selector =
+    x3::rule<class selector, ast::selector_expr>("selector");
 inline const auto braces =
     x3::rule<class braces, ast::logical_or_expr>("braces");
 inline const auto primary =
@@ -86,18 +92,52 @@ struct equality_sym
 : x3::symbols<ast::equality_enum>
 {
   equality_sym() {
-    add("==", ast::equality_enum::eq);
+    add("=", ast::equality_enum::eq);
     add("!=", ast::equality_enum::ne);
+  }
+};
+
+struct tag_matcher_comparison_sym
+: x3::symbols<expressions::tag_matcher::comparison>
+{
+  tag_matcher_comparison_sym() {
+    add("=", expressions::tag_matcher::eq);
+    add("!=", expressions::tag_matcher::ne);
+    add("<", expressions::tag_matcher::lt);
+    add(">", expressions::tag_matcher::gt);
+    add("<=", expressions::tag_matcher::le);
+    add(">=", expressions::tag_matcher::ge);
   }
 };
 
 
 inline const auto constant_def = value;
+inline const auto path_matcher_def =
+    ( x3::lit("**") >> x3::attr(expressions::path_matcher::double_wildcard())
+    | x3::lit('*') >> x3::attr(expressions::path_matcher::wildcard())
+    | quoted_identifier
+    | identifier
+    ) % '.';
+inline const auto tag_matcher_def =
+    x3::lit('{') >>
+    -(( (identifier | quoted_identifier) >> tag_matcher_comparison_sym() >>
+        value
+      | x3::lit('!') >> (identifier | quoted_identifier) >>
+        x3::attr(expressions::tag_matcher::absence_match())
+      | (identifier | quoted_identifier) >>
+        x3::attr(expressions::tag_matcher::presence_match())
+      ) % ',') >>
+    x3::lit('}');
+inline const auto selector_def =
+    path_matcher >>
+    -tag_matcher >>
+    path_matcher;
 inline const auto braces_def =
     x3::lit('(') >> logical_or >> x3::lit(')');
 inline const auto primary_def =
       constant
-    | braces;
+    | braces
+    | selector;
 inline const auto unary_def =
       primary
     | logical_negate
@@ -113,6 +153,9 @@ inline const auto logical_and_def = equality % "&&";
 inline const auto logical_or_def = logical_and % "||";
 BOOST_SPIRIT_DEFINE(
     constant,
+    path_matcher,
+    tag_matcher,
+    selector,
     braces,
     primary,
     unary,
