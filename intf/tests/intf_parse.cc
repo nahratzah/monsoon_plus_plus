@@ -1,6 +1,8 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/simple_group.h>
+#include <monsoon/tags.h>
+#include <monsoon/group_name.h>
 #include <monsoon/histogram.h>
 #include <string_view>
 #include <utility>
@@ -71,6 +73,42 @@ TEST(simple_group) {
   CHECK_EQUAL(simple_group({u8"foo\u1022bar"}), simple_group::parse(R"('foo\u1022bar')"));
   CHECK_EQUAL(simple_group({u8"foo\U00101022bar"}), simple_group::parse(R"('foo\U00101022bar')"));
   CHECK_EQUAL(simple_group({u8"foo\022bar"}), simple_group::parse(R"('foo\022bar')"));
+}
+
+TEST(tags) {
+  CHECK_EQUAL(
+      tags(),
+      tags::parse("{}"));
+  CHECK_EQUAL(
+      tags({{"foo", metric_value(42)}}),
+      tags::parse("{foo=42}"));
+  CHECK_EQUAL(
+      tags({{u8"foo\U0001fffe", metric_value(42)}}),
+      tags::parse(R"({'foo\U0001fffe'=42})"));
+  CHECK_EQUAL(
+      tags({{"foo", metric_value(42)}}),
+      tags::parse("{'foo'=42}"));
+  CHECK_EQUAL(
+      tags({{"foo", metric_value("42")}}),
+      tags::parse(R"({'foo'="42"})"));
+  CHECK_EQUAL(
+      tags({{"foo", metric_value("42")}, {"bar", metric_value(false)}}),
+      tags::parse(R"({'foo'="42", bar=false})"));
+}
+
+TEST(group_name) {
+  CHECK_EQUAL(
+      group_name({"foo", "bar"}),
+      group_name::parse(R"(foo.bar)"));
+  CHECK_EQUAL(
+      group_name({"foo.bar"}),
+      group_name::parse(R"('foo.bar')"));
+  CHECK_EQUAL(
+      group_name({"foo.bar"}),
+      group_name::parse(R"('foo.bar' { })"));
+  CHECK_EQUAL(
+      group_name({"foo", "bar"}, tags({{"pi", metric_value(3.14)}})),
+      group_name::parse(R"(foo.bar { pi=3.14 })"));
 }
 
 int main() {
