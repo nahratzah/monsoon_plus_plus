@@ -513,9 +513,10 @@ metric_value metric_value::parse(std::string_view s) {
   std::string_view::iterator parse_end = s.begin();
 
   grammar::ast::value_expr result;
-  bool r = grammar::x3::parse(
+  bool r = grammar::x3::phrase_parse(
       parse_end, s.end(),
       grammar::parser::value,
+      grammar::x3::space,
       result);
   if (r && parse_end == s.end())
     return result;
