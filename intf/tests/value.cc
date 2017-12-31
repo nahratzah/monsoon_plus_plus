@@ -21,6 +21,7 @@ TEST(parse) {
   CHECK_EQUAL(metric_value("foo\U00011017""bar"), metric_value::parse(R"("foo\U00011017bar")"));
 
   CHECK_EQUAL(metric_value(42), metric_value::parse(R"(42)"));
+  CHECK_EQUAL(metric_value(-42), metric_value::parse(R"(-42)"));
   CHECK_EQUAL(metric_value(-0), metric_value::parse(R"(-0)"));
   CHECK_EQUAL(metric_value(0.0), metric_value::parse(R"(0.0)"));
   CHECK_EQUAL(metric_value(-0.0), metric_value::parse(R"(-0.0)"));
