@@ -8,6 +8,7 @@ add_library (monsoon_expr
   src/expressions/selector.cc
   src/expressions/constant.cc
   src/expressions/operators.cc
+  src/grammar/expression/ast.cc
 )
 target_link_libraries (monsoon_expr ${extra_libs})
 target_link_libraries (monsoon_expr monsoon_lib)
@@ -32,5 +33,10 @@ install (FILES
   include/monsoon/expressions/merger.h
   include/monsoon/expressions/merger-inl.h
   DESTINATION include/monsoon/expressions)
+install (FILES
+  include/monsoon/grammar/expression/ast.h
+  include/monsoon/grammar/expression/ast_adapted.h
+  include/monsoon/grammar/expression/rules.h
+  DESTINATION include/monsoon/grammar/expression)
 
 add_subdirectory (tests)

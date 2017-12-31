@@ -107,6 +107,14 @@ class monsoon_intf_export_ metric_name {
    */
   std::string config_string() const;
 
+  /**
+   * \brief Parse metric name.
+   * \param s A string representation of a metric name.
+   * \return A metric name, as represented by the expression.
+   * \throw std::invalid_argument indicating \p s does not hold a valid expression.
+   */
+  static metric_name parse(std::string_view s);
+
  private:
   path_type path_;
 };

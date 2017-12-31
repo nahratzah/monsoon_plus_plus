@@ -1,6 +1,7 @@
 #include <monsoon/tags.h>
 #include <monsoon/hash_support.h>
 #include <monsoon/config_support.h>
+#include <monsoon/grammar/intf/rules.h>
 #include <algorithm>
 #include <utility>
 #include <ostream>
@@ -8,6 +9,20 @@
 
 namespace monsoon {
 
+
+tags tags::parse(std::string_view s) {
+  std::string_view::iterator parse_end = s.begin();
+
+  grammar::ast::tags_lit_expr result;
+  bool r = grammar::x3::phrase_parse(
+      parse_end, s.end(),
+      grammar::parser::tags_lit,
+      grammar::x3::space,
+      result);
+  if (r && parse_end == s.end())
+    return result;
+  throw std::invalid_argument("invalid expression");
+}
 
 auto tags::operator[](const std::string& key) const noexcept
 ->  std::optional<metric_value> {

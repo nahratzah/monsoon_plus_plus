@@ -53,6 +53,14 @@ class monsoon_intf_export_ tags {
   ///@}
 
   /**
+   * \brief Parse tags expression.
+   * \param s A string representation of a tag set.
+   * \return A tag set, as represented by the expression.
+   * \throw std::invalid_argument indicating \p s does not hold a valid expression.
+   */
+  static tags parse(std::string_view s);
+
+  /**
    * \return true if the tag set is empty.
    */
   bool empty() const noexcept;

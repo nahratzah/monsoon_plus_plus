@@ -22,6 +22,7 @@ add_library (monsoon_intf
   src/interpolate.cc
   src/histogram.cc
   src/config_support.cc
+  src/grammar/intf/ast.cc
 )
 target_link_libraries (monsoon_intf ${extra_libs})
 target_link_libraries (monsoon_intf monsoon_lib)
@@ -64,3 +65,10 @@ install (FILES
   include/monsoon/time_series_value-inl.h
   include/monsoon/time_series_value.h
   DESTINATION include/monsoon)
+install (FILES
+  include/monsoon/grammar/intf/ast.h
+  include/monsoon/grammar/intf/ast_adapted.h
+  include/monsoon/grammar/intf/rules.h
+  DESTINATION include/monsoon/grammar/intf)
+
+add_subdirectory(tests)

@@ -1,5 +1,6 @@
 #include <monsoon/simple_group.h>
 #include <monsoon/config_support.h>
+#include <monsoon/grammar/intf/rules.h>
 #include <algorithm>
 #include <utility>
 #include <ostream>
@@ -21,6 +22,20 @@ auto simple_group::operator<(const simple_group& other) const noexcept
 
 auto simple_group::config_string() const -> std::string {
   return (std::ostringstream() << *this).str();
+}
+
+simple_group simple_group::parse(std::string_view s) {
+  std::string_view::iterator parse_end = s.begin();
+
+  grammar::ast::simple_path_lit_expr result;
+  bool r = grammar::x3::phrase_parse(
+      parse_end, s.end(),
+      grammar::parser::simple_path_lit,
+      grammar::x3::space,
+      result);
+  if (r && parse_end == s.end())
+    return result;
+  throw std::invalid_argument("invalid expression");
 }
 
 

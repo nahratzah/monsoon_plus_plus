@@ -4,6 +4,7 @@
 #include <iterator>
 #include <ostream>
 #include <sstream>
+#include <monsoon/grammar/intf/rules.h>
 
 namespace monsoon {
 
@@ -29,6 +30,20 @@ auto histogram::before(const histogram& x, const histogram& y) noexcept
 ->  bool {
   return std::lexicographical_compare(x.elems_.begin(), x.elems_.end(),
                                       y.elems_.begin(), y.elems_.end());
+}
+
+histogram histogram::parse(std::string_view s) {
+  std::string_view::iterator parse_end = s.begin();
+
+  grammar::ast::histogram_expr result;
+  bool r = grammar::x3::phrase_parse(
+      parse_end, s.end(),
+      grammar::parser::histogram,
+      grammar::x3::space,
+      result);
+  if (r && parse_end == s.end())
+    return result;
+  throw std::invalid_argument("invalid expression");
 }
 
 auto histogram::add_immed_(range r, std::double_t c) -> void {

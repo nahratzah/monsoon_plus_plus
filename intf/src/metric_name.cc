@@ -1,5 +1,6 @@
 #include <monsoon/metric_name.h>
 #include <monsoon/config_support.h>
+#include <monsoon/grammar/intf/rules.h>
 #include <algorithm>
 #include <utility>
 #include <ostream>
@@ -19,6 +20,20 @@ auto metric_name::operator<(const metric_name& other) const noexcept -> bool {
 
 auto metric_name::config_string() const -> std::string {
   return (std::ostringstream() << *this).str();
+}
+
+metric_name metric_name::parse(std::string_view s) {
+  std::string_view::iterator parse_end = s.begin();
+
+  grammar::ast::simple_path_lit_expr result;
+  bool r = grammar::x3::phrase_parse(
+      parse_end, s.end(),
+      grammar::parser::simple_path_lit,
+      grammar::x3::space,
+      result);
+  if (r && parse_end == s.end())
+    return result;
+  throw std::invalid_argument("invalid expression");
 }
 
 

@@ -42,6 +42,15 @@ class monsoon_intf_export_ group_name {
    */
   group_name(simple_group path, tags tagset) noexcept;
 
+  /**
+   * \brief Parse group name expression.
+   * \param s A string representation of a group name.
+   *   The tag set may be omitted.
+   * \return A group name, as represented by the expression.
+   * \throw std::invalid_argument indicating \p s does not hold a valid expression.
+   */
+  static group_name parse(std::string_view s);
+
   ///@{
   ///\brief Get the path of the group.
   const simple_group& get_path() const noexcept;

@@ -165,6 +165,14 @@ class monsoon_intf_export_ metric_value {
   bool operator!=(const metric_value&) const noexcept;
   ///@}
 
+  /**
+   * \brief Parse metric value expression.
+   * \param s A string representation of an expression.
+   * \return A metric value, as represented by the expression.
+   * \throw std::invalid_argument indicating \p s does not hold a valid expression.
+   */
+  static metric_value parse(std::string_view s);
+
   ///\brief Retrieve underlying variant.
   const types& get() const noexcept;
 
