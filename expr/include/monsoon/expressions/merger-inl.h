@@ -10,12 +10,6 @@ namespace expressions {
 
 inline bool vector_accumulator::speculative_cmp::operator()(
     std::tuple<time_point, const tags&> x,
-    std::tuple<time_point, const tags&> y) const noexcept {
-  return x < y;
-}
-
-inline bool vector_accumulator::speculative_cmp::operator()(
-    std::tuple<time_point, const tags&> x,
     const time_point& y) const noexcept {
   return std::get<0>(x) < y;
 }
@@ -77,14 +71,22 @@ inline auto vector_accumulator::tp_proxy::value() const
 }
 
 
+inline vector_accumulator::vector_accumulator(
+    std::shared_ptr<const match_clause> mc)
+: speculative_(speculative_cmp(mc)),
+  speculative_index_(speculative_index_cmp(mc))
+{}
+
 inline auto vector_accumulator::operator[](time_point tp) const -> tp_proxy {
   return tp_proxy(*this, tp);
 }
 
 
 template<typename ObjPipe>
-merger_managed<ObjPipe>::merger_managed(ObjPipe&& input)
-: input_(std::move(input))
+merger_managed<ObjPipe>::merger_managed(
+    std::tuple<ObjPipe&&, std::shared_ptr<const match_clause>&> input)
+: accumulator(std::get<1>(std::move(input))),
+  input_(std::get<0>(std::move(input)))
 {}
 
 template<typename ObjPipe>
@@ -525,8 +527,11 @@ bool merger<Fn, ObjPipes...>::read_invocation_::operator>(
 
 
 template<typename Fn, typename... ObjPipes>
-merger<Fn, ObjPipes...>::merger(Fn&& fn, ObjPipes&&... inputs)
-: managed_(std::move(inputs)...),
+merger<Fn, ObjPipes...>::merger(
+    Fn&& fn,
+    ObjPipes&&... inputs,
+    std::shared_ptr<const match_clause> mc)
+: managed_(std::forward_as_tuple(std::move(inputs), mc)...),
   fn_(std::move(fn))
 {
   using namespace std::placeholders;
@@ -538,8 +543,11 @@ merger<Fn, ObjPipes...>::merger(Fn&& fn, ObjPipes&&... inputs)
 }
 
 template<typename Fn, typename... ObjPipes>
-merger<Fn, ObjPipes...>::merger(const Fn& fn, ObjPipes&&... inputs)
-: managed_(std::move(inputs)...),
+merger<Fn, ObjPipes...>::merger(
+    const Fn& fn,
+    ObjPipes&&... inputs,
+    std::shared_ptr<const match_clause> mc)
+: managed_(std::forward_as_tuple(std::move(inputs), mc)...),
   fn_(fn)
 {
   using namespace std::placeholders;
@@ -820,7 +828,10 @@ bool merger<Fn, ObjPipes...>::add_continuations_() {
 
 
 template<typename Fn, typename... ObjPipe>
-auto make_merger(Fn&& fn, ObjPipe&&... inputs)
+auto make_merger(
+    Fn&& fn,
+    std::shared_ptr<const match_clause> mc,
+    ObjPipe&&... inputs)
 -> objpipe::reader<typename merger<
     std::decay_t<Fn>,
     std::decay_t<ObjPipe>...>::value_type> {
@@ -828,7 +839,8 @@ auto make_merger(Fn&& fn, ObjPipe&&... inputs)
           std::decay_t<Fn>,
           std::decay_t<ObjPipe>...>>(
       std::forward<Fn>(fn),
-      std::forward<ObjPipe>(inputs)...);
+      std::forward<ObjPipe>(inputs)...,
+      std::move(mc));
 }
 
 
