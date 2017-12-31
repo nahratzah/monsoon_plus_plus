@@ -43,6 +43,12 @@ TEST(parse) {
   CHECK_EQUAL(
       metric_value(histogram({ std::make_tuple(histogram::range(0.0, 1.0), 1.0)})),
       metric_value::parse(R"([0..1=1])"));
+  CHECK_EQUAL(
+      metric_value(histogram({
+              std::make_tuple(histogram::range(0.0, 1.0), 1.0),
+              std::make_tuple(histogram::range(3.0, 4.0), 5.0)
+              })),
+      metric_value::parse(R"([ 0 .. 1 = 1, 3 .. 4 = 5])"));
 }
 
 int main() {
