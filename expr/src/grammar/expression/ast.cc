@@ -1,6 +1,7 @@
 #include <monsoon/grammar/expression/ast.h>
 #include <monsoon/expressions/constant.h>
 #include <monsoon/expressions/operators.h>
+#include <monsoon/expressions/selector.h>
 #include <monsoon/overload.h>
 
 namespace monsoon {
