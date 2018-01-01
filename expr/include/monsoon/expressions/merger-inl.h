@@ -488,7 +488,10 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
     }
     assert(std::get<0>(*this->factual) == tp);
 
-    std::get<1>(*this->factual).emplace(tag_set, std::apply(fn_, values));
+    const auto [pos, success] = std::get<1>(*this->factual).emplace(
+        tag_set, std::apply(fn_, values));
+    if (!success)
+      pos->second = metric_value(); // Mark colliding values as empty.
   } else {
     *speculative++ = speculative_entry(
         std::piecewise_construct,
