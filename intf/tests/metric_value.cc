@@ -31,6 +31,16 @@ inline auto operator<<(std::ostream& out, const metric_value::types& t)
 
 } /* namespace std */
 
+static_assert(
+    sizeof(metric_value::unsigned_type) == 8,
+    "metric_value::unsigned_type has wrong size");
+static_assert(
+    sizeof(metric_value::signed_type) == 8,
+    "metric_value::signed_type has wrong size");
+static_assert(
+    sizeof(metric_value::fp_type) >= sizeof(double),
+    "metric_value::fp_type has wrong size");
+
 TEST(constructor) {
   // Empty value.
   CHECK_EQUAL(
@@ -474,6 +484,124 @@ TEST(before) {
   CHECK_EQUAL(
       false,
       metric_value::before(metric_value(-1), metric_value(-2.0)));
+
+  // String value.
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value("foo"), metric_value("foo")));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value("foo"), metric_value("bar")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value("bar"), metric_value("foo")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(""), metric_value("foo")));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value("foobar"), metric_value("foo")));
+
+  // Strings come after empty, booleans, numerics.
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-1), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(0), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(1), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(0.0), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-0.0), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(1.0), metric_value("")));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-1.0), metric_value("")));
+
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value()));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(-1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(-0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(1.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(""), metric_value(-1.0)));
+
+  // Histogram value (histogram ordering is used).
+  CHECK_EQUAL(
+      histogram::before(
+          histogram::parse("[]"),
+          histogram::parse("[]")),
+      metric_value::before(
+          metric_value(histogram::parse("[]")),
+          metric_value(histogram::parse("[]"))));
+  CHECK_EQUAL(
+      histogram::before(
+          histogram::parse("[]"),
+          histogram::parse("[0..1=1]")),
+      metric_value::before(
+          metric_value(histogram::parse("[]")),
+          metric_value(histogram::parse("[0..1=1]"))));
+  CHECK_EQUAL(
+      histogram::before(
+          histogram::parse("[]"),
+          histogram::parse("[0..1=-1]")),
+      metric_value::before(
+          metric_value(histogram::parse("[]")),
+          metric_value(histogram::parse("[0..1=-1]"))));
+
+  CHECK_EQUAL(
+      histogram::before(
+          histogram::parse("[0..1=1]"),
+          histogram::parse("[]")),
+      metric_value::before(
+          metric_value(histogram::parse("[0..1=1]")),
+          metric_value(histogram::parse("[]"))));
+  CHECK_EQUAL(
+      histogram::before(
+          histogram::parse("[0..1=-1]"),
+          histogram::parse("[]")),
+      metric_value::before(
+          metric_value(histogram::parse("[0..1=-1]")),
+          metric_value(histogram::parse("[]"))));
 }
 
 int main() {
