@@ -100,6 +100,17 @@ void scalar_accumulator::add_factual_(time_point tp, metric_value&& v) {
 }
 
 
+bool vector_accumulator::speculative_cmp::operator()(
+    std::tuple<time_point, const tags&> x,
+    std::tuple<time_point, const tags&> y) const noexcept {
+  assert(mc_ != nullptr);
+
+  if (std::get<0>(x) != std::get<0>(y))
+    return std::get<0>(x) < std::get<0>(y);
+  return mc_->less_cmp(std::get<1>(x), std::get<1>(y));
+}
+
+
 auto vector_accumulator::factual_until() const noexcept
 -> std::optional<time_point> {
   if (factual_.empty()) return {};
@@ -166,6 +177,9 @@ void vector_accumulator::add_speculative_(time_point tp,
 
 void vector_accumulator::add_factual_(time_point tp,
     expression::factual_vector&& v) {
+  assert(v.hash_function().mc == mc_);
+  assert(v.key_eq().mc == mc_);
+
   assert(factual_.empty() || factual_.back().first < tp);
   factual_.emplace_back(tp, std::move(v));
 
@@ -244,6 +258,9 @@ auto vector_accumulator::interpolate_(time_point tp) const
 -> std::variant<
     expression::factual_vector,
     std::reference_wrapper<const expression::factual_vector>> {
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
+
   assert(!factual_.empty());
   assert(tp <= factual_.back().first);
 
@@ -259,13 +276,16 @@ auto vector_accumulator::interpolate_(time_point tp) const
   if (at_after->first == tp)
     return std::cref(at_after->second);
 
+  // Create result map.
+  expression::factual_vector interpolated = expression::factual_vector(
+      0u, match_clause_hash(mc_), match_clause_equal_to(mc_));
+
   // Yield empty map if the first factual map is after the tp.
   assert(at_after->first > tp);
-  if (at_after == factual_.begin()) return expression::factual_vector();
+  if (at_after == factual_.begin()) return interpolated; // empty map
   const auto before = std::prev(at_after);
 
   // Create interpolated map.
-  expression::factual_vector interpolated;
   interpolated.reserve(std::min(
           before->second.size(),
           at_after->second.size()));
@@ -339,42 +359,50 @@ template class merger_managed<expression::vector_objpipe>;
 template
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::scalar_objpipe&&,
     expression::scalar_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::scalar_objpipe&&>,
-        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::scalar_objpipe&&>,
+    std::decay_t<expression::scalar_objpipe&&>>::value_type>;
 
 template
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::vector_objpipe&&,
     expression::scalar_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::vector_objpipe&&>,
-        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::vector_objpipe&&>,
+    std::decay_t<expression::scalar_objpipe&&>>::value_type>;
 
 template
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::scalar_objpipe&&,
     expression::vector_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::scalar_objpipe&&>,
-        std::decay_t<expression::vector_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::scalar_objpipe&&>,
+    std::decay_t<expression::vector_objpipe&&>>::value_type>;
 
 template
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::vector_objpipe&&,
     expression::vector_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::vector_objpipe&&>,
-        std::decay_t<expression::vector_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::vector_objpipe&&>,
+    std::decay_t<expression::vector_objpipe&&>>::value_type>;
 
 
 }} /* namespace monsoon::expressions */

@@ -29,7 +29,8 @@ class monsoon_expr_local_ unop_t final
   ~unop_t() noexcept override;
 
   auto operator()(const metric_source&,
-      const time_range&, time_point::duration) const
+      const time_range&, time_point::duration,
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -57,11 +58,13 @@ class monsoon_expr_local_ binop_t final
   using functor = metric_value(*)(const metric_value&, const metric_value&);
 
   binop_t(functor, std::string_view, expression_ptr&&, expression_ptr&&,
-      precedence);
+      precedence,
+      std::shared_ptr<const match_clause> mc);
   ~binop_t() noexcept override;
 
   auto operator()(const metric_source&,
-      const time_range&, time_point::duration) const
+      const time_range&, time_point::duration,
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -73,6 +76,7 @@ class monsoon_expr_local_ binop_t final
   functor fn_;
   expression_ptr x_, y_;
   std::string_view sign_;
+  std::shared_ptr<const match_clause> mc_;
 };
 
 
@@ -90,7 +94,8 @@ unop_t::~unop_t() noexcept {}
 
 auto unop_t::operator()(
     const metric_source& src,
-    const time_range& tr, time_point::duration slack) const
+    const time_range& tr, time_point::duration slack,
+    const std::shared_ptr<const match_clause>& out_mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 
@@ -106,7 +111,7 @@ auto unop_t::operator()(
             return std::move(s)
                 .transform_copy(std::bind(&unop_t::apply_vector_, _1, fn_));
           }),
-      std::invoke(*nested_, src, tr, std::move(slack)));
+      std::invoke(*nested_, src, tr, std::move(slack), out_mc));
 }
 
 bool unop_t::is_scalar() const noexcept {
@@ -150,12 +155,14 @@ auto unop_t::apply_vector_(vector_emit_type& emt, functor fn)
 
 binop_t::binop_t(functor fn, std::string_view sign,
     expression_ptr&& x, expression_ptr&& y,
-    precedence level)
+    precedence level,
+    std::shared_ptr<const match_clause> mc)
 : expression(level),
   fn_(std::move(fn)),
   x_(std::move(x)),
   y_(std::move(y)),
-  sign_(std::move(sign))
+  sign_(std::move(sign)),
+  mc_(std::move(mc))
 {
   if (x_ == nullptr) throw std::invalid_argument("null expression_ptr x");
   if (y_ == nullptr) throw std::invalid_argument("null expression_ptr y");
@@ -172,16 +179,20 @@ bool binop_t::is_vector() const noexcept {
 }
 
 auto binop_t::operator()(const metric_source& src,
-    const time_range& tr, time_point::duration slack) const
+    const time_range& tr, time_point::duration slack,
+    const std::shared_ptr<const match_clause>& out_mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   return std::visit(
-      [this](auto&&... pipes) -> std::variant<scalar_objpipe, vector_objpipe> {
+      [this, &out_mc](auto&&... pipes)
+      -> std::variant<scalar_objpipe, vector_objpipe> {
         return make_merger(
             fn_,
+            mc_,
+            out_mc,
             std::forward<decltype(pipes)>(pipes)...);
       },
-      (*x_)(src, tr, slack),
-      (*y_)(src, tr, slack));
+      (*x_)(src, tr, slack, mc_),
+      (*y_)(src, tr, slack, mc_));
 }
 
 void binop_t::do_ostream(std::ostream& out) const {
@@ -210,10 +221,11 @@ inline auto unop(unop_t::functor fn,
 inline auto binop(binop_t::functor fn,
     const std::string_view& sign,
     expression_ptr&& x, expression_ptr&& y,
-    expression::precedence level)
+    expression::precedence level,
+    std::shared_ptr<const match_clause> mc)
 -> expression_ptr {
   return expression::make_ptr<binop_t>(
-      fn, sign, std::move(x), std::move(y), level);
+      fn, sign, std::move(x), std::move(y), level, std::move(mc));
 }
 
 
@@ -226,25 +238,30 @@ expression_ptr logical_not(expression_ptr ptr) {
       expression::precedence_negate);
 }
 
-expression_ptr logical_and(expression_ptr x, expression_ptr y) {
+expression_ptr logical_and(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" && "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x && y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_logical_and);
+      expression::precedence_logical_and,
+      std::move(mc));
 }
 
-expression_ptr logical_or(expression_ptr x, expression_ptr y) {
+expression_ptr logical_or(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" || "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x || y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_logical_or);
+      expression::precedence_logical_or,
+      std::move(mc));
 }
 
-expression_ptr cmp_eq(expression_ptr x, expression_ptr y) {
+expression_ptr cmp_eq(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" = "};
   return binop(
       [](const metric_value& x, const metric_value& y) {
@@ -252,10 +269,12 @@ expression_ptr cmp_eq(expression_ptr x, expression_ptr y) {
       },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_equality);
+      expression::precedence_equality,
+      std::move(mc));
 }
 
-expression_ptr cmp_ne(expression_ptr x, expression_ptr y) {
+expression_ptr cmp_ne(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" != "};
   return binop(
       [](const metric_value& x, const metric_value& y) {
@@ -263,10 +282,12 @@ expression_ptr cmp_ne(expression_ptr x, expression_ptr y) {
       },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_equality);
+      expression::precedence_equality,
+      std::move(mc));
 }
 
-expression_ptr cmp_lt(expression_ptr x, expression_ptr y) {
+expression_ptr cmp_lt(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" < "};
   return binop(
       [](const metric_value& x, const metric_value& y) {
@@ -274,10 +295,12 @@ expression_ptr cmp_lt(expression_ptr x, expression_ptr y) {
       },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_compare);
+      expression::precedence_compare,
+      std::move(mc));
 }
 
-expression_ptr cmp_gt(expression_ptr x, expression_ptr y) {
+expression_ptr cmp_gt(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" > "};
   return binop(
       [](const metric_value& x, const metric_value& y) {
@@ -285,10 +308,12 @@ expression_ptr cmp_gt(expression_ptr x, expression_ptr y) {
       },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_compare);
+      expression::precedence_compare,
+      std::move(mc));
 }
 
-expression_ptr cmp_le(expression_ptr x, expression_ptr y) {
+expression_ptr cmp_le(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" <= "};
   return binop(
       [](const metric_value& x, const metric_value& y) {
@@ -296,10 +321,12 @@ expression_ptr cmp_le(expression_ptr x, expression_ptr y) {
       },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_compare);
+      expression::precedence_compare,
+      std::move(mc));
 }
 
-expression_ptr cmp_ge(expression_ptr x, expression_ptr y) {
+expression_ptr cmp_ge(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" >= "};
   return binop(
       [](const metric_value& x, const metric_value& y) {
@@ -307,7 +334,8 @@ expression_ptr cmp_ge(expression_ptr x, expression_ptr y) {
       },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_compare);
+      expression::precedence_compare,
+      std::move(mc));
 }
 
 expression_ptr numeric_negate(expression_ptr ptr) {
@@ -319,67 +347,81 @@ expression_ptr numeric_negate(expression_ptr ptr) {
       expression::precedence_negate);
 }
 
-expression_ptr numeric_add(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_add(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" + "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x + y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_add_subtract);
+      expression::precedence_add_subtract,
+      std::move(mc));
 }
 
-expression_ptr numeric_subtract(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_subtract(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" - "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x - y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_add_subtract);
+      expression::precedence_add_subtract,
+      std::move(mc));
 }
 
-expression_ptr numeric_multiply(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_multiply(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" * "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x * y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_multiply_divide);
+      expression::precedence_multiply_divide,
+      std::move(mc));
 }
 
-expression_ptr numeric_divide(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_divide(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" / "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x / y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_multiply_divide);
+      expression::precedence_multiply_divide,
+      std::move(mc));
 }
 
-expression_ptr numeric_modulo(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_modulo(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" % "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x % y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_multiply_divide);
+      expression::precedence_multiply_divide,
+      std::move(mc));
 }
 
-expression_ptr numeric_shift_left(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_shift_left(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" << "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x << y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_shift);
+      expression::precedence_shift,
+      std::move(mc));
 }
 
-expression_ptr numeric_shift_right(expression_ptr x, expression_ptr y) {
+expression_ptr numeric_shift_right(expression_ptr x, expression_ptr y,
+    std::shared_ptr<const match_clause> mc) {
   static constexpr std::string_view sign{" >> "};
   return binop(
       [](const metric_value& x, const metric_value& y) { return x >> y; },
       sign,
       std::move(x), std::move(y),
-      expression::precedence_shift);
+      expression::precedence_shift,
+      std::move(mc));
 }
 
 

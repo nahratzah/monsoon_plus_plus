@@ -10,6 +10,7 @@
 #include <monsoon/time_point.h>
 #include <monsoon/tags.h>
 #include <monsoon/metric_value.h>
+#include <monsoon/match_clause.h>
 #include <deque>
 #include <map>
 #include <optional>
@@ -17,6 +18,7 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
+#include <memory>
 #include <mutex>
 #include <condition_variable>
 
@@ -30,6 +32,7 @@ class monsoon_expr_export_ scalar_accumulator {
   using factual_list = std::deque<std::pair<time_point, metric_value>>;
 
  public:
+  explicit scalar_accumulator(const std::shared_ptr<const match_clause>&) {}
   auto operator[](time_point tp) const
       -> std::optional<std::tuple<metric_value, bool>>;
   auto factual_until() const noexcept -> std::optional<time_point>;
@@ -52,7 +55,13 @@ class monsoon_expr_export_ vector_accumulator {
   struct monsoon_expr_local_ speculative_cmp {
     using is_transparent = std::true_type;
 
-    bool operator()(
+    explicit speculative_cmp(std::shared_ptr<const match_clause> mc)
+    : mc_(std::move(mc))
+    {
+      assert(mc_ != nullptr);
+    }
+
+    monsoon_expr_export_ bool operator()(
         std::tuple<time_point, const tags&> x,
         std::tuple<time_point, const tags&> y) const noexcept;
     bool operator()(
@@ -61,6 +70,9 @@ class monsoon_expr_export_ vector_accumulator {
     bool operator()(
         const time_point& x,
         std::tuple<time_point, const tags&> y) const noexcept;
+
+   private:
+    std::shared_ptr<const match_clause> mc_;
   };
 
   using speculative_map = std::map<
@@ -75,6 +87,12 @@ class monsoon_expr_export_ vector_accumulator {
    public:
     using is_transparent = std::true_type;
 
+    explicit speculative_index_cmp(std::shared_ptr<const match_clause> mc)
+    : mc_(std::move(mc))
+    {
+      assert(mc_ != nullptr);
+    }
+
     template<typename X, typename Y>
     bool operator()(const X& x, const Y& y) const noexcept;
 
@@ -85,6 +103,8 @@ class monsoon_expr_export_ vector_accumulator {
         -> const internal_type&;
     static auto intern_(std::tuple<time_point, const tags&> i) noexcept
         -> internal_type;
+
+    std::shared_ptr<const match_clause> mc_;
   };
 
   using speculative_index = std::set<
@@ -111,6 +131,8 @@ class monsoon_expr_export_ vector_accumulator {
     time_point tp_;
   };
 
+  vector_accumulator(std::shared_ptr<const match_clause> mc);
+
   auto operator[](time_point tp) const -> tp_proxy;
   auto factual_until() const noexcept -> std::optional<time_point>;
   void advance_factual(time_point) noexcept;
@@ -132,6 +154,7 @@ class monsoon_expr_export_ vector_accumulator {
   speculative_map speculative_;
   factual_list factual_;
   speculative_index speculative_index_;
+  const std::shared_ptr<const match_clause> mc_;
 };
 
 
@@ -155,9 +178,9 @@ class merger_managed {
 
   /**
    * \brief Constructor.
-   * \param input The input objpipe.
+   * \param input The input objpipe and match clause.
    */
-  explicit merger_managed(ObjPipe&& input);
+  explicit merger_managed(std::tuple<ObjPipe&&, std::shared_ptr<const match_clause>&> input);
 
   /**
    * \brief Load values until the next factual emition.
@@ -270,9 +293,7 @@ struct left_tag_combiner_ {
  * \tparam TagEqual A functor to test for tag equality.
  * \tparam TagCombine A tag combiner.
  */
-template<typename Fn,
-    typename TagEqual = std::equal_to<tags>,
-    typename TagCombine = left_tag_combiner_>
+template<typename Fn>
 class recursive_apply {
  private:
   ///\brief Discriminant for the case where no tags are present.
@@ -280,8 +301,7 @@ class recursive_apply {
 
  public:
   explicit recursive_apply(Fn fn,
-      TagEqual equal = TagEqual(),
-      TagCombine combine = TagCombine());
+      std::shared_ptr<const match_clause> mc);
 
   template<typename... Values>
   void operator()(Values&&... values);
@@ -355,19 +375,13 @@ class recursive_apply {
       Tail&&... tail);
 
   Fn fn_;
-  TagEqual tag_equal_;
-  TagCombine tag_combine_;
+  std::shared_ptr<const match_clause> mc_;
 };
 
 template<typename Fn, typename TagEqual, typename TagCombine>
-auto make_recursive_apply(Fn&& fn, TagEqual&& equal, TagCombine&& tag_combine)
-    -> recursive_apply<
-        std::decay_t<Fn>,
-        std::decay_t<TagEqual>,
-        std::decay_t<TagCombine>>;
-
-template<typename Fn>
-auto make_recursive_apply(Fn&& fn) -> recursive_apply<std::decay_t<Fn>>;
+auto make_recursive_apply(Fn&& fn,
+    std::shared_ptr<const match_clause> mc)
+-> recursive_apply<std::decay_t<Fn>>;
 
 
 /**
@@ -379,6 +393,10 @@ auto make_recursive_apply(Fn&& fn) -> recursive_apply<std::decay_t<Fn>>;
  */
 template<std::size_t CbIdx>
 struct merger_invocation {
+  merger_invocation(const std::shared_ptr<const match_clause>& mc)
+  : mc_(mc)
+  {}
+
   ///\brief Invoke functor on managed accumulators upon receival of value.
   template<typename Fn, typename... Managed, typename Value>
   void operator()(Fn& fn, const std::tuple<Managed...>& managed,
@@ -422,6 +440,8 @@ struct merger_invocation {
           Idx == CbIdx,
           const Value&,
           const typename Managed::accumulator_type&>;
+
+  const std::shared_ptr<const match_clause>& mc_;
 };
 
 
@@ -448,7 +468,10 @@ class merger_acceptor_data {
       expression::factual_vector>;
 
  protected:
-  merger_acceptor_data() = default;
+  merger_acceptor_data(
+      const std::shared_ptr<const match_clause>& out_mc)
+  : out_mc(out_mc)
+  {}
   merger_acceptor_data(const merger_acceptor_data&) = default;
   merger_acceptor_data(merger_acceptor_data&&) = default;
   merger_acceptor_data& operator=(const merger_acceptor_data&) = default;
@@ -460,6 +483,7 @@ class merger_acceptor_data {
   using factual_entry = std::pair<time_point, factual_type>;
 
   std::optional<factual_entry> factual;
+  const std::shared_ptr<const match_clause>& out_mc;
 };
 
 
@@ -470,7 +494,8 @@ class merger_acceptor<Fn, SpecInsIter, false, N>
 : public merger_acceptor_data<false>
 {
  public:
-  merger_acceptor(Fn& fn, SpecInsIter speculative);
+  merger_acceptor(Fn& fn, SpecInsIter speculative,
+      const std::shared_ptr<const match_clause>& out_mc);
 
   void operator()(
       bool is_factual,
@@ -487,7 +512,8 @@ class merger_acceptor<Fn, SpecInsIter, true, N>
 : public merger_acceptor_data<true>
 {
  public:
-  merger_acceptor(Fn& fn, SpecInsIter speculative);
+  merger_acceptor(Fn& fn, SpecInsIter speculative,
+      const std::shared_ptr<const match_clause>& out_mc);
 
   void operator()(
       bool is_factual,
@@ -585,8 +611,12 @@ class merger final
       typename merger_acceptor_data<tagged>::factual_entry;
 
  public:
-  explicit merger(const Fn& fn, ObjPipes&&... inputs);
-  explicit merger(Fn&& fn, ObjPipes&&... inputs);
+  explicit merger(const Fn& fn, ObjPipes&&... inputs,
+      std::shared_ptr<const match_clause> mc,
+      std::shared_ptr<const match_clause> out_mc);
+  explicit merger(Fn&& fn, ObjPipes&&... inputs,
+      std::shared_ptr<const match_clause> mc,
+      std::shared_ptr<const match_clause> out_mc);
 
   void add_continuation(
       std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release>&& c) override;
@@ -651,13 +681,18 @@ class merger final
   mutable std::condition_variable read_avail_;
   std::once_flag install_guard_;
   std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> continuation_ptr_;
+  const std::shared_ptr<const match_clause> mc_, out_mc_;
 };
 
 template<typename Fn, typename... ObjPipe>
-auto make_merger(Fn&& fn, ObjPipe&&... inputs)
-    -> objpipe::reader<typename merger<
-        std::decay_t<Fn>,
-        std::decay_t<ObjPipe>...>::value_type>;
+auto make_merger(
+    Fn&& fn,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    ObjPipe&&... inputs)
+-> objpipe::reader<typename merger<
+    std::decay_t<Fn>,
+    std::decay_t<ObjPipe>...>::value_type>;
 
 // Template instantiations, as used by binary operators.
 
@@ -665,45 +700,53 @@ extern template
 monsoon_expr_export_
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::scalar_objpipe&&,
     expression::scalar_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::scalar_objpipe&&>,
-        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::scalar_objpipe&&>,
+    std::decay_t<expression::scalar_objpipe&&>>::value_type>;
 
 extern template
 monsoon_expr_export_
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::vector_objpipe&&,
     expression::scalar_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::vector_objpipe&&>,
-        std::decay_t<expression::scalar_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::vector_objpipe&&>,
+    std::decay_t<expression::scalar_objpipe&&>>::value_type>;
 
 extern template
 monsoon_expr_export_
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::scalar_objpipe&&,
     expression::vector_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::scalar_objpipe&&>,
-        std::decay_t<expression::vector_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::scalar_objpipe&&>,
+    std::decay_t<expression::vector_objpipe&&>>::value_type>;
 
 extern template
 monsoon_expr_export_
 auto make_merger(
     metric_value(*const&)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause>,
+    std::shared_ptr<const match_clause>,
     expression::vector_objpipe&&,
     expression::vector_objpipe&&)
-    -> objpipe::reader<typename merger<
-        std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
-        std::decay_t<expression::vector_objpipe&&>,
-        std::decay_t<expression::vector_objpipe&&>>::value_type>;
+-> objpipe::reader<typename merger<
+    std::decay_t<metric_value(*)(const metric_value&, const metric_value&)>,
+    std::decay_t<expression::vector_objpipe&&>,
+    std::decay_t<expression::vector_objpipe&&>>::value_type>;
 
 
 }} /* namespace monsoon::expressions */

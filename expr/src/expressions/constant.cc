@@ -18,7 +18,8 @@ class monsoon_expr_local_ constant_expr
   ~constant_expr() noexcept override;
 
   auto operator()(const metric_source&,
-      const time_range&, time_point::duration) const
+      const time_range&, time_point::duration,
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -42,7 +43,8 @@ constant_expr::~constant_expr() noexcept {}
 
 auto constant_expr::operator()(
     const metric_source& source, const time_range& tr,
-    time_point::duration slack) const
+    time_point::duration slack,
+    const std::shared_ptr<const match_clause>&) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 

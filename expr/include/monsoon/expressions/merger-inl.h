@@ -10,12 +10,6 @@ namespace expressions {
 
 inline bool vector_accumulator::speculative_cmp::operator()(
     std::tuple<time_point, const tags&> x,
-    std::tuple<time_point, const tags&> y) const noexcept {
-  return x < y;
-}
-
-inline bool vector_accumulator::speculative_cmp::operator()(
-    std::tuple<time_point, const tags&> x,
     const time_point& y) const noexcept {
   return std::get<0>(x) < y;
 }
@@ -70,12 +64,27 @@ inline auto vector_accumulator::tp_proxy::value() const
 -> std::variant<
     expression::factual_vector,
     std::reference_wrapper<const expression::factual_vector>> {
-  if (is_speculative())
-    return {}; // XXX create speculative interpolation
-  else
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
+
+  if (is_speculative()) {
+    // XXX create speculative interpolation instead of empty map
+    return expression::factual_vector(
+        0u,
+        match_clause_hash(self_.mc_),
+        match_clause_equal_to(self_.mc_));
+  } else {
     return self_.interpolate_(tp_);
+  }
 }
 
+
+inline vector_accumulator::vector_accumulator(
+    std::shared_ptr<const match_clause> mc)
+: speculative_(speculative_cmp(mc)),
+  speculative_index_(speculative_index_cmp(mc)),
+  mc_(mc)
+{}
 
 inline auto vector_accumulator::operator[](time_point tp) const -> tp_proxy {
   return tp_proxy(*this, tp);
@@ -83,8 +92,10 @@ inline auto vector_accumulator::operator[](time_point tp) const -> tp_proxy {
 
 
 template<typename ObjPipe>
-merger_managed<ObjPipe>::merger_managed(ObjPipe&& input)
-: input_(std::move(input))
+merger_managed<ObjPipe>::merger_managed(
+    std::tuple<ObjPipe&&, std::shared_ptr<const match_clause>&> input)
+: accumulator(std::get<1>(std::move(input))),
+  input_(std::get<0>(std::move(input)))
 {}
 
 template<typename ObjPipe>
@@ -170,17 +181,16 @@ inline auto left_tag_combiner_::operator()(tags&& x, const tags&)
 }
 
 
-template<typename Fn, typename TagEqual, typename TagCombine>
-recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply(Fn fn,
-    TagEqual equal, TagCombine combine)
+template<typename Fn>
+recursive_apply<Fn>::recursive_apply(Fn fn,
+    std::shared_ptr<const match_clause> mc)
 : fn_(std::move(fn)),
-  tag_equal_(std::move(equal)),
-  tag_combine_(std::move(combine))
+  mc_(std::move(mc))
 {}
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<typename... Values>
-void recursive_apply<Fn, TagEqual, TagCombine>::operator()(
+void recursive_apply<Fn>::operator()(
     Values&&... values) {
   std::array<metric_value, sizeof...(Values)> args;
   recursive_apply_(
@@ -189,25 +199,25 @@ void recursive_apply<Fn, TagEqual, TagCombine>::operator()(
       std::forward<Values>(values)...);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<std::size_t N>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const untagged&,
     const std::array<metric_value, N>& values) {
   std::invoke(fn_, values);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<std::size_t N>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const tags& tags,
     const std::array<metric_value, N>& values) {
   std::invoke(fn_, tags, values);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<typename Tags, std::size_t N, typename Head, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const Tags& tags,
     std::array<metric_value, N>& values,
     const std::optional<Head>& head,
@@ -216,9 +226,9 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
     this->recursive_apply_(tags, values, *head, std::forward<Tail>(tail)...);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<typename Tags, std::size_t N, typename Head, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const Tags& tags,
     std::array<metric_value, N>& values,
     const std::reference_wrapper<Head>& head,
@@ -226,9 +236,9 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
   this->recursive_apply_(tags, values, head.get(), std::forward<Tail>(tail)...);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<typename Tags, std::size_t N, typename... Head, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const Tags& tags,
     std::array<metric_value, N>& values,
     const std::variant<Head...>& head,
@@ -240,9 +250,9 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
       head);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<std::size_t N, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const untagged&,
     std::array<metric_value, N>& values,
     const std::tuple<tags, metric_value>& head,
@@ -254,25 +264,25 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
       std::forward<Tail>(tail)...);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<std::size_t N, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const tags& tag_set,
     std::array<metric_value, N>& values,
     const std::tuple<tags, metric_value>& head,
     Tail&&... tail) {
-  if (tag_equal_(tag_set, std::get<0>(head))) {
+  if (mc_->eq_cmp(tag_set, std::get<0>(head))) {
     this->recursive_apply_(
-        tag_combine_(tag_set, std::get<0>(head)),
+        mc_->reduce(tag_set, std::get<0>(head)),
         values,
         std::get<1>(head),
         std::forward<Tail>(tail)...);
   }
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<typename Tags, std::size_t N, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const Tags& tags,
     std::array<metric_value, N>& values,
     const metric_value& head,
@@ -284,9 +294,9 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
       std::forward<Tail>(tail)...);
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<std::size_t N, typename... MapArgs, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const untagged&,
     std::array<metric_value, N>& values,
     const std::unordered_map<tags, metric_value, MapArgs...>& head,
@@ -300,9 +310,9 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
   }
 }
 
-template<typename Fn, typename TagEqual, typename TagCombine>
+template<typename Fn>
 template<std::size_t N, typename... MapArgs, typename... Tail>
-void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
+void recursive_apply<Fn>::recursive_apply_(
     const tags& tag_set,
     std::array<metric_value, N>& values,
     const std::unordered_map<tags, metric_value, MapArgs...>& head,
@@ -310,7 +320,7 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
   auto head_elem = head.find(tag_set);
   if (head_elem != head.end()) {
     this->recursive_apply_(
-        tag_combine_(tag_set, std::get<0>(*head_elem)),
+        mc_->reduce(tag_set, std::get<0>(*head_elem)),
         values,
         std::get<1>(*head_elem),
         std::forward<Tail>(tail)...);
@@ -318,28 +328,14 @@ void recursive_apply<Fn, TagEqual, TagCombine>::recursive_apply_(
 }
 
 
-template<typename Fn, typename TagEqual, typename TagCombine>
-inline auto make_recursive_apply(Fn&& fn,
-    TagEqual&& equal, TagCombine&& tag_combine)
--> recursive_apply<
-    std::decay_t<Fn>,
-    std::decay_t<TagEqual>,
-    std::decay_t<TagCombine>> {
-  using result_type = recursive_apply<
-      std::decay_t<Fn>,
-      std::decay_t<TagEqual>,
-      std::decay_t<TagCombine>>;
-  return result_type(
-      std::forward<Fn>(fn),
-      std::forward<TagEqual>(equal),
-      std::forward<TagCombine>(tag_combine));
-}
-
 template<typename Fn>
-inline auto make_recursive_apply(Fn&& fn)
+inline auto make_recursive_apply(Fn&& fn,
+    std::shared_ptr<const match_clause> mc)
 -> recursive_apply<std::decay_t<Fn>> {
   using result_type = recursive_apply<std::decay_t<Fn>>;
-  return result_type(std::forward<Fn>(fn));
+  return result_type(
+      std::forward<Fn>(fn),
+      std::move(mc));
 }
 
 
@@ -394,7 +390,8 @@ void merger_invocation<CbIdx>::unpack_invoke_(
             factual,
             tp,
             std::forward<decltype(args)>(args)...);
-      })
+      },
+      mc_)
       (std::forward<Values>(values)...);
 }
 
@@ -430,8 +427,10 @@ constexpr auto merger_invocation<CbIdx>::choose_value_(
 template<typename Fn, typename SpecInsIter, std::size_t N>
 merger_acceptor<Fn, SpecInsIter, false, N>::merger_acceptor(
     Fn& fn,
-    SpecInsIter speculative)
-: fn_(fn),
+    SpecInsIter speculative,
+    const std::shared_ptr<const match_clause>& out_mc)
+: merger_acceptor_data<false>(out_mc),
+  fn_(fn),
   speculative(std::move(speculative))
 {}
 
@@ -455,8 +454,12 @@ void merger_acceptor<Fn, SpecInsIter, false, N>::operator()(
 
 
 template<typename Fn, typename SpecInsIter, std::size_t N>
-merger_acceptor<Fn, SpecInsIter, true, N>::merger_acceptor(Fn& fn, SpecInsIter speculative)
-: fn_(fn),
+merger_acceptor<Fn, SpecInsIter, true, N>::merger_acceptor(
+    Fn& fn,
+    SpecInsIter speculative,
+    const std::shared_ptr<const match_clause>& out_mc)
+: merger_acceptor_data<true>(out_mc),
+  fn_(fn),
   speculative(std::move(speculative))
 {}
 
@@ -466,16 +469,29 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
     time_point tp,
     const tags& tag_set,
     const std::array<metric_value, N>& values) {
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
+
   if (is_factual) {
     if (!this->factual.has_value()) {
       this->factual.emplace(
           std::piecewise_construct,
           std::forward_as_tuple(tp),
-          std::forward_as_tuple());
+          std::forward_as_tuple(
+              8u,
+              match_clause_hash(out_mc),
+              match_clause_equal_to(out_mc)
+              ));
+    } else {
+      assert(this->factual->second.hash_function().mc == out_mc);
+      assert(this->factual->second.key_eq().mc == out_mc);
     }
     assert(std::get<0>(*this->factual) == tp);
 
-    std::get<1>(*this->factual).emplace(tag_set, std::apply(fn_, values));
+    const auto [pos, success] = std::get<1>(*this->factual).emplace(
+        tag_set, std::apply(fn_, values));
+    if (!success)
+      pos->second = metric_value(); // Mark colliding values as empty.
   } else {
     *speculative++ = speculative_entry(
         std::piecewise_construct,
@@ -525,9 +541,15 @@ bool merger<Fn, ObjPipes...>::read_invocation_::operator>(
 
 
 template<typename Fn, typename... ObjPipes>
-merger<Fn, ObjPipes...>::merger(Fn&& fn, ObjPipes&&... inputs)
-: managed_(std::move(inputs)...),
-  fn_(std::move(fn))
+merger<Fn, ObjPipes...>::merger(
+    Fn&& fn,
+    ObjPipes&&... inputs,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc)
+: managed_(std::forward_as_tuple(std::move(inputs), mc)...),
+  fn_(std::move(fn)),
+  mc_(mc),
+  out_mc_(std::move(out_mc))
 {
   using namespace std::placeholders;
 
@@ -538,9 +560,15 @@ merger<Fn, ObjPipes...>::merger(Fn&& fn, ObjPipes&&... inputs)
 }
 
 template<typename Fn, typename... ObjPipes>
-merger<Fn, ObjPipes...>::merger(const Fn& fn, ObjPipes&&... inputs)
-: managed_(std::move(inputs)...),
-  fn_(fn)
+merger<Fn, ObjPipes...>::merger(
+    const Fn& fn,
+    ObjPipes&&... inputs,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc)
+: managed_(std::forward_as_tuple(std::move(inputs), mc)...),
+  fn_(fn),
+  mc_(mc),
+  out_mc_(std::move(out_mc))
 {
   using namespace std::placeholders;
 
@@ -681,12 +709,13 @@ auto merger<Fn, ObjPipes...>::load_until_next_factual_()
 
   merger_acceptor<const Fn, spec_insert_iter, tagged, sizeof...(ObjPipes)> acceptor{
       fn_,
-      std::back_inserter(speculative_pending_)
+      std::back_inserter(speculative_pending_),
+      out_mc_
   };
   auto& managed = std::get<CbIdx>(managed_);
   const bool found_factual = managed.load_until_next_factual(
       std::bind(
-          merger_invocation<CbIdx>(),
+          merger_invocation<CbIdx>(mc_),
           std::ref(acceptor),
           std::cref(managed_),
           _1));
@@ -820,7 +849,11 @@ bool merger<Fn, ObjPipes...>::add_continuations_() {
 
 
 template<typename Fn, typename... ObjPipe>
-auto make_merger(Fn&& fn, ObjPipe&&... inputs)
+auto make_merger(
+    Fn&& fn,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    ObjPipe&&... inputs)
 -> objpipe::reader<typename merger<
     std::decay_t<Fn>,
     std::decay_t<ObjPipe>...>::value_type> {
@@ -828,7 +861,9 @@ auto make_merger(Fn&& fn, ObjPipe&&... inputs)
           std::decay_t<Fn>,
           std::decay_t<ObjPipe>...>>(
       std::forward<Fn>(fn),
-      std::forward<ObjPipe>(inputs)...);
+      std::forward<ObjPipe>(inputs)...,
+      std::move(mc),
+      std::move(out_mc));
 }
 
 
