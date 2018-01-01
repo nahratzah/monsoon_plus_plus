@@ -708,29 +708,91 @@ auto metric_value::as_string() const -> std::optional<std::string> {
 auto metric_value::before(const metric_value& x, const metric_value& y)
     noexcept
 ->  bool {
-  if (x.value_.index() != y.value_.index())
-    return x.value_.index() < y.value_.index();
+  return std::visit(
+      overload(
+          [](const auto& x, const auto& y) -> std::optional<bool> {
+            using x_type = std::decay_t<decltype(x)>;
+            using y_type = std::decay_t<decltype(y)>;
 
-  return visit(
-      [&y](const auto& v) {
-        using v_type = std::decay_t<decltype(v)>;
-        static_assert(std::is_same_v<empty, v_type>
-           || std::is_same_v<bool, v_type>
-           || std::is_same_v<signed_type, v_type>
-           || std::is_same_v<unsigned_type, v_type>
-           || std::is_same_v<fp_type, v_type>
-           || std::is_same_v<histogram, v_type>
-           || std::is_same_v<std::string, v_type>,
-           "Programmer error: type deduction.");
+            static_assert(!(
+                    (std::is_same_v<signed_type, x_type>
+                     || std::is_same_v<unsigned_type, x_type>
+                     || std::is_same_v<fp_type, x_type>)
+                    &&
+                    (std::is_same_v<signed_type, y_type>
+                     || std::is_same_v<unsigned_type, y_type>
+                     || std::is_same_v<fp_type, y_type>)),
+                "Programmer error: numeric types must be handled specifically");
 
-        if constexpr(std::is_same_v<empty, v_type>)
-          return false; // empty() < empty() -> false
-        else if constexpr(std::is_same_v<histogram, v_type>)
-          return histogram::before(v, std::get<histogram>(y.value_));
-        else
-          return v < std::get<v_type>(y.value_);
-      },
-      x.value_);
+            if constexpr(std::is_same_v<x_type, y_type>)
+              return x < y;
+            else
+              return {};
+          },
+          [](const empty&, const empty&) -> std::optional<bool> {
+            return false; // empty() < empty() -> false
+          },
+          [](const signed_type& x, const signed_type& y)
+          -> std::optional<bool> {
+            return x < y;
+          },
+          [](const unsigned_type& x, const unsigned_type& y)
+          -> std::optional<bool> {
+            return x < y;
+          },
+          [](const signed_type& x, const unsigned_type& y)
+          -> std::optional<bool> {
+            assert(x < 0); // Enforced by metric_value constructor.
+            return true;
+          },
+          [](const unsigned_type& x, const signed_type& y)
+          -> std::optional<bool> {
+            assert(y < 0); // Enforced by metric_value constructor.
+            return false;
+          },
+          [](const fp_type& x, const fp_type& y) -> std::optional<bool> {
+            if (x == 0.0 || x == -0.0) return y > 0.0;
+            if (y == 0.0 || y == -0.0) return x < -0.0;
+            return x < y;
+          },
+          [](const fp_type& x, const unsigned_type& y) -> std::optional<bool> {
+            if (x < -0.0) return true;
+            if (x == -0.0) return y > 0;
+
+            if (x > std::numeric_limits<unsigned_type>::max())
+              return false;
+            return static_cast<unsigned_type>(std::floor(x)) < y;
+          },
+          [](const unsigned_type& x, const fp_type& y) -> std::optional<bool> {
+            if (y < -0.0) return false;
+            if (y == -0.0 || y == 0.0) return false;
+
+            if (y > std::numeric_limits<unsigned_type>::max())
+              return true;
+            return x < static_cast<unsigned_type>(std::ceil(y));
+          },
+          [](const fp_type& x, const signed_type& y) -> std::optional<bool> {
+            assert(y < 0); // Enforced by metric_value constructor.
+            if (x > -0.0) return false;
+
+            if (x < std::numeric_limits<signed_type>::min())
+              return true;
+            return std::llrint(std::floor(x)) < y;
+          },
+          [](const signed_type& x, const fp_type& y) -> std::optional<bool> {
+            assert(x < 0); // Enforced by metric_value constructor.
+            if (y > 0.0) return true;
+
+            if (y < std::numeric_limits<signed_type>::min())
+              return false;
+            return x < std::llrint(std::ceil(y));
+          },
+          [](const histogram& x, const histogram& y) -> std::optional<bool> {
+            return histogram::before(x, y);
+          }),
+      x.value_,
+      y.value_)
+          .value_or(x.value_.index() < y.value_.index());
 }
 
 

@@ -111,6 +111,10 @@ TEST(constructor) {
 }
 
 TEST(equality) {
+  // Empty value.
+  CHECK_EQUAL(true, metric_value() == metric_value());
+  CHECK_EQUAL(false, metric_value() != metric_value());
+
   // Boolean value.
   CHECK_EQUAL(true, metric_value(true) == metric_value(true));
   CHECK_EQUAL(true, metric_value(false) == metric_value(false));
@@ -243,6 +247,233 @@ TEST(hash) {
   CHECK_EQUAL(
       h(metric_value(histogram::parse(R"([1..2=3])"))),
       h(metric_value(histogram::parse(R"([1..2=3])"))));
+}
+
+TEST(before) {
+  // Boolean value.
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(false), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(true), metric_value(true)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(true), metric_value(false)));
+
+  // Boolean and numeric value.
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(1)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(1)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(-1)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(-1)));
+
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1), metric_value(true)));
+
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(0.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(-0.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(-0.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(0.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(1.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(1.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(false), metric_value(-1.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(true), metric_value(-1.0)));
+
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0.0), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0.0), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-0.0), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-0.0), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1.0), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1.0), metric_value(true)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1.0), metric_value(false)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1.0), metric_value(true)));
+
+  // Unsigned value.
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0), metric_value(0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(1)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(0), metric_value(1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(0)));
+
+  // Signed value.
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1), metric_value(-1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-100), metric_value(-100)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-100), metric_value(-1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1), metric_value(-100)));
+
+  // Floating point value.
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0.0), metric_value(0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-0.0), metric_value(-0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1.0), metric_value(1.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1.0), metric_value(-1.0)));
+
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0.0), metric_value(-0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-0.0), metric_value(0.0)));
+
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-1.0), metric_value(-0.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-1.0), metric_value(0.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(0.0), metric_value(1.0)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-1.0), metric_value(1.0)));
+
+  // Signed and unsigned value.
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-1), metric_value(1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(-1)));
+
+  // Floating point value and integral value.
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0.0), metric_value(0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0), metric_value(0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-0.0), metric_value(0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(0), metric_value(-0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(1.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1.0), metric_value(1)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1), metric_value(-1.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1.0), metric_value(-1)));
+
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(0.0), metric_value(1)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-0.0), metric_value(1)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(1.0), metric_value(2)));
+  CHECK_EQUAL(
+      true,
+      metric_value::before(metric_value(-2.0), metric_value(-1)));
+
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(1), metric_value(-0.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(2), metric_value(1.0)));
+  CHECK_EQUAL(
+      false,
+      metric_value::before(metric_value(-1), metric_value(-2.0)));
 }
 
 int main() {
