@@ -1,37 +1,12 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/config_support.h>
 #include <monsoon/grammar/intf/rules.h>
+#include <monsoon/overload.h>
 #include <cmath>
 #include <ostream>
 #include <cassert>
 
 namespace monsoon {
-namespace {
-
-
-template<typename... Fn>
-class overload_t
-: private Fn...
-{
- public:
-  template<typename... FnInit>
-  constexpr overload_t(FnInit&&... fn)
-  : Fn(std::forward<FnInit>(fn))...
-  {}
-
-  using Fn::operator()...;
-};
-
-template<typename... Fn>
-constexpr auto overload(Fn&&... fn)
--> overload_t<std::decay_t<Fn>...> {
-  return overload_t<std::decay_t<Fn>...>(std::forward<Fn>(fn)...);
-}
-
-
-} /* namespace monsoon::<anonymous> */
-
-
 namespace metric_value_ops {
 
 
@@ -505,7 +480,91 @@ struct shift_right {
 
 auto metric_value::operator==(const metric_value& other) const noexcept
 ->  bool {
-  return value_ == other.value_;
+  return std::visit(
+      overload(
+          [](const auto& x, const auto& y) {
+            using x_type = std::decay_t<decltype(x)>;
+            using y_type = std::decay_t<decltype(y)>;
+
+            static_assert(!(
+                    (std::is_same_v<signed_type, x_type>
+                     || std::is_same_v<unsigned_type, x_type>
+                     || std::is_same_v<fp_type, x_type>)
+                    &&
+                    (std::is_same_v<signed_type, y_type>
+                     || std::is_same_v<unsigned_type, y_type>
+                     || std::is_same_v<fp_type, y_type>)),
+                "Programmer error: numeric types must be handled specifically");
+            if constexpr(std::is_same_v<x_type, y_type>)
+              return x == y;
+            else
+              return false;
+          },
+          [](const signed_type& x, const signed_type& y) {
+            return x == y;
+          },
+          [](const signed_type& x, const unsigned_type& y) {
+            assert(x < 0); // Enforced by metric_value constructor.
+            return false;
+          },
+          [](const unsigned_type& x, const signed_type& y) {
+            assert(y < 0); // Enforced by metric_value constructor.
+            return false;
+          },
+          [](const unsigned_type& x, const unsigned_type& y) {
+            return x == y;
+          },
+          [](const fp_type& x, const fp_type& y) {
+            if (x == -0.0 || x == 0.0)
+              return (y == -0.0 || y == 0.0);
+            return x == y;
+          },
+          [](const fp_type& x, const signed_type& y) {
+            assert(y < 0); // Enforced by metric_value constructor.
+
+            fp_type int_part;
+            if (std::fpclassify(std::modf(x, &int_part)) != FP_ZERO)
+              return false;
+
+            if (x < -0.0 && x >= std::numeric_limits<signed_type>::min())
+              return static_cast<signed_type>(x) == y;
+            return false;
+          },
+          [](const fp_type& x, const unsigned_type& y) {
+            if (y == 0) return std::fpclassify(x) == FP_ZERO;
+
+            fp_type int_part;
+            if (std::fpclassify(std::modf(x, &int_part)) != FP_ZERO)
+              return false;
+
+            if (x >= -0.0 && x <= std::numeric_limits<unsigned_type>::max())
+              return static_cast<unsigned_type>(x) == y;
+            return false;
+          },
+          [](const signed_type& x, const fp_type& y) {
+            assert(x < 0); // Enforced by metric_value constructor.
+
+            fp_type int_part;
+            if (std::fpclassify(std::modf(y, &int_part)) != FP_ZERO)
+              return false;
+
+            if (y < -0.0 && y >= std::numeric_limits<signed_type>::min())
+              return x == static_cast<signed_type>(y);
+            return false;
+          },
+          [](const unsigned_type& x, const fp_type& y) {
+            if (x == 0) return std::fpclassify(y) == FP_ZERO;
+
+            fp_type int_part;
+            if (std::fpclassify(std::modf(y, &int_part)) != FP_ZERO)
+              return false;
+
+            if (y >= -0.0 && y <= std::numeric_limits<unsigned_type>::max())
+              return x == static_cast<unsigned_type>(y);
+            return false;
+          }),
+      value_,
+      other.value_);
 }
 
 metric_value metric_value::parse(std::string_view s) {
@@ -1105,7 +1164,36 @@ namespace std {
 auto std::hash<monsoon::metric_value>::operator()(
     const monsoon::metric_value& v) const noexcept
 ->  size_t {
-  return std::hash<monsoon::metric_value::types>()(v.get());
+  using empty = monsoon::metric_value::empty;
+  using signed_type = monsoon::metric_value::signed_type;
+  using unsigned_type = monsoon::metric_value::unsigned_type;
+  using fp_type = monsoon::metric_value::fp_type;
+
+  return std::visit(
+      monsoon::overload(
+          [](empty v) {
+            return std::hash<empty>()(v);
+          },
+          [](bool v) {
+            return std::hash<bool>()(v);
+          },
+          [](fp_type v) {
+            if (v == -0.0) v = 0.0;
+            return std::hash<fp_type>()(v);
+          },
+          [](const signed_type& v) {
+            return std::hash<fp_type>()(v);
+          },
+          [](const unsigned_type& v) {
+            return std::hash<fp_type>()(v);
+          },
+          [](const std::string& v) {
+            return std::hash<std::string>()(v);
+          },
+          [](const monsoon::histogram& v) {
+            return std::hash<monsoon::histogram>()(v);
+          }),
+      v.get());
 }
 
 
