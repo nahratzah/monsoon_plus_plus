@@ -77,6 +77,40 @@ void by_match_clause::fixup_() noexcept {
   tag_names_.shrink_to_fit();
 }
 
+std::size_t by_match_clause::hash(const tags& x) const noexcept {
+  std::size_t cumulative = 0;
+
+  auto name = tag_names_.begin();
+  for (const auto& [first, second] : x) {
+    while (name != tag_names_.end() && *name < first)
+      ++name;
+
+    if (name == tag_names_.end() || *name != first) {
+      using first_type =
+          std::remove_const_t<std::remove_reference_t<decltype(first)>>;
+      using second_type =
+          std::remove_const_t<std::remove_reference_t<decltype(second)>>;
+      const size_t h = 23u * std::hash<first_type>()(first) +
+          std::hash<second_type>()(second);
+
+      cumulative ^= h;
+    }
+  }
+  return cumulative;
+}
+
+bool by_match_clause::eq_cmp(const tags& x, const tags& y) const noexcept {
+  for (const auto& name : tag_names_) {
+    const std::optional<metric_value> x_val = x[name];
+    const std::optional<metric_value> y_val = y[name];
+    assert(x_val.has_value() && y_val.has_value());
+
+    if (metric_value::before(*x_val, *y_val)
+        || metric_value::before(*y_val, *x_val)) return false;
+  }
+  return true;
+}
+
 
 without_match_clause::~without_match_clause() noexcept {}
 
@@ -131,6 +165,58 @@ tags without_match_clause::reduce(const tags& x, const tags& y) const {
         return tag_names_.count(std::get<0>(kv)) == 0;
       });
   return tags(std::move(result));
+}
+
+std::size_t without_match_clause::hash(const tags& x) const noexcept {
+  std::size_t cumulative = 0;
+
+  for (const auto& [first, second] : x) {
+    if (tag_names_.count(first) == 0) {
+      using first_type =
+          std::remove_const_t<std::remove_reference_t<decltype(first)>>;
+      using second_type =
+          std::remove_const_t<std::remove_reference_t<decltype(second)>>;
+      const size_t h = 23u * std::hash<first_type>()(first) +
+          std::hash<second_type>()(second);
+
+      cumulative ^= h;
+    }
+  }
+  return cumulative;
+}
+
+bool without_match_clause::eq_cmp(const tags& x, const tags& y) const noexcept {
+  auto x_i = x.begin(), y_i = y.begin();
+  const auto x_end = x.end(), y_end = y.end();
+
+  while (x_i != x_end && y_i != y_end) {
+    if (tag_names_.count(std::get<0>(*x_i)) != 0) {
+      ++x_i;
+      continue;
+    }
+    if (tag_names_.count(std::get<0>(*y_i)) != 0) {
+      ++y_i;
+      continue;
+    }
+
+    if (*x_i != *y_i) return false;
+  }
+
+  while (x_i != x_end) {
+    if (tag_names_.count(std::get<0>(*x_i)) != 0)
+      ++x_i;
+    else
+      return false;
+  }
+
+  while (y_i != y_end) {
+    if (tag_names_.count(std::get<0>(*y_i)) != 0)
+      ++y_i;
+    else
+      return false;
+  }
+
+  return true;
 }
 
 
