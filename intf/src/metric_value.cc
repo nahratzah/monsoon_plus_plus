@@ -982,19 +982,20 @@ auto operator>>(const metric_value& x, const metric_value& y) noexcept
 }
 
 auto operator<<(std::ostream& out, const metric_value& v) -> std::ostream& {
-  visit(
-      [&out](const auto& v) {
+  return visit(
+      [&out](const auto& v) -> std::ostream& {
         using v_type = std::decay_t<decltype(v)>;
 
         if constexpr(std::is_same_v<metric_value::empty, v_type>)
-          out << "(none)";
+          return out << "(none)";
         else if constexpr(std::is_same_v<bool, v_type>)
-          out << (v ? "true" : "false");
+          return out << (v ? "true" : "false");
+        else if constexpr(std::is_same_v<std::string, v_type>)
+          return out << quoted_string(v);
         else
-          out << v;
+          return out << v;
       },
       v.get());
-  return out;
 }
 
 auto equal(const metric_value& x, const metric_value& y) noexcept
@@ -1209,7 +1210,7 @@ auto to_string(const monsoon::metric_value& v) -> std::string {
         else if constexpr(std::is_same_v<bool, v_type>)
           return (v ? "true" : "false");
         else if constexpr(std::is_same_v<std::string, v_type>)
-          return v;
+          return quoted_string(v);
         else
           return to_string(v); // ADL
       },

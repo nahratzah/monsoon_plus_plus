@@ -3,6 +3,7 @@
 #include <string_view>
 #include <utility>
 #include <tuple>
+#include <sstream>
 #include "UnitTest++/UnitTest++.h"
 
 using namespace monsoon;
@@ -602,6 +603,58 @@ TEST(before) {
       metric_value::before(
           metric_value(histogram::parse("[0..1=-1]")),
           metric_value(histogram::parse("[]"))));
+}
+
+TEST(to_string) {
+  CHECK_EQUAL("(none)", to_string(metric_value()));
+
+  CHECK_EQUAL("false", to_string(metric_value(false)));
+  CHECK_EQUAL("true", to_string(metric_value(true)));
+
+  CHECK_EQUAL("0", to_string(metric_value(0)));
+  CHECK_EQUAL("17", to_string(metric_value(17)));
+
+  CHECK_EQUAL("-17", to_string(metric_value(-17)));
+
+  CHECK_EQUAL(std::to_string(double(0.0)), to_string(metric_value(0.0)));
+  CHECK_EQUAL(std::to_string(double(-0.0)), to_string(metric_value(-0.0)));
+  CHECK_EQUAL(std::to_string(double(1.0)), to_string(metric_value(1.0)));
+  CHECK_EQUAL(std::to_string(double(1e100)), to_string(metric_value(1e100)));
+
+  CHECK_EQUAL(u8R"("foobar")", to_string(metric_value(u8"foobar")));
+  CHECK_EQUAL(u8R"("foo\u1017bar")", to_string(metric_value(u8"foo\u1017bar")));
+
+  CHECK_EQUAL(
+      to_string(histogram::parse("[0..1=1]")),
+      to_string(metric_value(histogram::parse("[0..1=1]"))));
+}
+
+TEST(to_ostream) {
+  const auto to_ostream_ = [](const auto& v) {
+    return (std::ostringstream() << v).str();
+  };
+
+  CHECK_EQUAL("(none)", to_ostream_(metric_value()));
+
+  CHECK_EQUAL("false", to_ostream_(metric_value(false)));
+  CHECK_EQUAL("true", to_ostream_(metric_value(true)));
+
+  CHECK_EQUAL("0", to_ostream_(metric_value(0)));
+  CHECK_EQUAL("17", to_ostream_(metric_value(17)));
+
+  CHECK_EQUAL("-17", to_ostream_(metric_value(-17)));
+
+  CHECK_EQUAL(to_ostream_(double(0.0)), to_ostream_(metric_value(0.0)));
+  CHECK_EQUAL(to_ostream_(double(-0.0)), to_ostream_(metric_value(-0.0)));
+  CHECK_EQUAL(to_ostream_(double(1.0)), to_ostream_(metric_value(1.0)));
+  CHECK_EQUAL(to_ostream_(double(1e100)), to_ostream_(metric_value(1e100)));
+
+  CHECK_EQUAL(u8R"("foobar")", to_ostream_(metric_value(u8"foobar")));
+  CHECK_EQUAL(u8R"("foo\u1017bar")", to_ostream_(metric_value(u8"foo\u1017bar")));
+
+  CHECK_EQUAL(
+      to_ostream_(histogram::parse("[0..1=1]")),
+      to_ostream_(metric_value(histogram::parse("[0..1=1]"))));
 }
 
 int main() {
