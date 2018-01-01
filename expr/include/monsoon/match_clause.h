@@ -184,7 +184,7 @@ class monsoon_expr_export_ without_match_clause
   std::unordered_set<std::string> tag_names_;
 };
 
-class default_match_clause
+class monsoon_expr_export_ default_match_clause
 : public match_clause
 {
  public:
