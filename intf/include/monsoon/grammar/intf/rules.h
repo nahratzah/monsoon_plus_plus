@@ -78,12 +78,10 @@ struct append_char {
   template<typename Ctx>
   void operator()(Ctx& ctx) const {
     const auto& attr = x3::_attr(ctx);
-    if (attr < 0x20 || attr > 0x7f) {
-      x3::_pass(ctx) = false;
-      return;
-    }
 
-    x3::_val(ctx) += attr;
+    using str_iter = std::back_insert_iterator<std::string>;
+    auto iter = boost::utf8_output_iterator<str_iter>(str_iter(x3::_val(ctx)));
+    *iter++ = attr;
   }
 };
 
@@ -117,14 +115,14 @@ inline const auto string_escape =
 inline const auto string_def = x3::lexeme[
     '"' >>
         *( '\\' >> string_escape
-         | (~x3::char_(R"(\")"))[append_char()]
+         | (x3::standard_wide::char_(wchar_t(0x20), wchar_t(MAX_UNICODE_CODEPOINT)) - x3::char_(R"(\")"))[append_char()]
          ) >>
     '"'
     ];
 inline const auto quoted_identifier_def = x3::lexeme[
     '\'' >>
         *( '\\' >> string_escape
-         | (~x3::char_(R"(\')"))[append_char()]
+         | (x3::standard_wide::char_(wchar_t(0x20), wchar_t(MAX_UNICODE_CODEPOINT)) - x3::char_(R"(\')"))[append_char()]
          ) >>
     '\''
     ];
