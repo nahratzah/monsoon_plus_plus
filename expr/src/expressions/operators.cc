@@ -180,7 +180,7 @@ bool binop_t::is_vector() const noexcept {
 
 auto binop_t::operator()(const metric_source& src,
     const time_range& tr, time_point::duration slack,
-    const std::shared_ptr<const expressions::match_clause>& out_mc) const
+    const std::shared_ptr<const match_clause>& out_mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   return std::visit(
       [this, &out_mc](auto&&... pipes)

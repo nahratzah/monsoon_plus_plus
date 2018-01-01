@@ -1,4 +1,4 @@
-#include <monsoon/expressions/match_clause.h>
+#include <monsoon/match_clause.h>
 #include <algorithm>
 #include <cassert>
 #include <iterator>
@@ -6,7 +6,6 @@
 #include <monsoon/overload.h>
 
 namespace monsoon {
-namespace expressions {
 
 
 match_clause::~match_clause() noexcept {}
@@ -246,4 +245,4 @@ bool default_match_clause::eq_cmp(const tags& x, const tags& y)
 }
 
 
-}} /* namespace monsoon::expressions */
+} /* namespace monsoon */

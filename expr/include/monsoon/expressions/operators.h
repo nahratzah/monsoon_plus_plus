@@ -5,7 +5,7 @@
 ///\ingroup expr
 
 #include <monsoon/expression.h>
-#include <monsoon/expressions/match_clause.h>
+#include <monsoon/match_clause.h>
 #include <monsoon/expr_export_.h>
 #include <memory>
 

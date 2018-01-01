@@ -258,8 +258,8 @@ auto vector_accumulator::interpolate_(time_point tp) const
 -> std::variant<
     expression::factual_vector,
     std::reference_wrapper<const expression::factual_vector>> {
-  using match_clause_hash = class expressions::match_clause::hash;
-  using match_clause_equal_to = expressions::match_clause::equal_to;
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
 
   assert(!factual_.empty());
   assert(tp <= factual_.back().first);

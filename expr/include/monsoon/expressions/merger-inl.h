@@ -64,8 +64,8 @@ inline auto vector_accumulator::tp_proxy::value() const
 -> std::variant<
     expression::factual_vector,
     std::reference_wrapper<const expression::factual_vector>> {
-  using match_clause_hash = class expressions::match_clause::hash;
-  using match_clause_equal_to = expressions::match_clause::equal_to;
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
 
   if (is_speculative()) {
     // XXX create speculative interpolation instead of empty map
@@ -183,7 +183,7 @@ inline auto left_tag_combiner_::operator()(tags&& x, const tags&)
 
 template<typename Fn>
 recursive_apply<Fn>::recursive_apply(Fn fn,
-    std::shared_ptr<const expressions::match_clause> mc)
+    std::shared_ptr<const match_clause> mc)
 : fn_(std::move(fn)),
   mc_(std::move(mc))
 {}
@@ -330,7 +330,7 @@ void recursive_apply<Fn>::recursive_apply_(
 
 template<typename Fn>
 inline auto make_recursive_apply(Fn&& fn,
-    std::shared_ptr<const expressions::match_clause> mc)
+    std::shared_ptr<const match_clause> mc)
 -> recursive_apply<std::decay_t<Fn>> {
   using result_type = recursive_apply<std::decay_t<Fn>>;
   return result_type(
@@ -428,7 +428,7 @@ template<typename Fn, typename SpecInsIter, std::size_t N>
 merger_acceptor<Fn, SpecInsIter, false, N>::merger_acceptor(
     Fn& fn,
     SpecInsIter speculative,
-    const std::shared_ptr<const expressions::match_clause>& out_mc)
+    const std::shared_ptr<const match_clause>& out_mc)
 : merger_acceptor_data<false>(out_mc),
   fn_(fn),
   speculative(std::move(speculative))
@@ -457,7 +457,7 @@ template<typename Fn, typename SpecInsIter, std::size_t N>
 merger_acceptor<Fn, SpecInsIter, true, N>::merger_acceptor(
     Fn& fn,
     SpecInsIter speculative,
-    const std::shared_ptr<const expressions::match_clause>& out_mc)
+    const std::shared_ptr<const match_clause>& out_mc)
 : merger_acceptor_data<true>(out_mc),
   fn_(fn),
   speculative(std::move(speculative))
@@ -469,8 +469,8 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
     time_point tp,
     const tags& tag_set,
     const std::array<metric_value, N>& values) {
-  using match_clause_hash = class expressions::match_clause::hash;
-  using match_clause_equal_to = expressions::match_clause::equal_to;
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
 
   if (is_factual) {
     if (!this->factual.has_value()) {

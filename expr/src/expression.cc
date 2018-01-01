@@ -28,7 +28,7 @@ auto expression::operator()(const metric_source& ms, const time_range& tr,
     time_point::duration slack) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   return (*this)(ms, tr, slack,
-      std::make_shared<expressions::default_match_clause>());
+      std::make_shared<default_match_clause>());
 }
 
 

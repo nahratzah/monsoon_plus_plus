@@ -208,7 +208,7 @@ class monsoon_expr_local_ selector_with_tags
 
   auto operator()(const metric_source&, const time_range&,
       time_point::duration,
-      const std::shared_ptr<const expressions::match_clause>&) const
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -236,7 +236,7 @@ class monsoon_expr_local_ selector_without_tags
 
   auto operator()(const metric_source&, const time_range&,
       time_point::duration,
-      const std::shared_ptr<const expressions::match_clause>&) const
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -358,7 +358,7 @@ auto selector_with_tags::operator()(
     const metric_source& source,
     const time_range& tr,
     time_point::duration slack,
-    const std::shared_ptr<const expressions::match_clause>& mc) const
+    const std::shared_ptr<const match_clause>& mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 
@@ -395,7 +395,7 @@ auto selector_without_tags::operator()(
     const metric_source& source,
     const time_range& tr,
     time_point::duration slack,
-    const std::shared_ptr<const expressions::match_clause>& mc) const
+    const std::shared_ptr<const match_clause>& mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 

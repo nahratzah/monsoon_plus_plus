@@ -8,7 +8,7 @@ add_library (monsoon_expr
   src/expressions/selector.cc
   src/expressions/constant.cc
   src/expressions/operators.cc
-  src/expressions/match_clause.cc
+  src/match_clause.cc
   src/grammar/expression/ast.cc
 )
 target_link_libraries (monsoon_expr ${extra_libs})
@@ -26,6 +26,7 @@ install (TARGETS monsoon_expr DESTINATION lib)
 install (FILES
   include/monsoon/expression.h
   include/monsoon/expression-inl.h
+  include/monsoon/match_clause.h
   DESTINATION include/monsoon)
 install (FILES
   include/monsoon/expressions/selector.h
@@ -33,7 +34,6 @@ install (FILES
   include/monsoon/expressions/operators.h
   include/monsoon/expressions/merger.h
   include/monsoon/expressions/merger-inl.h
-  include/monsoon/expressions/match_clause.h
   DESTINATION include/monsoon/expressions)
 install (FILES
   include/monsoon/grammar/expression/ast.h

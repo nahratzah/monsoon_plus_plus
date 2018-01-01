@@ -1,5 +1,5 @@
-#ifndef MONSOON_EXPRESSIONS_MATCH_CLAUSE_H
-#define MONSOON_EXPRESSIONS_MATCH_CLAUSE_H
+#ifndef MONSOON_MATCH_CLAUSE_H
+#define MONSOON_MATCH_CLAUSE_H
 
 ///\file
 ///\brief A match clause for vector operations.
@@ -15,7 +15,6 @@
 #include <cassert>
 
 namespace monsoon {
-namespace expressions {
 
 
 enum class match_clause_keep {
@@ -204,6 +203,6 @@ class default_match_clause
 };
 
 
-}} /* namespace monsoon::expressions */
+} /* namespace monsoon */
 
-#endif /* MONSOON_EXPRESSIONS_MATCH_CLAUSE_H */
+#endif /* MONSOON_MATCH_CLAUSE_H */

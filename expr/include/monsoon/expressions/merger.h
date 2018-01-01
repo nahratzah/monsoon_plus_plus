@@ -10,7 +10,7 @@
 #include <monsoon/time_point.h>
 #include <monsoon/tags.h>
 #include <monsoon/metric_value.h>
-#include <monsoon/expressions/match_clause.h>
+#include <monsoon/match_clause.h>
 #include <deque>
 #include <map>
 #include <optional>
@@ -301,7 +301,7 @@ class recursive_apply {
 
  public:
   explicit recursive_apply(Fn fn,
-      std::shared_ptr<const expressions::match_clause> mc);
+      std::shared_ptr<const match_clause> mc);
 
   template<typename... Values>
   void operator()(Values&&... values);
@@ -375,12 +375,12 @@ class recursive_apply {
       Tail&&... tail);
 
   Fn fn_;
-  std::shared_ptr<const expressions::match_clause> mc_;
+  std::shared_ptr<const match_clause> mc_;
 };
 
 template<typename Fn, typename TagEqual, typename TagCombine>
 auto make_recursive_apply(Fn&& fn,
-    std::shared_ptr<const expressions::match_clause> mc)
+    std::shared_ptr<const match_clause> mc)
 -> recursive_apply<std::decay_t<Fn>>;
 
 
@@ -393,7 +393,7 @@ auto make_recursive_apply(Fn&& fn,
  */
 template<std::size_t CbIdx>
 struct merger_invocation {
-  merger_invocation(const std::shared_ptr<const expressions::match_clause>& mc)
+  merger_invocation(const std::shared_ptr<const match_clause>& mc)
   : mc_(mc)
   {}
 
@@ -441,7 +441,7 @@ struct merger_invocation {
           const Value&,
           const typename Managed::accumulator_type&>;
 
-  const std::shared_ptr<const expressions::match_clause>& mc_;
+  const std::shared_ptr<const match_clause>& mc_;
 };
 
 
@@ -469,7 +469,7 @@ class merger_acceptor_data {
 
  protected:
   merger_acceptor_data(
-      const std::shared_ptr<const expressions::match_clause>& out_mc)
+      const std::shared_ptr<const match_clause>& out_mc)
   : out_mc(out_mc)
   {}
   merger_acceptor_data(const merger_acceptor_data&) = default;
@@ -483,7 +483,7 @@ class merger_acceptor_data {
   using factual_entry = std::pair<time_point, factual_type>;
 
   std::optional<factual_entry> factual;
-  const std::shared_ptr<const expressions::match_clause>& out_mc;
+  const std::shared_ptr<const match_clause>& out_mc;
 };
 
 
@@ -495,7 +495,7 @@ class merger_acceptor<Fn, SpecInsIter, false, N>
 {
  public:
   merger_acceptor(Fn& fn, SpecInsIter speculative,
-      const std::shared_ptr<const expressions::match_clause>& out_mc);
+      const std::shared_ptr<const match_clause>& out_mc);
 
   void operator()(
       bool is_factual,
@@ -513,7 +513,7 @@ class merger_acceptor<Fn, SpecInsIter, true, N>
 {
  public:
   merger_acceptor(Fn& fn, SpecInsIter speculative,
-      const std::shared_ptr<const expressions::match_clause>& out_mc);
+      const std::shared_ptr<const match_clause>& out_mc);
 
   void operator()(
       bool is_factual,
@@ -681,7 +681,7 @@ class merger final
   mutable std::condition_variable read_avail_;
   std::once_flag install_guard_;
   std::unique_ptr<objpipe::detail::continuation_intf, objpipe::detail::writer_release> continuation_ptr_;
-  const std::shared_ptr<const expressions::match_clause> mc_, out_mc_;
+  const std::shared_ptr<const match_clause> mc_, out_mc_;
 };
 
 template<typename Fn, typename... ObjPipe>
