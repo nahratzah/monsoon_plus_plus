@@ -29,7 +29,8 @@ class monsoon_expr_local_ unop_t final
   ~unop_t() noexcept override;
 
   auto operator()(const metric_source&,
-      const time_range&, time_point::duration) const
+      const time_range&, time_point::duration,
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -62,7 +63,8 @@ class monsoon_expr_local_ binop_t final
   ~binop_t() noexcept override;
 
   auto operator()(const metric_source&,
-      const time_range&, time_point::duration) const
+      const time_range&, time_point::duration,
+      const std::shared_ptr<const match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -92,7 +94,8 @@ unop_t::~unop_t() noexcept {}
 
 auto unop_t::operator()(
     const metric_source& src,
-    const time_range& tr, time_point::duration slack) const
+    const time_range& tr, time_point::duration slack,
+    const std::shared_ptr<const match_clause>& out_mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   using namespace std::placeholders;
 
@@ -108,7 +111,7 @@ auto unop_t::operator()(
             return std::move(s)
                 .transform_copy(std::bind(&unop_t::apply_vector_, _1, fn_));
           }),
-      std::invoke(*nested_, src, tr, std::move(slack)));
+      std::invoke(*nested_, src, tr, std::move(slack), out_mc));
 }
 
 bool unop_t::is_scalar() const noexcept {
@@ -176,17 +179,20 @@ bool binop_t::is_vector() const noexcept {
 }
 
 auto binop_t::operator()(const metric_source& src,
-    const time_range& tr, time_point::duration slack) const
+    const time_range& tr, time_point::duration slack,
+    const std::shared_ptr<const expressions::match_clause>& out_mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   return std::visit(
-      [this](auto&&... pipes) -> std::variant<scalar_objpipe, vector_objpipe> {
+      [this, &out_mc](auto&&... pipes)
+      -> std::variant<scalar_objpipe, vector_objpipe> {
         return make_merger(
             fn_,
             mc_,
+            out_mc,
             std::forward<decltype(pipes)>(pipes)...);
       },
-      (*x_)(src, tr, slack),
-      (*y_)(src, tr, slack));
+      (*x_)(src, tr, slack, mc_),
+      (*y_)(src, tr, slack, mc_));
 }
 
 void binop_t::do_ostream(std::ostream& out) const {

@@ -12,6 +12,7 @@
 #include <monsoon/time_point.h>
 #include <monsoon/time_range.h>
 #include <monsoon/objpipe/reader.h>
+#include <monsoon/expressions/match_clause.h>
 #include <variant>
 #include <memory>
 #include <iosfwd>
@@ -111,7 +112,10 @@ class monsoon_expr_export_ expression {
    * \todo Supply an implementation of hash and equal functors, that uses a
    * tag name set for their computation. Thus allowing fast merging of by-clauses.
    */
-  using factual_vector = std::unordered_map<tags, metric_value>;
+  using factual_vector = std::unordered_map<
+      tags, metric_value,
+      class expressions::match_clause::hash,
+      expressions::match_clause::equal_to>;
   /**
    * \brief Emitted scalar values.
    *
@@ -189,9 +193,15 @@ class monsoon_expr_export_ expression {
 
   /**
    * \brief Evaluate an expression using a \ref metric_source.
+   * \param ms A metric source on which the evaluation is to take place.
+   * \param tr A time range over which the evaluation is to take place.
+   * \param slack Slack in the time range, used for interpolation and filling.
+   * \param mc A match clause used in the emitted vector objpipe.
+   * \note \p mc is ignored if the expression is a scalar expression.
    */
-  virtual auto operator()(const metric_source&, const time_range&,
-      time_point::duration) const
+  virtual auto operator()(const metric_source& ms, const time_range& tr,
+      time_point::duration slack,
+      const std::shared_ptr<const expressions::match_clause>& mc) const
       -> std::variant<scalar_objpipe, vector_objpipe> = 0;
 
   /**

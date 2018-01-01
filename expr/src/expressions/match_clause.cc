@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cassert>
 #include <iterator>
+#include <functional>
 #include <monsoon/overload.h>
 
 namespace monsoon {
@@ -147,6 +148,15 @@ bool default_match_clause::less_cmp(const tags& x, const tags& y)
 tags default_match_clause::reduce(const tags& x, const tags& y) const {
   assert(x == y);
   return x;
+}
+
+std::size_t default_match_clause::hash(const tags& x) const noexcept {
+  return std::hash<tags>()(x);
+}
+
+bool default_match_clause::eq_cmp(const tags& x, const tags& y)
+    const noexcept {
+  return std::equal_to<tags>()(x, y);
 }
 
 

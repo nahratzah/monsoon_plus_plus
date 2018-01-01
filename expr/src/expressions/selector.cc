@@ -10,8 +10,10 @@ namespace expressions {
 
 
 monsoon_expr_local_
-auto selector_accept_wrapper_(const metric_source::emit_type&)
-    -> expression::vector_emit_type;
+auto selector_accept_wrapper_(
+    const std::shared_ptr<const match_clause>& mc,
+    const metric_source::emit_type&)
+-> expression::vector_emit_type;
 
 
 template<typename MatchIter, typename ValIter>
@@ -205,7 +207,8 @@ class monsoon_expr_local_ selector_with_tags
   ~selector_with_tags() noexcept override;
 
   auto operator()(const metric_source&, const time_range&,
-      time_point::duration) const
+      time_point::duration,
+      const std::shared_ptr<const expressions::match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -232,7 +235,8 @@ class monsoon_expr_local_ selector_without_tags
   ~selector_without_tags() noexcept override;
 
   auto operator()(const metric_source&, const time_range&,
-      time_point::duration) const
+      time_point::duration,
+      const std::shared_ptr<const expressions::match_clause>&) const
       -> std::variant<scalar_objpipe, vector_objpipe> override;
 
   bool is_scalar() const noexcept override;
@@ -353,8 +357,11 @@ selector_with_tags::~selector_with_tags() noexcept {}
 auto selector_with_tags::operator()(
     const metric_source& source,
     const time_range& tr,
-    time_point::duration slack) const
+    time_point::duration slack,
+    const std::shared_ptr<const expressions::match_clause>& mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
+  using namespace std::placeholders;
+
   return source
       .emit(
           tr,
@@ -366,7 +373,7 @@ auto selector_with_tags::operator()(
             return metric_(mname);
           },
           slack)
-      .transform(&selector_accept_wrapper_);
+      .transform(std::bind(&selector_accept_wrapper_, mc, _1));
 }
 
 bool selector_with_tags::is_scalar() const noexcept {
@@ -387,8 +394,11 @@ selector_without_tags::~selector_without_tags() noexcept {}
 auto selector_without_tags::operator()(
     const metric_source& source,
     const time_range& tr,
-    time_point::duration slack) const
+    time_point::duration slack,
+    const std::shared_ptr<const expressions::match_clause>& mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
+  using namespace std::placeholders;
+
   return source
       .emit(
           tr,
@@ -400,7 +410,7 @@ auto selector_without_tags::operator()(
             return metric_(mname);
           },
           slack)
-      .transform(&selector_accept_wrapper_);
+      .transform(std::bind(&selector_accept_wrapper_, mc, _1));
 }
 
 bool selector_without_tags::is_scalar() const noexcept {
@@ -416,8 +426,13 @@ void selector_without_tags::do_ostream(std::ostream& out) const {
 }
 
 
-auto selector_accept_wrapper_(const metric_source::emit_type& src)
+auto selector_accept_wrapper_(
+    const std::shared_ptr<const match_clause>& mc,
+    const metric_source::emit_type& src)
 -> expression::vector_emit_type {
+  using match_clause_hash = class match_clause::hash;
+  using match_clause_equal_to = match_clause::equal_to;
+
   if (src.index() == 0) {
     const auto& speculative = std::get<0>(src);
     const time_point& tp = std::get<0>(speculative);
@@ -436,7 +451,10 @@ auto selector_accept_wrapper_(const metric_source::emit_type& src)
     const auto& map = std::get<1>(factual);
 
     // Fill in the map of the factual result.
-    expression::factual_vector out_map;
+    expression::factual_vector out_map = expression::factual_vector(
+        8u,
+        match_clause_hash(mc),
+        match_clause_equal_to(mc));
     std::transform(map.begin(), map.end(),
         std::inserter(out_map, out_map.end()),
         [](const auto& metric) {

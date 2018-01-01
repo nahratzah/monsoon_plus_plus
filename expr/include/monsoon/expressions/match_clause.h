@@ -10,7 +10,9 @@
 #include <string>
 #include <vector>
 #include <unordered_set>
+#include <utility>
 #include <type_traits>
+#include <cassert>
 
 namespace monsoon {
 namespace expressions {
@@ -60,6 +62,67 @@ class monsoon_expr_export_ match_clause {
    * \return A merged tag set, constructed from the two input tag sets.
    */
   virtual tags reduce(const tags& x, const tags& y) const = 0;
+
+  /**
+   * \brief Computes a hash value for tag set.
+   * \return A hash value for the tag set.
+   */
+  virtual std::size_t hash(const tags& x) const noexcept = 0;
+
+  /**
+   * \brief Compare two tag sets for equality.
+   * \return True if the tag sets are equal,
+   * taking into account the configuration of the match clause.
+   */
+  virtual bool eq_cmp(const tags& x, const tags& y) const noexcept = 0;
+
+  class hash {
+   public:
+    hash(std::shared_ptr<const match_clause> mc) noexcept
+    : mc(std::move(mc))
+    {
+      assert(this->mc != nullptr);
+    }
+
+    std::size_t operator()(const tags& x) const noexcept {
+      assert(this->mc != nullptr);
+      return mc->hash(x);
+    }
+
+    bool operator==(const class hash& o) const noexcept {
+      return mc == o.mc;
+    }
+
+    bool operator!=(const class hash& o) const noexcept {
+      return !(*this == o);
+    }
+
+    std::shared_ptr<const match_clause> mc;
+  };
+
+  class equal_to {
+   public:
+    equal_to(std::shared_ptr<const match_clause> mc) noexcept
+    : mc(std::move(mc))
+    {
+      assert(this->mc != nullptr);
+    }
+
+    bool operator()(const tags& x, const tags& y) const noexcept {
+      assert(this->mc != nullptr);
+      return mc->eq_cmp(x, y);
+    }
+
+    bool operator==(const equal_to& o) const noexcept {
+      return mc == o.mc;
+    }
+
+    bool operator!=(const equal_to& o) const noexcept {
+      return !(*this == o);
+    }
+
+    std::shared_ptr<const match_clause> mc;
+  };
 };
 
 class monsoon_expr_export_ by_match_clause
@@ -84,6 +147,10 @@ class monsoon_expr_export_ by_match_clause
   bool less_cmp(const tags& x, const tags& y) const noexcept override;
   ///\copydoc match_clause::reduce(const tags&, const tags&);
   tags reduce(const tags& x, const tags& y) const override;
+  ///\copydoc match_clause::hash(const tags&);
+  virtual std::size_t hash(const tags& x) const noexcept override;
+  ///\copydoc match_clause::eq_cmp(const tags&, const tags&);
+  virtual bool eq_cmp(const tags& x, const tags& y) const noexcept override;
 
  private:
   void fixup_() noexcept;
@@ -109,6 +176,10 @@ class monsoon_expr_export_ without_match_clause
   bool less_cmp(const tags& x, const tags& y) const noexcept override;
   ///\copydoc match_clause::reduce(const tags&, const tags&);
   tags reduce(const tags& x, const tags& y) const override;
+  ///\copydoc match_clause::hash(const tags&);
+  virtual std::size_t hash(const tags& x) const noexcept override;
+  ///\copydoc match_clause::eq_cmp(const tags&, const tags&);
+  virtual bool eq_cmp(const tags& x, const tags& y) const noexcept override;
 
  private:
   std::unordered_set<std::string> tag_names_;
@@ -126,6 +197,10 @@ class default_match_clause
   bool less_cmp(const tags& x, const tags& y) const noexcept override;
   ///\copydoc match_clause::reduce(const tags&, const tags&);
   tags reduce(const tags& x, const tags& y) const override;
+  ///\copydoc match_clause::hash(const tags&);
+  virtual std::size_t hash(const tags& x) const noexcept override;
+  ///\copydoc match_clause::eq_cmp(const tags&, const tags&);
+  virtual bool eq_cmp(const tags& x, const tags& y) const noexcept override;
 };
 
 
