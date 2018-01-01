@@ -58,6 +58,7 @@ struct muldiv_sym
     add("%", ast::muldiv_enum::mod);
   }
 };
+inline const struct muldiv_sym muldiv_sym;
 
 struct addsub_sym
 : x3::symbols<ast::addsub_enum>
@@ -67,6 +68,7 @@ struct addsub_sym
     add("-", ast::addsub_enum::sub);
   }
 };
+inline const struct addsub_sym addsub_sym;
 
 struct shift_sym
 : x3::symbols<ast::shift_enum>
@@ -76,6 +78,7 @@ struct shift_sym
     add(">>", ast::shift_enum::right);
   }
 };
+inline const struct shift_sym shift_sym;
 
 struct compare_sym
 : x3::symbols<ast::compare_enum>
@@ -87,6 +90,7 @@ struct compare_sym
     add(">", ast::compare_enum::gt);
   }
 };
+inline const struct compare_sym compare_sym;
 
 struct equality_sym
 : x3::symbols<ast::equality_enum>
@@ -96,6 +100,7 @@ struct equality_sym
     add("!=", ast::equality_enum::ne);
   }
 };
+inline const struct equality_sym equality_sym;
 
 struct tag_matcher_comparison_sym
 : x3::symbols<expressions::tag_matcher::comparison>
@@ -109,6 +114,7 @@ struct tag_matcher_comparison_sym
     add(">=", expressions::tag_matcher::ge);
   }
 };
+inline const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
 
 
 inline const auto constant_def = value;
@@ -120,7 +126,7 @@ inline const auto path_matcher_def =
     ) % '.';
 inline const auto tag_matcher_def =
     x3::lit('{') >>
-    -(( (identifier | quoted_identifier) >> tag_matcher_comparison_sym() >>
+    -(( (identifier | quoted_identifier) >> tag_matcher_comparison_sym >>
         tag_value
       | x3::lit('!') >> (identifier | quoted_identifier) >>
         x3::attr(expressions::tag_matcher::absence_match())
@@ -144,11 +150,11 @@ inline const auto unary_def =
     | numeric_negate;
 inline const auto logical_negate_def = x3::lit('!') >> unary;
 inline const auto numeric_negate_def = x3::lit('-') >> unary;
-inline const auto muldiv_def = unary >> *(muldiv_sym() >> unary);
-inline const auto addsub_def = muldiv >> *(addsub_sym() >> muldiv);
-inline const auto shift_def = addsub >> *(shift_sym() >> addsub);
-inline const auto compare_def = shift >> *(compare_sym() >> shift);
-inline const auto equality_def = compare >> *(equality_sym() >> compare);
+inline const auto muldiv_def = unary >> *(muldiv_sym >> unary);
+inline const auto addsub_def = muldiv >> *(addsub_sym >> muldiv);
+inline const auto shift_def = addsub >> *(shift_sym >> addsub);
+inline const auto compare_def = shift >> *(compare_sym >> shift);
+inline const auto equality_def = compare >> *(equality_sym >> compare);
 inline const auto logical_and_def = equality % "&&";
 inline const auto logical_or_def = logical_and % "||";
 BOOST_SPIRIT_DEFINE(
