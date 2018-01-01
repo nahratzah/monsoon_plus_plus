@@ -203,6 +203,15 @@ class monsoon_expr_export_ expression {
       time_point::duration slack,
       const std::shared_ptr<const expressions::match_clause>& mc) const
       -> std::variant<scalar_objpipe, vector_objpipe> = 0;
+  /**
+   * \brief Evaluate an expression using a \ref metric_source.
+   * \param ms A metric source on which the evaluation is to take place.
+   * \param tr A time range over which the evaluation is to take place.
+   * \param slack Slack in the time range, used for interpolation and filling.
+   */
+  auto operator()(const metric_source& ms, const time_range& tr,
+      time_point::duration slack) const
+      -> std::variant<scalar_objpipe, vector_objpipe>;
 
   /**
    * \brief Test if the expression is a scalar expression.
