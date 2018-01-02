@@ -7,9 +7,10 @@
 #include <monsoon/metric_value.h>
 #include <cstdint>
 #include <iostream>
+#include <memory>
 
 auto open_dir(std::string dir)
--> std::shared_ptr<monsoon::collect_history> {
+-> std::unique_ptr<monsoon::collect_history> {
   return std::make_unique<monsoon::history::dirhistory>(dir, false);
 }
 
