@@ -18,7 +18,7 @@ namespace x3 = boost::spirit::x3;
 inline const auto constant =
     x3::rule<class constant, ast::constant_expr>("constant");
 inline const auto path_matcher =
-    x3::rule<class path_matcher, ast::path_matcher_expr>("path selector");
+    x3::rule<class path_matcher_, ast::path_matcher_expr>("path selector");
 inline const auto tag_matcher =
     x3::rule<class tag_matcher, ast::tag_matcher_expr>("tag selector");
 inline const auto selector =
@@ -119,8 +119,8 @@ inline const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
 
 inline const auto constant_def = value;
 inline const auto path_matcher_def =
-    ( x3::lit("**") >> x3::attr(expressions::path_matcher::double_wildcard())
-    | x3::lit('*') >> x3::attr(expressions::path_matcher::wildcard())
+    ( x3::lit("**") >> x3::attr(path_matcher::double_wildcard())
+    | x3::lit('*') >> x3::attr(path_matcher::wildcard())
     | quoted_identifier
     | identifier
     ) % '.';

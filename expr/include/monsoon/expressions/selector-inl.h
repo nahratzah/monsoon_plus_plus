@@ -5,23 +5,6 @@ namespace monsoon {
 namespace expressions {
 
 
-inline auto path_matcher::begin() const -> const_iterator {
-  return matcher_.begin();
-}
-
-inline auto path_matcher::end() const -> const_iterator {
-  return matcher_.end();
-}
-
-inline auto path_matcher::cbegin() const -> const_iterator {
-  return matcher_.cbegin();
-}
-
-inline auto path_matcher::cend() const -> const_iterator {
-  return matcher_.cend();
-}
-
-
 inline auto tag_matcher::begin() const -> const_iterator {
   return matcher_.begin();
 }

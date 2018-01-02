@@ -34,15 +34,15 @@ constant_expr::operator expression_ptr() const {
   return expressions::constant(v);
 }
 
-path_matcher_expr::operator expressions::path_matcher() const {
-  expressions::path_matcher result;
+path_matcher_expr::operator path_matcher() const {
+  path_matcher result;
   for (const auto& i : *this) {
     std::visit(
         overload(
-            [&result](const expressions::path_matcher::wildcard&) {
+            [&result](const path_matcher::wildcard&) {
               result.push_back_wildcard();
             },
-            [&result](const expressions::path_matcher::double_wildcard&) {
+            [&result](const path_matcher::double_wildcard&) {
               result.push_back_double_wildcard();
             },
             [&result](std::string_view s) {
