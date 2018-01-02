@@ -3,9 +3,9 @@
 
 ///\file
 ///\brief A tag matcher.
-///\ingroup expr
+///\ingroup intf
 
-#include <monsoon/expr_export_.h>
+#include <monsoon/intf_export_.h>
 #include <monsoon/tags.h>
 #include <monsoon/metric_value.h>
 #include <iosfwd>
@@ -19,11 +19,11 @@ namespace monsoon {
 
 /**
  * \brief A predicate on tags.
- * \ingroup expr
+ * \ingroup intf
  *
  * Test if a \ref monsoon::tags "tag set" matches.
  */
-class monsoon_expr_export_ tag_matcher {
+class monsoon_intf_export_ tag_matcher {
   friend std::ostream& operator<<(std::ostream&, const tag_matcher&);
 
  public:
@@ -137,7 +137,7 @@ class monsoon_expr_export_ tag_matcher {
   matcher_map matcher_;
 };
 
-///\ingroup expr_io
+///\ingroup intf_io
 ///@{
 /**
  * \brief Stream matcher textual representation to stream.
@@ -146,7 +146,7 @@ class monsoon_expr_export_ tag_matcher {
  * \param m The matcher for which to create a textual representation.
  * \return \p out
  */
-monsoon_expr_export_
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream& out, const tag_matcher& m);
 /**
  * \brief Yield textual representation of the matcher.
@@ -154,7 +154,7 @@ std::ostream& operator<<(std::ostream& out, const tag_matcher& m);
  * \param m The matcher for which to create a textual representation.
  * \return Textual representation of \p m
  */
-monsoon_expr_export_
+monsoon_intf_export_
 std::string to_string(const tag_matcher& m);
 ///@}
 

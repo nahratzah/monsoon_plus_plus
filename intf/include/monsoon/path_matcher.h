@@ -3,9 +3,9 @@
 
 ///\file
 ///\brief A path matcher.
-///\ingroup expr
+///\ingroup intf
 
-#include <monsoon/expr_export_.h>
+#include <monsoon/intf_export_.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/metric_name.h>
 #include <iosfwd>
@@ -18,12 +18,12 @@ namespace monsoon {
 
 /**
  * \brief A predicate on paths.
- * \ingroup expr
+ * \ingroup intf
  *
  * Test if a \ref monsoon::simple_group "simple_group" or
  * \ref monsoon::metric_name "metric_name" matches.
  */
-class monsoon_expr_export_ path_matcher {
+class monsoon_intf_export_ path_matcher {
  public:
   /**
    * \brief Segment literal.
@@ -114,7 +114,7 @@ class monsoon_expr_export_ path_matcher {
   matcher_vector matcher_;
 };
 
-///\ingroup expr_io
+///\ingroup intf_io
 ///@{
 /**
  * \brief Stream matcher textual representation to stream.
@@ -123,7 +123,7 @@ class monsoon_expr_export_ path_matcher {
  * \param m The matcher for which to create a textual representation.
  * \return \p out
  */
-monsoon_expr_export_
+monsoon_intf_export_
 std::ostream& operator<<(std::ostream& out, const path_matcher& m);
 /**
  * \brief Yield textual representation of the matcher.
@@ -131,7 +131,7 @@ std::ostream& operator<<(std::ostream& out, const path_matcher& m);
  * \param m The matcher for which to create a textual representation.
  * \return Textual representation of \p m
  */
-monsoon_expr_export_
+monsoon_intf_export_
 std::string to_string(const path_matcher& m);
 ///@}
 

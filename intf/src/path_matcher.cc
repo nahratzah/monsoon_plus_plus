@@ -8,7 +8,7 @@ namespace monsoon {
 
 
 template<typename MatchIter, typename ValIter>
-bool monsoon_expr_local_ do_match(
+bool do_match(
     MatchIter m_b, MatchIter m_e,
     ValIter val_b, ValIter val_e) {
   using literal = path_matcher::literal;
