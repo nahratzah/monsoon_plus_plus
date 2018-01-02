@@ -26,8 +26,9 @@ class monsoon_dirhistory_local_ tsdata_v2_tables
       const std::function<void(time_point, emit_map&&)>&,
       std::optional<time_point>,
       std::optional<time_point>,
-      const std::function<bool(const group_name&)>&,
-      const std::function<bool(const group_name&, const metric_name&)>&)
+      const path_matcher&,
+      const tag_matcher&,
+      const path_matcher&)
       const override;
   virtual void emit_time(
       const std::function<void(time_point)>&,

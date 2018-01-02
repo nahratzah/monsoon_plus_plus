@@ -147,24 +147,26 @@ void tsdata_v0::emit(
     const std::function<void(time_point, emit_map&&)>& acceptor,
     std::optional<time_point> tr_begin,
     std::optional<time_point> tr_end,
-    const std::function<bool(const group_name&)>& group_filter,
-    const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
+    const path_matcher& group_filter,
+    const tag_matcher& tag_filter,
+    const path_matcher& metric_filter)
     const {
   visit(
-      [&tr_begin, &tr_end, &group_filter, &metric_filter, &acceptor](auto&& ts) {
+      [&tr_begin, &tr_end, &group_filter, &tag_filter, &metric_filter, &acceptor](auto&& ts) {
         const time_point tp = ts.get_time();
         if (tr_begin.has_value() && tp < tr_begin.value()) return;
         if (tr_end.has_value() && tp > tr_end.value()) return;
 
         emit_map values;
         std::for_each(ts.data().begin(), ts.data().end(),
-            [&values, &group_filter, &metric_filter](auto&& tsv) {
-              if (!group_filter(tsv.get_name())) return;
+            [&values, &group_filter, &tag_filter, &metric_filter](auto&& tsv) {
+              if (!group_filter(tsv.get_name().get_path())) return;
+              if (!tag_filter(tsv.get_name().get_tags())) return;
 
               const auto& metrics_map = tsv.get_metrics();
               std::for_each(metrics_map.begin(), metrics_map.end(),
                   [&tsv, &values, &metric_filter](const auto& entry) {
-                    if (!metric_filter(tsv.get_name(), std::get<0>(entry)))
+                    if (!metric_filter(std::get<0>(entry)))
                       return;
 
                     values.emplace(

@@ -128,17 +128,20 @@ auto dirhistory::time() const -> std::tuple<time_point, time_point> {
 
 auto dirhistory::emit(
     time_range tr,
-    std::function<bool(const group_name&)> group_filter,
-    std::function<bool(const group_name&, const metric_name&)> metric_filter,
+    path_matcher group_filter,
+    tag_matcher tag_filter,
+    path_matcher metric_filter,
     time_point::duration slack) const -> objpipe::reader<emit_type> {
   using namespace std::placeholders;
 
   auto visitor = emit_visitor<tsdata::emit_map>(
       files_, tr, std::move(slack),
-      [group_filter, metric_filter](const tsdata& tsd, const auto& cb,
-          const auto& tr_begin, const auto& tr_end) {
-        tsd.emit(cb, tr_begin, tr_end, group_filter, metric_filter);
-      },
+      std::bind(
+          &tsdata::emit,
+          _1, _2, _3, _4,
+          std::move(group_filter),
+          std::move(tag_filter),
+          std::move(metric_filter)),
       &dirhistory_emit_merger,
       &dirhistory_emit_reducer,
       &dirhistory_emit_prune_before_,
@@ -151,36 +154,6 @@ auto dirhistory::emit(
                 [&cb](time_point tp, tsdata::emit_map&& map) {
                   cb(emit_type(std::in_place_index<1>, std::move(tp), std::move(map)));
                   std::invoke(cb, emit_type(std::in_place_index<1>, std::move(tp), std::move(map)));
-                });
-          },
-          std::move(visitor),
-          _1));
-}
-
-auto dirhistory::emit(
-    time_range tr,
-    std::function<bool(const simple_group&)> group_filter,
-    std::function<bool(const simple_group&, const metric_name&)> metric_filter,
-    time_point::duration slack) const -> objpipe::reader<emit_type> {
-  using namespace std::placeholders;
-
-  auto visitor = emit_visitor<tsdata::emit_map>(
-      files_, tr, std::move(slack),
-      [group_filter, metric_filter](const tsdata& tsd, const auto& cb,
-          const auto& tr_begin, const auto& tr_end) {
-        tsd.emit(cb, tr_begin, tr_end, group_filter, metric_filter);
-      },
-      &dirhistory_emit_merger,
-      &dirhistory_emit_reducer,
-      &dirhistory_emit_prune_before_,
-      &dirhistory_emit_prune_after_);
-
-  return objpipe::new_callback<emit_type>(
-      std::bind(
-          [](emit_visitor<tsdata::emit_map>& visitor, auto& cb) {
-            visitor(
-                [&cb](time_point tp, tsdata::emit_map&& map) {
-                  std::invoke(cb, std::forward_as_tuple(tp, std::move(map)));
                 });
           },
           std::move(visitor),

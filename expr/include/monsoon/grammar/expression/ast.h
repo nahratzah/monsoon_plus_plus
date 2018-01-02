@@ -5,7 +5,8 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/histogram.h>
 #include <monsoon/expression.h>
-#include <monsoon/expressions/selector.h>
+#include <monsoon/path_matcher.h>
+#include <monsoon/tag_matcher.h>
 #include <monsoon/grammar/intf/ast.h>
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/x3/support/ast/variant.hpp>
@@ -37,21 +38,21 @@ struct constant_expr {
 };
 
 struct path_matcher_expr
-: std::vector<expressions::path_matcher::match_element>
+: std::vector<path_matcher::match_element>
 {
-  monsoon_expr_export_ operator expressions::path_matcher() const;
+  monsoon_expr_export_ operator path_matcher() const;
 };
 
 struct tag_matcher_expr
 : std::vector<
     x3::variant<
-      std::tuple<std::string, expressions::tag_matcher::presence_match>,
-      std::tuple<std::string, expressions::tag_matcher::absence_match>,
-      std::tuple<std::string, expressions::tag_matcher::comparison, value_expr>
+      std::tuple<std::string, tag_matcher::presence_match>,
+      std::tuple<std::string, tag_matcher::absence_match>,
+      std::tuple<std::string, tag_matcher::comparison, value_expr>
     >
   >
 {
-  monsoon_expr_export_ operator expressions::tag_matcher() const;
+  monsoon_expr_export_ operator tag_matcher() const;
 };
 
 struct selector_expr {

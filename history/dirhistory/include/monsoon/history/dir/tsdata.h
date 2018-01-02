@@ -69,16 +69,10 @@ class monsoon_dirhistory_export_ tsdata {
       const std::function<void(time_point, emit_map&&)>&,
       std::optional<time_point>,
       std::optional<time_point>,
-      const std::function<bool(const group_name&)>&,
-      const std::function<bool(const group_name&, const metric_name&)>&)
+      const path_matcher&,
+      const tag_matcher&,
+      const path_matcher&)
       const = 0;
-  virtual void emit(
-      const std::function<void(time_point, emit_map&&)>&,
-      std::optional<time_point>,
-      std::optional<time_point>,
-      const std::function<bool(const simple_group&)>&,
-      const std::function<bool(const simple_group&, const metric_name&)>&)
-      const;
   virtual void emit_time(
       const std::function<void(time_point)>&,
       std::optional<time_point>,
