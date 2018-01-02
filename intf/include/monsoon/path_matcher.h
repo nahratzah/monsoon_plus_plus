@@ -59,12 +59,12 @@ class monsoon_intf_export_ path_matcher {
 
   ///@{
   /**
-   * \brief Test if the \ref monsoon::simple_group "simple_group" matches.
+   * \brief Test if the \ref monsoon::simple_group "simple group" matches.
    * \param path The path to test a match on.
    */
   bool operator()(const simple_group& path) const;
   /**
-   * \brief Test if the \ref monsoon::metric_name "simple_group" matches.
+   * \brief Test if the \ref monsoon::metric_name "metric name" matches.
    * \param path The path to test a match on.
    */
   bool operator()(const metric_name& path) const;
