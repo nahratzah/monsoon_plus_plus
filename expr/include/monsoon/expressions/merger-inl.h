@@ -472,9 +472,7 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
   using match_clause_hash = class match_clause::hash;
   using match_clause_equal_to = match_clause::equal_to;
 
-  if (!out_mc->pass(tag_set)) {
-    /* SKIP */
-  } else if (is_factual) {
+  if (is_factual) {
     if (!this->factual.has_value()) {
       this->factual.emplace(
           std::piecewise_construct,
@@ -490,10 +488,12 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
     }
     assert(std::get<0>(*this->factual) == tp);
 
-    const auto [pos, success] = std::get<1>(*this->factual).emplace(
-        tag_set, std::apply(fn_, values));
-    if (!success)
-      pos->second = metric_value(); // Mark colliding values as empty.
+    if (out_mc->pass(tag_set)) {
+      const auto [pos, success] = std::get<1>(*this->factual).emplace(
+          tag_set, std::apply(fn_, values));
+      if (!success)
+        pos->second = metric_value(); // Mark colliding values as empty.
+    }
   } else {
     *speculative++ = speculative_entry(
         std::piecewise_construct,
