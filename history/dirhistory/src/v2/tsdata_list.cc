@@ -61,8 +61,9 @@ void tsdata_v2_list::push_back(const time_series& ts) {
 void tsdata_v2_list::emit(
     const std::function<void(time_point, emit_map&&)>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    const std::function<bool(const group_name&)>& group_filter,
-    const std::function<bool(const group_name&, const metric_name&)>& filter) const {
+    const path_matcher& group_filter,
+    const tag_matcher& tag_filter,
+    const path_matcher& metric_filter) const {
   using std::swap;
 
   // Reorder map, used to deal with non-distinct/non-sorted file.
@@ -83,18 +84,19 @@ void tsdata_v2_list::emit(
         emit_map emit_data;
 
         std::for_each(records->begin(), records->end(),
-            [&emit_data, &group_filter, &filter](const auto& group_entry) {
+            [&emit_data, &group_filter, &tag_filter, &metric_filter](const auto& group_entry) {
               const auto& group_name = std::get<0>(group_entry);
 
-              if (group_filter(group_name)) {
+              if (group_filter(group_name.get_path())
+                  && tag_filter(group_name.get_tags())) {
                 const auto metrics = std::get<1>(group_entry).get();
                 std::for_each(metrics->begin(), metrics->end(),
-                    [&group_name, &emit_data, &filter](
+                    [&group_name, &emit_data, &metric_filter](
                         const auto& metric_entry) {
                       const auto& metric_name = std::get<0>(metric_entry);
                       const auto& metric_value = std::get<1>(metric_entry);
 
-                      if (filter(group_name, metric_name)) {
+                      if (metric_filter(metric_name)) {
                         emit_data.emplace(
                             std::piecewise_construct,
                             std::forward_as_tuple(group_name, metric_name),

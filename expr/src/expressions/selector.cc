@@ -45,37 +45,9 @@ class monsoon_expr_local_ selector_with_tags
   path_matcher metric_;
 };
 
-class monsoon_expr_local_ selector_without_tags
-: public expression
-{
- public:
-  selector_without_tags(path_matcher&& g, path_matcher&& m)
-  : expression(precedence_value),
-    group_(std::move(g)),
-    metric_(std::move(m))
-  {}
-
-  ~selector_without_tags() noexcept override;
-
-  auto operator()(const metric_source&, const time_range&,
-      time_point::duration,
-      const std::shared_ptr<const match_clause>&) const
-      -> std::variant<scalar_objpipe, vector_objpipe> override;
-
-  bool is_scalar() const noexcept override;
-  bool is_vector() const noexcept override;
-
- private:
-  void do_ostream(std::ostream&) const override;
-
-  path_matcher group_;
-  path_matcher metric_;
-};
-
 
 auto selector(path_matcher g, path_matcher m) -> expression_ptr {
-  return expression::make_ptr<selector_without_tags>(
-      std::move(g), std::move(m));
+  return selector(std::move(g), tag_matcher(), std::move(m));
 }
 
 auto selector(path_matcher g, tag_matcher t, path_matcher m)
@@ -103,16 +75,7 @@ auto selector_with_tags::operator()(
   using namespace std::placeholders;
 
   return source
-      .emit(
-          tr,
-          [this](const group_name& gname) {
-            return group_(gname.get_path()) && tags_(gname.get_tags());
-          },
-          [this](const group_name& gname, const metric_name& mname) {
-            // We already know gname matches.
-            return metric_(mname);
-          },
-          slack)
+      .emit(tr, group_, tags_, metric_, slack)
       .transform(std::bind(&selector_accept_wrapper_, mc, _1));
 }
 
@@ -126,43 +89,6 @@ bool selector_with_tags::is_vector() const noexcept {
 
 void selector_with_tags::do_ostream(std::ostream& out) const {
   out << group_ << tags_ << "::" << metric_;
-}
-
-
-selector_without_tags::~selector_without_tags() noexcept {}
-
-auto selector_without_tags::operator()(
-    const metric_source& source,
-    const time_range& tr,
-    time_point::duration slack,
-    const std::shared_ptr<const match_clause>& mc) const
--> std::variant<scalar_objpipe, vector_objpipe> {
-  using namespace std::placeholders;
-
-  return source
-      .emit(
-          tr,
-          [this](const group_name& gname) {
-            return group_(gname.get_path());
-          },
-          [this](const group_name& gname, const metric_name& mname) {
-            // We already know gname matches.
-            return metric_(mname);
-          },
-          slack)
-      .transform(std::bind(&selector_accept_wrapper_, mc, _1));
-}
-
-bool selector_without_tags::is_scalar() const noexcept {
-  return false;
-}
-
-bool selector_without_tags::is_vector() const noexcept {
-  return true;
-}
-
-void selector_without_tags::do_ostream(std::ostream& out) const {
-  out << group_ << "::" << metric_;
 }
 
 

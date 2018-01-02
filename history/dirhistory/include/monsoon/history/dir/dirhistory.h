@@ -37,14 +37,9 @@ class monsoon_dirhistory_export_ dirhistory
 
   auto emit(
       time_range,
-      std::function<bool(const group_name&)>,
-      std::function<bool(const group_name&, const metric_name&)>,
-      time_point::duration = time_point::duration(0)) const
-      -> objpipe::reader<emit_type> override;
-  auto emit(
-      time_range,
-      std::function<bool(const simple_group&)>,
-      std::function<bool(const simple_group&, const metric_name&)>,
+      path_matcher,
+      tag_matcher,
+      path_matcher,
       time_point::duration = time_point::duration(0)) const
       -> objpipe::reader<emit_type> override;
   auto emit_time(

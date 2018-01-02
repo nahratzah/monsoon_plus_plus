@@ -169,16 +169,18 @@ void monsoon_dirhistory_local_ emit_fdtblock(
     std::shared_ptr<const file_data_tables_block> block,
     std::function<void(time_point, tsdata_v2_tables::emit_map&&)> cb,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    const std::function<bool(const group_name&)>& group_filter,
-    const std::function<bool(const group_name&, const metric_name&)>& metric_filter) {
+    const path_matcher& group_filter,
+    const tag_matcher& tag_filter,
+    const path_matcher& metric_filter) {
   auto timestamps = std::get<0>(*block);
   std::vector<metric_iteration> data;
 
   // Build parallel iterators per each selected metric.
   const std::shared_ptr<const tables> tbl_ptr = std::get<1>(*block).get();
   std::for_each(tbl_ptr->begin(), tbl_ptr->end(),
-      [&data, &tbl_ptr, &group_filter, &metric_filter](const auto& tbl_entry) {
-        if (!group_filter(std::get<0>(tbl_entry)))
+      [&data, &tbl_ptr, &group_filter, &tag_filter, &metric_filter](const auto& tbl_entry) {
+        if (!group_filter(std::get<0>(tbl_entry).get_path())
+            || !tag_filter(std::get<0>(tbl_entry).get_tags()))
           return; // SKIP
 
         const std::shared_ptr<const group_name> group_ptr =
@@ -192,7 +194,7 @@ void monsoon_dirhistory_local_ emit_fdtblock(
         std::for_each(metric_map->begin(), metric_map->end(),
             [&data, &group_ptr, &metric_map, &metric_filter](
                 const auto& metric_map_entry) {
-              if (!metric_filter(*group_ptr, metric_map_entry.first))
+              if (!metric_filter(metric_map_entry.first))
                 return; // SKIP
 
               const std::shared_ptr<const metric_name> metric_ptr =
@@ -238,8 +240,9 @@ void monsoon_dirhistory_local_ emit_fdtblock(
 void tsdata_v2_tables::emit(
     const std::function<void(time_point, emit_map&&)>& accept_fn,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-    const std::function<bool(const group_name&)>& group_filter,
-    const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
+    const path_matcher& group_filter,
+    const tag_matcher& tag_filter,
+    const path_matcher& metric_filter)
     const {
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();
@@ -251,7 +254,7 @@ void tsdata_v2_tables::emit(
       emit_fdtblock(
           std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
           accept_fn,
-          tr_begin, tr_end, group_filter, metric_filter);
+          tr_begin, tr_end, group_filter, tag_filter, metric_filter);
     }
   } else { // parallel iteration of blocks.
     // Declare parallel iteration
@@ -276,17 +279,18 @@ void tsdata_v2_tables::emit(
       iterators_value_type(
           std::shared_ptr<const file_data_tables_block> block,
           std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-          const std::function<bool(const group_name&)>& group_filter,
-          const std::function<bool(const group_name&, const metric_name&)>& metric_filter)
+          const path_matcher& group_filter,
+          const tag_matcher& tag_filter,
+          const path_matcher& metric_filter)
       : co_(boost::coroutines2::protected_fixedsize_stack(),
-          [block, tr_begin, tr_end, &group_filter, &metric_filter](
+          [block, tr_begin, tr_end, &group_filter, &tag_filter, &metric_filter](
               co_type::push_type& yield) {
             emit_fdtblock(
                 block,
                 [&yield](time_point tp, emit_map&& v) {
                   yield(co_arg_type(std::move(tp), std::move(v)));
                 },
-                tr_begin, tr_end, group_filter, metric_filter);
+                tr_begin, tr_end, group_filter, tag_filter, metric_filter);
           })
       {
         if (co_) val_ = co_.get();
@@ -333,7 +337,7 @@ void tsdata_v2_tables::emit(
     for (const file_data_tables_block& block : *file_data_tables) {
       iterators.emplace_back(
           std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
-          tr_begin, tr_end, group_filter, metric_filter);
+          tr_begin, tr_end, group_filter, tag_filter, metric_filter);
     }
     std::make_heap(iterators.begin(), iterators.end(), iterators_cmp());
 

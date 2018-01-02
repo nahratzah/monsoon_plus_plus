@@ -13,6 +13,8 @@
 #include <monsoon/time_point.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/time_range.h>
+#include <monsoon/path_matcher.h>
+#include <monsoon/tag_matcher.h>
 #include <monsoon/objpipe/reader.h>
 
 namespace monsoon {
@@ -82,29 +84,11 @@ class monsoon_intf_export_ metric_source {
    */
   virtual auto emit(
       time_range tr,
-      std::function<bool(const group_name&)> group_filter,
-      std::function<bool(const group_name&, const metric_name&)> metric_filter,
+      path_matcher group_filter,
+      tag_matcher group_tag_filter,
+      path_matcher metric_filter,
       time_point::duration slack = time_point::duration(0)) const
       -> objpipe::reader<emit_type> = 0;
-  /**
-   * \brief Retrieve all metrics matching the given filters over time.
-   *
-   * \note The default implementation simply wraps the filters, so it
-   * can invoke its virtual counterpart. Derived classes may override this
-   * to provide a more efficient implementation.
-   *
-   * \param tr The interval over which to yield metrics.
-   * \param group_filter A predicate on group.
-   * \param metric_filter A predicate on metrics. Only invoked if the group passes the group filter predicate.
-   * \param slack Extra time before and after the time range, to fill in interpolated values.
-   * \return An \ref objpipe::reader emitting the \ref emit_type.
-   */
-  virtual auto emit(
-      time_range tr,
-      std::function<bool(const simple_group&)> group_filter,
-      std::function<bool(const simple_group&, const metric_name&)> metric_filter,
-      time_point::duration slack = time_point::duration(0)) const
-      -> objpipe::reader<emit_type>;
   /**
    * \brief Retrieve all time points over time.
    *

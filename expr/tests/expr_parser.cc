@@ -16,8 +16,9 @@ class mock_metric_source_for_emit_time
  public:
   virtual auto emit(
       time_range tr,
-      std::function<bool(const group_name&)> group_filter,
-      std::function<bool(const group_name&, const metric_name&)> metric_filter,
+      path_matcher group_filter,
+      tag_matcher tag_filter,
+      path_matcher metric_filter,
       time_point::duration slack = time_point::duration(0)) const
   -> objpipe::reader<emit_type> {
     throw std::runtime_error("unimplemented mock");
