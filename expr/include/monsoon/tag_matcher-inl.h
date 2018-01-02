@@ -1,8 +1,7 @@
-#ifndef MONSOON_EXPRESSIONS_SELECTOR_INL_H
-#define MONSOON_EXPRESSIONS_SELECTOR_INL_H
+#ifndef MONSOON_TAG_MATCHER_INL_H
+#define MONSOON_TAG_MATCHER_INL_H
 
 namespace monsoon {
-namespace expressions {
 
 
 inline auto tag_matcher::begin() const -> const_iterator {
@@ -22,6 +21,6 @@ inline auto tag_matcher::cend() const -> const_iterator {
 }
 
 
-}} /* namespace monsoon::expressions */
+} /* namespace monsoon */
 
-#endif /* MONSOON_EXPRESSIONS_SELECTOR_INL_H */
+#endif /* MONSOON_TAG_MATCHER_INL_H */

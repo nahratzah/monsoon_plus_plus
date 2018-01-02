@@ -9,6 +9,7 @@ add_library (monsoon_expr
   src/expressions/constant.cc
   src/expressions/operators.cc
   src/path_matcher.cc
+  src/tag_matcher.cc
   src/match_clause.cc
   src/grammar/expression/ast.cc
 )
@@ -30,6 +31,8 @@ install (FILES
   include/monsoon/match_clause.h
   include/monsoon/path_matcher.h
   include/monsoon/path_matcher-inl.h
+  include/monsoon/tag_matcher.h
+  include/monsoon/tag_matcher-inl.h
   DESTINATION include/monsoon)
 install (FILES
   include/monsoon/expressions/selector.h

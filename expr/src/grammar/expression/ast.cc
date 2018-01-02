@@ -53,11 +53,11 @@ path_matcher_expr::operator path_matcher() const {
   return result;
 }
 
-tag_matcher_expr::operator expressions::tag_matcher() const {
+tag_matcher_expr::operator tag_matcher() const {
   using std::bind;
   using namespace std::placeholders;
 
-  expressions::tag_matcher result;
+  tag_matcher result;
   for (const auto& i : *this) {
     i.apply_visitor(
         bind<void>(
@@ -66,17 +66,17 @@ tag_matcher_expr::operator expressions::tag_matcher() const {
                   overload(
                       [&result](
                           std::string_view tagname,
-                          const expressions::tag_matcher::presence_match&) {
+                          const tag_matcher::presence_match&) {
                         result.check_presence(tagname);
                       },
                       [&result](
                           std::string_view tagname,
-                          const expressions::tag_matcher::absence_match&) {
+                          const tag_matcher::absence_match&) {
                         result.check_absence(tagname);
                       },
                       [&result](
                           std::string_view tagname,
-                          const expressions::tag_matcher::comparison& cmp,
+                          const tag_matcher::comparison& cmp,
                           const value_expr& value) {
                         result.check_comparison(tagname, cmp, value);
                       }),
