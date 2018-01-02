@@ -98,6 +98,7 @@ inline const auto constant_def = value;
 inline const auto selector_def =
     path_matcher >>
     -tag_matcher >>
+    x3::lit("::") >>
     path_matcher;
 inline const auto braces_def =
     x3::lit('(') >> logical_or >> x3::lit(')');
