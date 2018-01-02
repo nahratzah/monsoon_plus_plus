@@ -105,6 +105,26 @@ inline const auto tags_lit =
     x3::rule<class tags_lit, ast::tags_lit_expr>("tags");
 inline const auto group_name_lit =
     x3::rule<class group_name_lit, ast::group_name_lit_expr>("group");
+inline const auto path_matcher =
+    x3::rule<class path_matcher_, ast::path_matcher_expr>("path selector");
+inline const auto tag_matcher =
+    x3::rule<class tag_matcher_, ast::tag_matcher_expr>("tag selector");
+
+
+struct tag_matcher_comparison_sym
+: x3::symbols<tag_matcher::comparison>
+{
+  tag_matcher_comparison_sym() {
+    add("=", tag_matcher::eq);
+    add("!=", tag_matcher::ne);
+    add("<", tag_matcher::lt);
+    add(">", tag_matcher::gt);
+    add("<=", tag_matcher::le);
+    add(">=", tag_matcher::ge);
+  }
+};
+inline const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
+
 
 inline const auto string_escape =
       x3::uint_parser<std::uint8_t, 8, 1, 3>()[append_utf8()]
@@ -157,6 +177,22 @@ inline const auto tags_lit_def =
     x3::lit('}');
 inline const auto simple_path_lit_def = (identifier | quoted_identifier) % '.';
 inline const auto group_name_lit_def = simple_path_lit >> -tags_lit;
+inline const auto path_matcher_def =
+    ( x3::lit("**") >> x3::attr(path_matcher::double_wildcard())
+    | x3::lit('*') >> x3::attr(path_matcher::wildcard())
+    | quoted_identifier
+    | identifier
+    ) % '.';
+inline const auto tag_matcher_def =
+    x3::lit('{') >>
+    -(( (identifier | quoted_identifier) >> tag_matcher_comparison_sym >>
+        tag_value
+      | x3::lit('!') >> (identifier | quoted_identifier) >>
+        x3::attr(tag_matcher::absence_match())
+      | (identifier | quoted_identifier) >>
+        x3::attr(tag_matcher::presence_match())
+      ) % ',') >>
+    x3::lit('}');
 
 BOOST_SPIRIT_DEFINE(
     string,
@@ -168,7 +204,9 @@ BOOST_SPIRIT_DEFINE(
     simple_path_lit,
     tag_value,
     tags_lit,
-    group_name_lit);
+    group_name_lit,
+    path_matcher,
+    tag_matcher);
 
 
 }}} /* namespace monsoon::grammar::parser */

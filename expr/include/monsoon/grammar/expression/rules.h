@@ -17,10 +17,6 @@ namespace x3 = boost::spirit::x3;
 
 inline const auto constant =
     x3::rule<class constant, ast::constant_expr>("constant");
-inline const auto path_matcher =
-    x3::rule<class path_matcher_, ast::path_matcher_expr>("path selector");
-inline const auto tag_matcher =
-    x3::rule<class tag_matcher_, ast::tag_matcher_expr>("tag selector");
 inline const auto selector =
     x3::rule<class selector, ast::selector_expr>("selector");
 inline const auto braces =
@@ -102,38 +98,8 @@ struct equality_sym
 };
 inline const struct equality_sym equality_sym;
 
-struct tag_matcher_comparison_sym
-: x3::symbols<tag_matcher::comparison>
-{
-  tag_matcher_comparison_sym() {
-    add("=", tag_matcher::eq);
-    add("!=", tag_matcher::ne);
-    add("<", tag_matcher::lt);
-    add(">", tag_matcher::gt);
-    add("<=", tag_matcher::le);
-    add(">=", tag_matcher::ge);
-  }
-};
-inline const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
-
 
 inline const auto constant_def = value;
-inline const auto path_matcher_def =
-    ( x3::lit("**") >> x3::attr(path_matcher::double_wildcard())
-    | x3::lit('*') >> x3::attr(path_matcher::wildcard())
-    | quoted_identifier
-    | identifier
-    ) % '.';
-inline const auto tag_matcher_def =
-    x3::lit('{') >>
-    -(( (identifier | quoted_identifier) >> tag_matcher_comparison_sym >>
-        tag_value
-      | x3::lit('!') >> (identifier | quoted_identifier) >>
-        x3::attr(tag_matcher::absence_match())
-      | (identifier | quoted_identifier) >>
-        x3::attr(tag_matcher::presence_match())
-      ) % ',') >>
-    x3::lit('}');
 inline const auto selector_def =
     path_matcher >>
     -tag_matcher >>
@@ -159,8 +125,6 @@ inline const auto logical_and_def = equality % "&&";
 inline const auto logical_or_def = logical_and % "||";
 BOOST_SPIRIT_DEFINE(
     constant,
-    path_matcher,
-    tag_matcher,
     selector,
     braces,
     primary,
