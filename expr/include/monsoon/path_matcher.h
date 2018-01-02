@@ -1,6 +1,10 @@
 #ifndef MONSOON_PATH_MATCHER_H
 #define MONSOON_PATH_MATCHER_H
 
+///\file
+///\brief A path matcher.
+///\ingroup expr
+
 #include <monsoon/expr_export_.h>
 #include <monsoon/simple_group.h>
 #include <monsoon/metric_name.h>
