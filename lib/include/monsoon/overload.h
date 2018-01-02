@@ -30,9 +30,15 @@ class overload_base_fnptr_<Fn(Args...)> {
 
 template<typename Fn>
 using overload_base_t = std::conditional_t<
-    std::is_pointer_v<Fn>,
-    overload_base_fnptr_<std::remove_pointer_t<Fn>>,
-    Fn>;
+    std::is_pointer_v<std::remove_reference_t<Fn>>,
+    overload_base_fnptr_<std::remove_pointer_t<std::remove_reference_t<Fn>>>,
+    std::conditional_t<
+        std::is_rvalue_reference_v<Fn>,
+        std::remove_reference_t<Fn>,
+        std::conditional_t<
+            std::is_lvalue_reference_v<Fn>,
+            std::reference_wrapper<Fn>,
+            Fn>>>;
 
 
 template<typename... Fn>
@@ -50,8 +56,8 @@ class overload_t
 
 template<typename... Fn>
 constexpr auto overload(Fn&&... fn)
--> overload_t<std::decay_t<Fn>...> {
-  return overload_t<std::decay_t<Fn>...>(std::forward<Fn>(fn)...);
+-> overload_t<Fn...> {
+  return overload_t<Fn...>(std::forward<Fn>(fn)...);
 }
 
 
