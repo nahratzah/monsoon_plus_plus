@@ -246,6 +246,22 @@ class monsoon_expr_export_ expression {
 monsoon_expr_export_
 std::string to_string(const expression&);
 
+/**
+ * \brief Print textual representation of expression.
+ * \ingroup expr_io
+ * \relates expression
+ *
+ * \details
+ * The expression is printed to the output stream.
+ * The printed expression is parsable into a new instance of expression.
+ *
+ * \param out The output stream.
+ * \param expr The expression to be written to the output stream.
+ * \return The output stream.
+ */
+monsoon_intf_export_
+auto operator<<(std::ostream& out, const expression& expr) -> std::ostream&;
+
 monsoon_expr_export_
 bool operator==(
     const expression::scalar_emit_type& x,
