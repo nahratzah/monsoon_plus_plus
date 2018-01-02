@@ -25,14 +25,8 @@ std::string concat_args(char** b, char** e) {
   return std::move(oss).str();
 }
 
-struct print_scalar_or_vector {
-  explicit print_scalar_or_vector(std::ostream& out) : out(out) {}
-
-  void operator()(monsoon::expression::scalar_objpipe&& pipe) const;
-  void operator()(monsoon::expression::vector_objpipe&& pipe) const;
-
-  std::ostream& out;
-};
+void print_scalar(monsoon::expression::scalar_objpipe&& pipe);
+void print_vector(monsoon::expression::vector_objpipe&& pipe);
 
 int main(int argc, char** argv) {
   if (argc <= 2) {
@@ -50,31 +44,29 @@ int main(int argc, char** argv) {
       monsoon::time_range(),
       monsoon::time_point::duration(5 * 60 * 1000));
   std::visit(
-      print_scalar_or_vector(std::cout),
+      monsoon::overload(&print_scalar, &print_vector),
       std::move(eval_stream_variant));
 }
 
-void print_scalar_or_vector::operator()(
-    monsoon::expression::scalar_objpipe&& pipe) const {
+void print_scalar(monsoon::expression::scalar_objpipe&& pipe) {
   std::move(pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
       .for_each(
-          [this](auto&& v) {
-            out << v.tp << ": " << std::get<1>(std::move(v.data)) << "\n";
+          [](auto&& v) {
+            std::cout << v.tp << ": " << std::get<1>(std::move(v.data)) << "\n";
           });
 }
 
-void print_scalar_or_vector::operator()(
-    monsoon::expression::vector_objpipe&& pipe) const {
+void print_vector(monsoon::expression::vector_objpipe&& pipe) {
   std::move(pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
       .for_each(
-          [this](auto&& v) {
-            out << v.tp << ":\n";
+          [](auto&& v) {
+            std::cout << v.tp << ":\n";
             for (const auto& entry : std::get<1>(v.data)) {
               const monsoon::tags tags = entry.first;
               const monsoon::metric_value value = entry.second;
-              out << "  " // indent
+              std::cout << "  " // indent
                   << tags
                   << "="
                   << value

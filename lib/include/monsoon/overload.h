@@ -8,17 +8,44 @@ namespace monsoon {
 inline namespace support {
 
 
+template<typename> class overload_base_fnptr_;
+
+template<typename Fn, typename... Args>
+class overload_base_fnptr_<Fn(Args...)> {
+ private:
+  using fn_type = Fn(Args...);
+
+ public:
+  constexpr overload_base_fnptr_(fn_type* fn)
+  : fn_(fn)
+  {}
+
+  constexpr decltype(auto) operator()(Args... args) const {
+    return std::invoke(fn_, std::forward<Args>(args)...);
+  }
+
+ private:
+  fn_type* fn_;
+};
+
+template<typename Fn>
+using overload_base_t = std::conditional_t<
+    std::is_pointer_v<Fn>,
+    overload_base_fnptr_<std::remove_pointer_t<Fn>>,
+    Fn>;
+
+
 template<typename... Fn>
 class overload_t
-: private Fn...
+: private overload_base_t<Fn>...
 {
  public:
   template<typename... FnInit>
   constexpr overload_t(FnInit&&... fn)
-  : Fn(std::forward<FnInit>(fn))...
+  : overload_base_t<Fn>(std::forward<FnInit>(fn))...
   {}
 
-  using Fn::operator()...;
+  using overload_base_t<Fn>::operator()...;
 };
 
 template<typename... Fn>
