@@ -14,7 +14,5 @@ tag_matcher_comparison_sym::tag_matcher_comparison_sym() {
   add(">=", tag_matcher::ge);
 }
 
-const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
-
 
 }}} /* namespace monsoon::grammar::parser */

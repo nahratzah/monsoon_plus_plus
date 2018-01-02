@@ -48,53 +48,35 @@ inline const auto logical_or =
 struct muldiv_sym
 : x3::symbols<ast::muldiv_enum>
 {
-  muldiv_sym() {
-    add("*", ast::muldiv_enum::mul);
-    add("/", ast::muldiv_enum::div);
-    add("%", ast::muldiv_enum::mod);
-  }
+  monsoon_expr_export_ muldiv_sym();
 };
 inline const struct muldiv_sym muldiv_sym;
 
 struct addsub_sym
 : x3::symbols<ast::addsub_enum>
 {
-  addsub_sym() {
-    add("+", ast::addsub_enum::add);
-    add("-", ast::addsub_enum::sub);
-  }
+  monsoon_expr_export_ addsub_sym();
 };
 inline const struct addsub_sym addsub_sym;
 
 struct shift_sym
 : x3::symbols<ast::shift_enum>
 {
-  shift_sym() {
-    add("<<", ast::shift_enum::left);
-    add(">>", ast::shift_enum::right);
-  }
+  monsoon_expr_export_ shift_sym();
 };
 inline const struct shift_sym shift_sym;
 
 struct compare_sym
 : x3::symbols<ast::compare_enum>
 {
-  compare_sym() {
-    add("<=", ast::compare_enum::le);
-    add(">=", ast::compare_enum::ge);
-    add("<", ast::compare_enum::lt);
-    add(">", ast::compare_enum::gt);
-  }
+  monsoon_expr_export_ compare_sym();
 };
 inline const struct compare_sym compare_sym;
 
 struct equality_sym
 : x3::symbols<ast::equality_enum>
 {
-  equality_sym() {
-    add("=", ast::equality_enum::eq);
-    add("!=", ast::equality_enum::ne);
-  }
+  monsoon_expr_export_ equality_sym();
 };
 inline const struct equality_sym equality_sym;
 

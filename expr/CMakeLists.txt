@@ -10,6 +10,7 @@ add_library (monsoon_expr
   src/expressions/operators.cc
   src/match_clause.cc
   src/grammar/expression/ast.cc
+  src/grammar/expression/rules.cc
 )
 target_link_libraries (monsoon_expr ${extra_libs})
 target_link_libraries (monsoon_expr monsoon_lib)

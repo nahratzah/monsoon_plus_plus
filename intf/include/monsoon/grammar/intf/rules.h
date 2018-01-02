@@ -116,8 +116,7 @@ struct tag_matcher_comparison_sym
 {
   monsoon_intf_export_ tag_matcher_comparison_sym();
 };
-extern monsoon_intf_export_
-const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
+inline const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
 
 
 inline const auto string_escape =
