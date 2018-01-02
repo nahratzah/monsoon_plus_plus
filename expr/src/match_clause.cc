@@ -33,7 +33,7 @@ tags by_match_clause::reduce(const tags& x, const tags& y) const {
   tags::map_type result;
 
   switch (keep_) {
-    case match_clause_keep::none:
+    case match_clause_keep::selected:
       std::set_intersection(
           x.begin(), x.end(),
           tag_names_.begin(), tag_names_.end(),
