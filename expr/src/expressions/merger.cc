@@ -179,6 +179,10 @@ void vector_accumulator::add_factual_(time_point tp,
     expression::factual_vector&& v) {
   assert(v.hash_function().mc == mc_);
   assert(v.key_eq().mc == mc_);
+  assert(std::all_of(v.begin(), v.end(),
+          [this](const auto& kv) {
+            return mc_->pass(std::get<0>(kv));
+          }));
 
   assert(factual_.empty() || factual_.back().first < tp);
   factual_.emplace_back(tp, std::move(v));

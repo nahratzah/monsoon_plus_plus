@@ -472,7 +472,9 @@ void merger_acceptor<Fn, SpecInsIter, true, N>::operator()(
   using match_clause_hash = class match_clause::hash;
   using match_clause_equal_to = match_clause::equal_to;
 
-  if (is_factual) {
+  if (!out_mc->pass(tag_set)) {
+    /* SKIP */
+  } else if (is_factual) {
     if (!this->factual.has_value()) {
       this->factual.emplace(
           std::piecewise_construct,
