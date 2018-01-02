@@ -25,6 +25,7 @@ add_library (monsoon_intf
   src/path_matcher.cc
   src/tag_matcher.cc
   src/grammar/intf/ast.cc
+  src/grammar/intf/rules.cc
 )
 target_link_libraries (monsoon_intf ${extra_libs})
 target_link_libraries (monsoon_intf monsoon_lib)

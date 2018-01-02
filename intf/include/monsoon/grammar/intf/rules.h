@@ -114,16 +114,10 @@ inline const auto tag_matcher =
 struct tag_matcher_comparison_sym
 : x3::symbols<tag_matcher::comparison>
 {
-  tag_matcher_comparison_sym() {
-    add("=", tag_matcher::eq);
-    add("!=", tag_matcher::ne);
-    add("<", tag_matcher::lt);
-    add(">", tag_matcher::gt);
-    add("<=", tag_matcher::le);
-    add(">=", tag_matcher::ge);
-  }
+  monsoon_intf_export_ tag_matcher_comparison_sym();
 };
-inline const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
+extern monsoon_intf_export_
+const struct tag_matcher_comparison_sym tag_matcher_comparison_sym;
 
 
 inline const auto string_escape =
