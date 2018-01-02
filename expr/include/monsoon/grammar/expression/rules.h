@@ -43,6 +43,12 @@ inline const auto logical_and =
     x3::rule<class logical_and, ast::logical_and_expr>("logical and expression");
 inline const auto logical_or =
     x3::rule<class logical_or, ast::logical_or_expr>("logical or expression");
+inline const auto by_clause =
+    x3::rule<class by_clause, ast::by_clause_expr>("by clause");
+inline const auto without_clause =
+    x3::rule<class without_clause, ast::without_clause_expr>("without clause");
+inline const auto match_clause =
+    x3::rule<class match_clause_, ast::match_clause_expr>("match clause");
 
 
 struct muldiv_sym
@@ -80,6 +86,13 @@ struct equality_sym
 };
 inline const struct equality_sym equality_sym;
 
+struct match_clause_keep_sym
+: x3::symbols<match_clause_keep>
+{
+  monsoon_expr_export_ match_clause_keep_sym();
+};
+inline const struct match_clause_keep_sym match_clause_keep_sym;
+
 
 inline const auto constant_def = value;
 inline const auto selector_def =
@@ -98,13 +111,43 @@ inline const auto unary_def =
     | numeric_negate;
 inline const auto logical_negate_def = x3::lit('!') >> unary;
 inline const auto numeric_negate_def = x3::lit('-') >> unary;
-inline const auto muldiv_def = unary >> *(muldiv_sym >> unary);
-inline const auto addsub_def = muldiv >> *(addsub_sym >> muldiv);
-inline const auto shift_def = addsub >> *(shift_sym >> addsub);
-inline const auto compare_def = shift >> *(compare_sym >> shift);
-inline const auto equality_def = compare >> *(equality_sym >> compare);
-inline const auto logical_and_def = equality % "&&";
-inline const auto logical_or_def = logical_and % "||";
+inline const auto muldiv_def =
+    unary >>
+    *(muldiv_sym >> match_clause >> unary);
+inline const auto addsub_def =
+    muldiv >>
+    *(addsub_sym >> match_clause >> muldiv);
+inline const auto shift_def =
+    addsub >>
+    *(shift_sym >> match_clause >> addsub);
+inline const auto compare_def =
+    shift >>
+    *(compare_sym >> match_clause >> shift);
+inline const auto equality_def =
+    compare >>
+    *(equality_sym >> match_clause >> compare);
+inline const auto logical_and_def =
+    equality >>
+    *(  x3::lit("&&") >> x3::attr(ast::logical_and_enum()) >>
+        match_clause >> equality);
+inline const auto logical_or_def =
+    logical_and >>
+    *(  x3::lit("||") >> x3::attr(ast::logical_or_enum()) >>
+        match_clause >> logical_and);
+inline const auto by_clause_def =
+    x3::lit("by") >> x3::lit('(') >>
+    (identifier | quoted_identifier) % ',' >>
+    x3::lit(')') >>
+    -(x3::lit("keep") >> match_clause_keep_sym);
+inline const auto without_clause_def =
+    x3::lit("by") >> x3::lit('(') >>
+    (identifier | quoted_identifier) % ',' >>
+    x3::lit(')');
+inline const auto match_clause_def =
+      by_clause
+    | without_clause
+    | x3::attr(ast::default_clause_expr());
+
 BOOST_SPIRIT_DEFINE(
     constant,
     selector,
@@ -119,7 +162,10 @@ BOOST_SPIRIT_DEFINE(
     compare,
     equality,
     logical_and,
-    logical_or);
+    logical_or,
+    by_clause,
+    without_clause,
+    match_clause);
 
 
 } /* namespace monsoon::grammar::parser */

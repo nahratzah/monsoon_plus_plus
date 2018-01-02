@@ -33,5 +33,12 @@ equality_sym::equality_sym() {
   add("!=", ast::equality_enum::ne);
 }
 
+match_clause_keep_sym::match_clause_keep_sym() {
+  add("selected", match_clause_keep::selected);
+  add("left", match_clause_keep::left);
+  add("right", match_clause_keep::right);
+  add("common", match_clause_keep::common);
+}
+
 
 }}} /* namespace monsoon::grammar::parser */

@@ -29,5 +29,16 @@ BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::compare_expr,
 BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::equality_expr,
     head,
     tail);
+BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::logical_and_expr,
+    head,
+    tail);
+BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::logical_or_expr,
+    head,
+    tail);
+BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::by_clause_expr,
+    names,
+    keep);
+BOOST_FUSION_ADAPT_STRUCT(monsoon::grammar::ast::without_clause_expr,
+    names);
 
 #endif /* MONSOON_GRAMMAR_EXPRESSION_AST_ADAPTED_H */
