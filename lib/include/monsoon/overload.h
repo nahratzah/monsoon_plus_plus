@@ -9,162 +9,72 @@ namespace monsoon {
 namespace support {
 
 
-template<typename Ptr> class overload_base_fnptr_;
-
-template<typename Result, typename... Args>
-class overload_base_fnptr_<Result (*)(Args...)> {
+template<typename Fn>
+class overload_base_fnptr_ {
  private:
-  using fn_type = Result (*)(Args...);
+  using fn_type = std::remove_reference_t<Fn>;
 
  public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
+  template<typename FnFwd>
+  constexpr overload_base_fnptr_(FnFwd&& fn)
+  noexcept(std::is_nothrow_constructible_v<fn_type, FnFwd&&>)
+  : fn_(std::forward<FnFwd>(fn))
   {}
 
-  constexpr Result operator()(Args... args) const {
-    return std::invoke(fn_, std::forward<Args>(args)...);
+  template<typename... FwdArgs>
+  constexpr auto operator()(FwdArgs&&... args) const
+  noexcept(noexcept(std::invoke(std::declval<const fn_type&>(), std::declval<FwdArgs>()...)))
+  -> decltype(std::invoke(std::declval<const fn_type&>(), std::declval<FwdArgs>()...)) {
+    return std::invoke(fn_, std::forward<FwdArgs>(args)...);
+  }
+
+  template<typename... FwdArgs>
+  constexpr auto operator()(FwdArgs&&... args) &
+  noexcept(noexcept(std::invoke(std::declval<fn_type&>(), std::declval<FwdArgs>()...)))
+  -> decltype(std::invoke(std::declval<fn_type&>(), std::declval<FwdArgs>()...)) {
+    return std::invoke(fn_, std::forward<FwdArgs>(args)...);
+  }
+
+  template<typename... FwdArgs>
+  constexpr auto operator()(FwdArgs&&... args) &&
+  noexcept(noexcept(std::invoke(std::declval<fn_type&&>(), std::declval<FwdArgs>()...)))
+  -> decltype(std::invoke(std::declval<fn_type&&>(), std::declval<FwdArgs>()...)) {
+    return std::invoke(std::forward<fn_type>(fn_), std::forward<FwdArgs>(args)...);
   }
 
  private:
   fn_type fn_;
 };
 
-template<typename Result, typename Class>
-class overload_base_fnptr_<Result (Class::*)> {
+template<typename Fn>
+class overload_base_fnptr_<Fn&> {
  private:
-  using fn_type = Result (Class::*);
+  using fn_type = Fn;
 
  public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
+  constexpr overload_base_fnptr_(fn_type& fn) noexcept
+  : fn_(&fn)
   {}
 
-  constexpr auto operator()(Class& cls) const
-  -> std::add_lvalue_reference_t<Result> {
-    return std::invoke(fn_, cls);
-  }
-
-  constexpr auto operator()(const Class& cls) const
-  -> std::add_lvalue_reference_t<std::add_const_t<Result>> {
-    return std::invoke(fn_, cls);
-  }
-
-  constexpr auto operator()(Class&& cls) const
-  -> std::add_rvalue_reference_t<Result> {
-    return std::invoke(fn_, std::move(cls));
+  template<typename... FwdArgs>
+  constexpr auto operator()(FwdArgs&&... args) const
+  noexcept(noexcept(std::invoke(std::declval<fn_type&>(), std::declval<FwdArgs>()...)))
+  -> decltype(std::invoke(std::declval<fn_type&>(), std::declval<FwdArgs>()...)) {
+    return std::invoke(*fn_, std::forward<FwdArgs>(args)...);
   }
 
  private:
-  fn_type fn_;
-};
-
-template<typename Result, typename Class, typename... Args>
-class overload_base_fnptr_<Result (Class::*)(Args...)> {
- private:
-  using fn_type = Result (Class::*)(Args...);
-
- public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
-  {}
-
-  constexpr Result operator()(Class& cls, Args... args) const {
-    return std::invoke(fn_, cls, std::forward<Args>(args)...);
-  }
-
-  constexpr Result operator()(Class&& cls, Args... args) const {
-    return std::invoke(fn_, cls, std::forward<Args>(args)...);
-  }
-
- private:
-  fn_type fn_;
-};
-
-template<typename Result, typename Class, typename... Args>
-class overload_base_fnptr_<Result (Class::*)(Args...) const> {
- private:
-  using fn_type = Result (Class::*)(Args...) const;
-
- public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
-  {}
-
-  constexpr Result operator()(const Class& cls, Args... args) const {
-    return std::invoke(fn_, cls, std::forward<Args>(args)...);
-  }
-
- private:
-  fn_type fn_;
-};
-
-template<typename Result, typename Class, typename... Args>
-class overload_base_fnptr_<Result (Class::*)(Args...) const &> {
- private:
-  using fn_type = Result (Class::*)(Args...) const &;
-
- public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
-  {}
-
-  constexpr Result operator()(const Class& cls, Args... args) const {
-    return std::invoke(fn_, cls, std::forward<Args>(args)...);
-  }
-
- private:
-  fn_type fn_;
-};
-
-template<typename Result, typename Class, typename... Args>
-class overload_base_fnptr_<Result (Class::*)(Args...) &> {
- private:
-  using fn_type = Result (Class::*)(Args...) &;
-
- public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
-  {}
-
-  constexpr Result operator()(Class& cls, Args... args) const {
-    return std::invoke(fn_, cls, std::forward<Args>(args)...);
-  }
-
- private:
-  fn_type fn_;
-};
-
-template<typename Result, typename Class, typename... Args>
-class overload_base_fnptr_<Result (Class::*)(Args...) &&> {
- private:
-  using fn_type = Result (Class::*)(Args...) &&;
-
- public:
-  constexpr overload_base_fnptr_(fn_type fn)
-  : fn_(fn)
-  {}
-
-  constexpr Result operator()(Class&& cls, Args... args) const {
-    return std::invoke(fn_, std::move(cls), std::forward<Args>(args)...);
-  }
-
- private:
-  fn_type fn_;
+  fn_type* fn_;
 };
 
 
 template<typename Fn>
 using overload_base_t = std::conditional_t<
-    std::is_pointer_v<std::remove_reference_t<Fn>>
-    || std::is_member_pointer_v<std::remove_reference_t<Fn>>,
-    overload_base_fnptr_<std::remove_reference_t<Fn>>,
-    std::conditional_t<
-        std::is_rvalue_reference_v<Fn>,
-        std::remove_reference_t<Fn>,
-        std::conditional_t<
-            std::is_lvalue_reference_v<Fn>,
-            std::reference_wrapper<std::remove_reference_t<Fn>>,
-            Fn>>>;
+       std::is_pointer_v<Fn>
+    || std::is_member_pointer_v<Fn>
+    || std::is_reference_v<Fn>,
+    overload_base_fnptr_<Fn>,
+    Fn>;
 
 
 template<typename... Fn>
@@ -180,17 +90,15 @@ class overload_t
   using overload_base_t<Fn>::operator()...;
 };
 
-template<typename... Fn>
-constexpr auto overload(Fn&&... fn)
--> overload_t<Fn...> {
-  return overload_t<Fn...>(std::forward<Fn>(fn)...);
-}
-
 
 } /* namespace monsoon::support */
 
 
-using support::overload;
+template<typename... Fn>
+constexpr auto overload(Fn&&... fn)
+-> support::overload_t<Fn...> {
+  return support::overload_t<Fn...>(std::forward<Fn>(fn)...);
+}
 
 
 } /* namespace monsoon */
