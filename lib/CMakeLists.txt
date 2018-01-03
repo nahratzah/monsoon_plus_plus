@@ -17,3 +17,4 @@ install (FILES
 
 add_subdirectory (misc)
 add_subdirectory (objpipe)
+add_subdirectory(tests)
