@@ -5,6 +5,7 @@
 ///\ingroup objpipe
 
 #include <monsoon/objpipe/detail/array_pipe.h>
+#include <monsoon/objpipe/detail/adapter.h>
 
 namespace monsoon {
 namespace objpipe {
@@ -32,8 +33,8 @@ namespace objpipe {
  */
 template<typename Iter, typename Alloc = std::allocator<typename std::iterator_traits<Iter>::value_type>>
 auto new_array(Iter b, Iter e, Alloc alloc = Alloc())
--> array_pipe<typename std::iterator_traits<Iter>::value_type, Alloc> {
-  return array_pipe<typename std::iterator_traits<Iter>::value_type, Alloc>(b, e, alloc);
+-> decltype(auto) {
+  return detail::adapter(detail::array_pipe<typename std::iterator_traits<Iter>::value_type, Alloc>(b, e, alloc));
 }
 
 /**
@@ -58,8 +59,8 @@ auto new_array(Iter b, Iter e, Alloc alloc = Alloc())
  */
 template<typename T, typename Alloc = std::allocator<T>>
 auto new_array(std::initializer_list<T> values, Alloc alloc = Alloc())
--> array_pipe<T, Alloc> {
-  return array_pipe<T, Alloc>(values, alloc);
+-> decltype(auto) {
+  return detail::adapter(detail::array_pipe<T, Alloc>(values, alloc));
 }
 
 

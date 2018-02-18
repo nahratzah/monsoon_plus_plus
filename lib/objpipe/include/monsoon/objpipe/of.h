@@ -6,7 +6,7 @@
 
 #include <array>
 #include <type_traits>
-#include <monsooon/objpipe/detail/of.h>
+#include <monsooon/objpipe/detail/of_pipe.h>
 #include <monsooon/objpipe/detail/adapter.h>
 
 namespace monsoon::objpipe {

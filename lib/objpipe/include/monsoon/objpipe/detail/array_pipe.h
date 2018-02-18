@@ -10,7 +10,7 @@
 #include <memory>
 #include <utility>
 #include <variant>
-#include <monsoon/objpipe/objpipe_errc.h>
+#include <monsoon/objpipe/errc.h>
 
 namespace monsoon::objpipe::detail {
 

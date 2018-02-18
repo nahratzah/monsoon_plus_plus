@@ -29,7 +29,7 @@ class mock_metric_source_for_emit_time
       time_point::duration slack) const
   -> objpipe::reader<time_point> {
     last_emit_time.emplace(std::move(tr), std::move(slack));
-    return objpipe::new_array<time_point>(
+    return objpipe::new_array(
         result_emit_time->begin(),
         result_emit_time->end());
   }

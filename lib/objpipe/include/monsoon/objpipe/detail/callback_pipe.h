@@ -72,7 +72,7 @@ class callback_fn_wrapper {
   -> void {
     std::invoke(
         std::move(fn_),
-        callback_fn_wrapper<T>(std::forward<Push>(push)));
+        callback_fn_wrapper<T>(std::move(push)));
   }
 
  private:

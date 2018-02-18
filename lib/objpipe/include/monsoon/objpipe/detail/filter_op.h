@@ -20,16 +20,15 @@ namespace monsoon::objpipe::detail {
 
 template<typename Arg, typename Fn0, typename... Fn>
 constexpr auto filter_test_(const Arg& v, const Fn0& pred0, const Fn&... preds)
-noexcept(noexcept(std::invoke(pred0, v) && resolve_(v, preds...)))
+noexcept(std::conjunction_v<
+    is_nothrow_invocable<const Fn0&, const Arg&>,
+    is_nothrow_invocable<const Fn&, const Arg&>...>)
 -> bool {
-  return std::invoke(pred0, v) && resolve_(v, preds...);
-}
-
-template<typename Arg>
-constexpr auto filter_test_(const Arg& v)
-noexcept
--> bool {
-  return true;
+  if (!std::invoke(pred0, v)) return false;
+  if constexpr(sizeof...(preds) == 0)
+    return true;
+  else
+    return filter_test_(v, preds...);
 }
 
 template<typename T>
@@ -47,10 +46,7 @@ class filter_store_copy_ {
   constexpr auto load(const Source& src)
   noexcept(noexcept(src.front()))
   -> objpipe_errc {
-    static_assert(std::is_lvalue_reference_v<adapt::front_type<Source>>
-        || std::is_rvalue_reference_v<adapt::front_type<Source>>,
-        "Front type must be a reference");
-    assert(present_);
+    assert(!present());
 
     auto v = src.front();
     if (v.index() != 0) return std::get<1>(v);
@@ -94,7 +90,7 @@ class filter_store_copy_ {
 
  private:
   bool present_ = false;
-  std::optional<T> val_;
+  mutable std::optional<T> val_;
 };
 
 template<typename T>
@@ -208,7 +204,10 @@ class filter_op {
     while (!store_.present()) {
       objpipe_errc e = store_.load(src_);
       if (e != objpipe_errc::success) return e;
-      if (!test(store_.get())) store_.reset();
+      if (!test(store_.get())) {
+        store_.reset();
+        src_.pop_front();
+      }
     }
     return objpipe_errc::success;
   }
@@ -221,7 +220,10 @@ class filter_op {
     while (!store_.present()) {
       objpipe_errc e = store_.load(src_);
       if (e != objpipe_errc::success) return { std::in_place_index<1>, e };
-      if (!test(store_.get())) store_.reset();
+      if (!test(store_.get())) {
+        store_.reset();
+        src_.pop_front();
+      }
     }
     return { std::in_place_index<0>, store_.get() };
   }
@@ -234,7 +236,10 @@ class filter_op {
     while (!store_.present()) {
       objpipe_errc e = store_.load(src_);
       if (e != objpipe_errc::success) return e;
-      if (!test(store_.get())) store_.reset();
+      if (!test(store_.get())) {
+        store_.reset();
+        src_.pop_front();
+      }
     }
 
     store_.reset();
@@ -271,11 +276,13 @@ class filter_op {
       && noexcept_test)
   -> std::enable_if_t<Enable,
       std::variant<adapt::pull_type<Source>, objpipe_errc>> {
+    using result_type = std::variant<adapt::pull_type<Source>, objpipe_errc>;
+
     if (store_.present()) {
       if constexpr(std::is_lvalue_reference_v<adapt::pull_type<Source>>)
-        return { std::in_place_index<0>, store_.release_lref() };
+        return result_type(std::in_place_index<0>, store_.release_lref());
       else
-        return { std::in_place_index<0>, store_.release_rref() };
+        return result_type(std::in_place_index<0>, store_.release_rref());
     }
 
     for (;;) {
@@ -287,9 +294,15 @@ class filter_op {
   }
 
  private:
-  template<size_t... Idx>
+  constexpr auto test(cref v) const
+  noexcept(noexcept_test)
+  -> bool {
+    return test(v, std::index_sequence_for<Pred...>());
+  }
+
+  template<std::size_t... Idx>
   constexpr auto test(cref v,
-      std::index_sequence<Idx...> = std::index_sequence_for<Pred...>()) const
+      std::index_sequence<Idx...>) const
   noexcept(noexcept_test)
   -> bool {
     return filter_test_(v, std::get<Idx>(pred_)...);
