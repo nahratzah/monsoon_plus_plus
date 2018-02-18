@@ -482,7 +482,9 @@ constexpr auto transform(
     Source&& src, ///< [in] Object pipe source that is to be adapted.
     Fn&& fn ///< [in] A one-argument invocable, returning the transformed value.
     )
+#if 0
 noexcept(std::is_nothrow_constructible_v<transform_op<Source, std::decay_t<Fn>>, Source, Fn>)
+#endif
 -> std::enable_if_t<!has_transform<Source, std::decay_t<Fn>>,
     transform_op<Source, std::decay_t<Fn>>> {
   static_assert(!std::is_reference_v<Source> && !std::is_const_v<Source>,

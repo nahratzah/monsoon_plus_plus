@@ -15,10 +15,11 @@ namespace monsoon::objpipe::detail {
 template<typename T>
 class interlock_impl {
  private:
+  using value_type = std::remove_cv_t<std::remove_reference_t<T>>;
   using front_type = std::conditional_t<std::is_const_v<T>,
         std::add_lvalue_reference_t<T>,
         std::add_rvalue_reference_t<T>>;
-  using pull_type = std::remove_cv_t<std::remove_reference_t<T>>;
+  using pull_type = value_type;
 
  public:
   auto is_pullable()
@@ -95,32 +96,11 @@ class interlock_impl {
     return result;
   }
 
-  template<bool Enable = !std::is_const_v<T>>
-  auto publish(std::remove_cv_t<std::remove_reference_t<T>>&& v)
-  -> std::enable_if_t<Enable, objpipe_errc> {
-    std::unique_lock<std::mutex> lck_{ guard_ };
-    write_ready_.wait(lck_,
-        [this]() {
-          return offered_ == nullptr || reader_count_ == 0;
-        });
-    if (reader_count_ == 0) return objpipe_errc::closed;
-
-    offered_ = std::addressof(v);
-    read_ready_.notify_one();
-    write_ready_.wait(lck_,
-        [this]() {
-          return offered_ != std::addressof(v) || reader_count_ == 0;
-        });
-
-    if (offered_ != std::addressof(v)) return objpipe_errc::success;
-    offered_ = nullptr;
-    assert(reader_count_ == 0);
-    return objpipe_errc::closed;
-  }
-
   template<bool Enable = std::is_const_v<T>>
-  auto publish(std::add_const_t<std::remove_cv_t<std::remove_reference_t<T>>& v)
-  -> std::enable_if_t<Enable, objpipe_errc> {
+  auto publish(std::conditional_t<std::is_const_v<T>,
+      std::add_lvalue_reference_t<std::add_const_t<value_type>>,
+      std::add_rvalue_reference_t<value_type>> v)
+  -> objpipe_errc {
     std::unique_lock<std::mutex> lck_{ guard_ };
     write_ready_.wait(lck_,
         [this]() {
@@ -142,7 +122,7 @@ class interlock_impl {
   }
 
   template<bool Enable = !std::is_const_v<T>>
-  auto publish(std::add_const_t<std::remove_cv_t<std::remove_reference_t<T>>& v)
+  auto publish(std::add_lvalue_reference_t<std::add_const_t<value_type>> v)
   -> std::enable_if_t<Enable, objpipe_errc> {
     publish(T(v));
   }
@@ -174,10 +154,11 @@ class interlock_impl {
   }
 
  private:
-  auto get(const std::unique_lock<std::mutex>& lck) const noexcept
+  auto get(const std::unique_lock<std::mutex>& lck) const
+  noexcept
   -> std::conditional_t<std::is_const_v<T>,
-      std::add_lvalue_reference_t<T>,
-      std::add_rvalue_reference_t<T>> {
+      std::add_lvalue_reference_t<std::add_const_t<value_type>>,
+      std::add_rvalue_reference_t<value_type>> {
     assert(lck.owns_lock() && lck.mutex() == &guard_);
     assert(offered_ != nullptr);
     if constexpr(std::is_const_v<T>)
@@ -236,7 +217,8 @@ class interlocked_pipe {
   }
 #endif
 
-  ~interlocked_pipe() noexcept {
+  ~interlocked_pipe()
+  noexcept {
     if (ptr_ != nullptr && ptr_->subtract_reader())
       delete ptr_;
   }
@@ -319,7 +301,8 @@ class interlocked_writer {
     return *this;
   }
 
-  ~interlocked_writer() noexcept {
+  ~interlocked_writer()
+  noexcept {
     if (ptr_ != nullptr && ptr_->subtract_writer())
       delete ptr_;
   }
