@@ -64,12 +64,6 @@ class array_pipe {
     return objpipe_errc::success;
   }
 
-  auto try_pull()
-  noexcept(noexcept(pull()))
-  -> decltype(pull()) {
-    return pull();
-  }
-
   auto pull()
   noexcept(noexcept(data_.empty())
       && noexcept(data_.front())
@@ -80,6 +74,12 @@ class array_pipe {
     auto rv = std::variant<T, objpipe_errc>(std::in_place_index<0>, std::move(data_.front()));
     data_.pop_front();
     return rv;
+  }
+
+  auto try_pull()
+  noexcept(noexcept(pull()))
+  -> decltype(pull()) {
+    return pull();
   }
 
  private:

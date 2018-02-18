@@ -28,9 +28,9 @@ namespace monsoon::objpipe {
  */
 template<typename T>
 constexpr auto of(T&& v)
-noexcept(std::is_nothrow_constructible<of_pipe<std::remove_cv_t<std::remove_reference_t<T>>>, T>)
--> adapter<of_pipe<std::remove_cv_t<std::remove_reference_t<T>>>> {
-  return of_pipe<std::remove_cv_t<std::remove_reference_t<T>>>(std::forward<T>(v));
+noexcept(std::is_nothrow_constructible_v<detail::of_pipe<std::remove_cv_t<std::remove_reference_t<T>>>, T>)
+-> detail::adapter_t<detail::of_pipe<std::remove_cv_t<std::remove_reference_t<T>>>> {
+  return detail::adapter(detail::of_pipe<std::remove_cv_t<std::remove_reference_t<T>>>(std::forward<T>(v)));
 }
 
 /**
@@ -49,8 +49,14 @@ constexpr auto of(Types&&... values)
 noexcept(noexcept(of(std::make_array<T>(std::forward<Types>(values)...))
         .flatten()))
 -> decltype(auto) {
-  return of(std::make_array<T>(std::forward<Types>(values)...))
-      .flatten();
+  if constexpr(std::is_same_v<void, T>) {
+    using type = std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>>;
+    return of(std::array<type>(std::forward<Types>(values)...))
+        .flatten();
+  } else {
+    return of(std::array<T>(std::forward<Types>(values)...))
+        .flatten();
+  }
 }
 
 
