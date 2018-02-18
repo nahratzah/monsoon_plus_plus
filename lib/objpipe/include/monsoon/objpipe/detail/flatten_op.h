@@ -1,0 +1,308 @@
+#ifndef MONSOON_OBJPIPE_DETAIL_FLATTEN_OP_H
+#define MONSOON_OBJPIPE_DETAIL_FLATTEN_OP_H
+
+///\file
+///\ingroup objpipe_detail
+
+#include <iterator>
+#include <optional>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <monsoon/objpipe/detail/fwd.h>
+
+namespace monsoon::objpipe::detail {
+
+
+using std::make_move_iterator;
+using std::begin;
+using std::end;
+
+template<typename Collection, typename = std::void_t<decltype(begin(std::declval<Collection&>()))>>
+constexpr auto flatten_op_begin_(Collection& c)
+noexcept(noexcept(begin(std::declval<Collection&>())))
+-> decltype(begin(c)) {
+  return begin(c); // ADL, with fallback to std::begin
+}
+
+template<typename Collection, typename = std::void_t<decltype(end(std::declval<Collection&>()))>>
+constexpr auto flatten_op_end_(Collection& c)
+noexcept(noexcept(end(std::declval<Collection&>())))
+-> decltype(end(c)) {
+  return end(c); // ADL, with fallback to std::end
+}
+
+template<typename Source,
+    typename ValueType = std::add_lvalue_reference_t<std::remove_cv_t<std::remove_reference_t<decltype(std::declval<const Source&>().front())>>>,
+    typename = void>
+struct can_flatten_
+: std::false_type
+{};
+
+template<typename Source,
+    typename ValueType>
+struct can_flatten_<Source, ValueType,
+    std::void_t<decltype(flatten_op_begin_(std::declval<ValueType>())),
+        decltype(flatten_op_end_(std::declval<ValueType>()))>>
+: std::true_type
+{};
+
+template<typename Source>
+constexpr bool can_flatten = can_flatten_<Source>::value;
+
+template<typename Collection>
+class flatten_op_store_copy_ {
+ public:
+  using collection = Collection;
+  using begin_iterator =
+      std::decay_t<decltype(make_move_iterator(flatten_op_begin_(std::declval<collection&>())))>;
+  using end_iterator =
+      std::decay_t<decltype(make_move_iterator(flatten_op_end_(std::declval<collection&>())))>;
+
+  static_assert(
+      std::is_base_of_v<std::input_iterator_tag, typename std::iterator_traits<begin_iterator>::iterator_category>,
+      "Collection iterator must be an input iterator");
+
+  constexpr flatten_op_store_copy_(collection&& c)
+  noexcept(std::is_nothrow_move_constructible_v<collection>
+      && noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(c_))))
+      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(c_)))))
+  : c_(std::move(c)),
+    begin_(make_move_iterator(flatten_op_begin_(c_))),
+    end_(make_move_iterator(flatten_op_end_(c_)))
+  {}
+
+  constexpr flatten_op_store_copy_(const collection& c)
+  noexcept(std::is_nothrow_copy_constructible_v<collection>
+      && noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(c_))))
+      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(c_)))))
+  : c_(c),
+    begin_(make_move_iterator(flatten_op_begin_(c_))),
+    end_(make_move_iterator(flatten_op_end_(c_)))
+  {}
+
+  constexpr auto empty() const
+  noexcept(noexcept(std::declval<const begin_iterator&>() == std::declval<const end_iterator&>()))
+  -> bool {
+    return begin_ == end_;
+  }
+
+  auto deref() const
+  noexcept(noexcept(*std::declval<const begin_iterator&>()))
+  -> decltype(*std::declval<const begin_iterator&>()) {
+    assert(begin_ != end_);
+    return *begin_;
+  }
+
+  auto advance()
+  noexcept(noexcept(++std::declval<begin_iterator&>()))
+  -> void {
+    assert(begin_ != end_);
+    ++begin_;
+  }
+
+ private:
+  collection c_;
+  begin_iterator begin_;
+  end_iterator end_;
+};
+
+template<typename Collection>
+class flatten_op_store_ref_ {
+ public:
+  using collection = Collection;
+  using begin_iterator =
+      std::decay_t<decltype(flatten_op_begin_(std::declval<collection&>()))>;
+  using end_iterator =
+      std::decay_t<decltype(flatten_op_end_(std::declval<collection&>()))>;
+
+  static_assert(
+      std::is_base_of_v<std::input_iterator_tag, typename std::iterator_traits<begin_iterator>::iterator_category>,
+      "Collection iterator must be an input iterator");
+
+  constexpr flatten_op_store_ref_(collection&& c)
+  noexcept(noexcept(begin_iterator(flatten_op_begin_(c)))
+      && noexcept(end_iterator(flatten_op_end_(c))))
+  : begin_(flatten_op_begin_(c)),
+    end_(flatten_op_end_(c))
+  {}
+
+  constexpr flatten_op_store_ref_(collection& c)
+  noexcept(noexcept(begin_iterator(flatten_op_begin_(c)))
+      && noexcept(end_iterator(flatten_op_end_(c))))
+  : begin_(flatten_op_begin_(c)),
+    end_(flatten_op_end_(c))
+  {}
+
+  constexpr auto empty() const
+  noexcept(noexcept(std::declval<const begin_iterator&>() == std::declval<const end_iterator&>()))
+  -> bool {
+    return begin_ == end_;
+  }
+
+  auto deref() const
+  noexcept(noexcept(*std::declval<const begin_iterator&>()))
+  -> decltype(*std::declval<const begin_iterator&>()) {
+    assert(begin_ != end_);
+    return *begin_;
+  }
+
+  auto advance()
+  noexcept(noexcept(++std::declval<begin_iterator&>()))
+  -> void {
+    assert(begin_ != end_);
+    ++begin_;
+  }
+
+ private:
+  begin_iterator begin_;
+  end_iterator end_;
+};
+
+template<typename Collection>
+class flatten_op_store_rref_ {
+ public:
+  using collection = Collection;
+  using begin_iterator =
+      std::decay_t<decltype(make_move_iterator(flatten_op_begin_(std::declval<collection&>())))>;
+  using end_iterator =
+      std::decay_t<decltype(make_move_iterator(flatten_op_end_(std::declval<collection&>())))>;
+
+  static_assert(
+      std::is_base_of_v<std::input_iterator_tag, typename std::iterator_traits<begin_iterator>::iterator_category>,
+      "Collection iterator must be an input iterator");
+
+  constexpr flatten_op_store_rref_(collection&& c)
+  noexcept(noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(c))))
+      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(c)))))
+  : begin_(make_move_iterator(flatten_op_begin_(c))),
+    end_(make_move_iterator(flatten_op_end_(c)))
+  {}
+
+  constexpr auto empty() const
+  noexcept(noexcept(std::declval<const begin_iterator&>() == std::declval<const end_iterator&>()))
+  -> bool {
+    return begin_ == end_;
+  }
+
+  auto deref() const
+  noexcept(noexcept(*std::declval<const begin_iterator&>()))
+  -> decltype(*std::declval<const begin_iterator&>()) {
+    assert(begin_ != end_);
+    return *begin_;
+  }
+
+  auto advance()
+  noexcept(noexcept(++std::declval<begin_iterator&>()))
+  -> void {
+    assert(begin_ != end_);
+    ++begin_;
+  }
+
+ private:
+  begin_iterator begin_;
+  end_iterator end_;
+};
+
+template<typename Collection>
+using flatten_op_store = std::conditional_t<
+    std::is_volatile_v<Collection>,
+    flatten_op_store_copy_<std::decay_t<Collection>>,
+    std::conditional_t<
+        std::is_lvalue_reference_v<Collection> || std::is_const_v<Collection>,
+        flatten_op_store_ref_<std::remove_reference_t<Collection>>,
+        flatten_op_store_rref_<std::remove_reference_t<Collection>>>>;
+
+
+/**
+ * \brief Implements the flatten operation, that iterates over each element of a collection value.
+ * \ingroup objpipe_detail
+ *
+ * \details
+ * Replaces each collection element in the nested objpipe by the sequence of its elements.
+ *
+ * Requires that std::begin() and std::end() are valid for the given collection type.
+ *
+ * \tparam Source The nested source.
+ * \sa \ref monsoon::objpipe::detail::adapter::flatten
+ */
+template<typename Source>
+class flatten_op {
+ private:
+  using raw_collection_type = std::variant_alternative_t<
+      0,
+      decltype(std::declval<const Source&>().front())>;
+  using store_type = flatten_op_store<raw_collection_type>;
+  using item_type = decltype(std::declval<const store_type&>().deref());
+
+ public:
+  constexpr flatten_op(Source&& src)
+  noexcept(std::is_nothrow_move_constructible_v<Source>)
+  : src_(src),
+    active_()
+  {}
+
+  auto is_pullable() const
+  noexcept(noexcept(std::declval<const Source&>().is_pullable())
+      && noexcept(ensure_avail_()))
+  -> bool {
+    return src_.is_pullable() || ensure_avail_() == objpipe_errc::success;
+  }
+
+  auto wait() const
+  noexcept(noexcept(ensure_avail_()))
+  -> objpipe_errc {
+    return ensure_avail_() == objpipe_errc::success;
+  }
+
+  auto front() const
+  noexcept(noexcept(ensure_avail_())
+      && noexcept(std::declval<store_type&>().deref())
+      && (std::is_lvalue_reference_v<item_type>
+          || std::is_rvalue_reference_v<item_type>
+          || std::is_nothrow_move_constructible_v<item_type>))
+  -> std::variant<item_type, objpipe_errc> {
+    const objpipe_errc e = ensure_avail_();
+    if (e == objpipe_errc::success)
+      return { std::in_place_index<0>, active_.deref() };
+    return { std::in_place_index<1>, e };
+  }
+
+  auto pop_front()
+  noexcept(noexcept(ensure_avail_())
+      && noexcept(std::declval<store_type&>().advance()))
+  -> objpipe_errc {
+    const objpipe_errc e = ensure_avail_();
+    if (e == objpipe_errc::success) active_.advance();
+    return e;
+  }
+
+ private:
+  auto ensure_avail_() const
+  noexcept(noexcept(std::declval<const Source&>().front())
+      && noexcept(std::declval<store_type>().empty())
+      && std::is_nothrow_constructible_v<store_type, raw_collection_type>
+      && std::is_nothrow_destructible_v<store_type>
+      && (std::is_lvalue_reference_v<raw_collection_type>
+          || std::is_rvalue_reference_v<raw_collection_type>
+          || std::is_nothrow_move_constructible_v<raw_collection_type>))
+  -> objpipe_errc {
+    while (!active_.has_value() || active_.empty()) {
+      std::variant<raw_collection_type, objpipe_errc> front_val = src_.front();
+      if (front_val.index() == 1) {
+        assert(std::get<1>(front_val) != objpipe_errc::success);
+        return std::get<1>(front_val);
+      }
+      active_.emplace(std::get<0>(std::move(front_val)));
+    }
+    return objpipe_errc::success;
+  }
+
+  mutable Source src_;
+  mutable std::optional<store_type> active_;
+};
+
+
+} /* namespace monsoon::objpipe::detail */
+
+#endif /* MONSOON_OBJPIPE_DETAIL_FLATTEN_OP_H */

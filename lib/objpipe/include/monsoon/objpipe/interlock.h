@@ -4,10 +4,8 @@
 ///\file
 ///\ingroup objpipe
 
-#include <monsoon/objpipe/detail/base_objpipe.h>
-#include <monsoon/objpipe/detail/interlocked.h>
-#include <monsoon/objpipe/reader.h>
-#include <monsoon/objpipe/writer.h>
+#include <monsoon/objpipe/detail/interlock_pipe.h>
+#include <monsoon/objpipe/detail/adapter.h>
 
 namespace monsoon {
 namespace objpipe {
@@ -23,11 +21,15 @@ namespace objpipe {
  * \sa \ref monsoon::objpipe::detail::interlocked<T>
  */
 template<typename T>
-auto new_interlock() -> std::tuple<reader<T>, writer<T>> {
-  detail::interlocked<T>* ptr = new detail::interlocked<T>();
+auto new_interlock()
+-> std::tuple<detail::adapter_t<detail::interlock_pipe<T>>, detail::interlock_writer<T>> {
+  using reader_type = detail::adapter_t<detail::interlock_pipe<T>>;
+  using writer_type = detail::interlock_writer<T>;
+
+  detail::interlock_pipe<T>*const ptr = new detail::interlock_impl<T>();
   return std::make_tuple( // Never throws.
-      reader<T>(detail::reader_release::link(ptr)),
-      writer<T>(detail::writer_release::link(ptr)));
+      reader_type<T>(detail::interlock_pipe<T>(ptr)),
+      writer_type<T>(ptr));
 }
 
 
