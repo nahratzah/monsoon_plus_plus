@@ -46,17 +46,17 @@ noexcept(std::is_nothrow_constructible_v<detail::of_pipe<std::remove_cv_t<std::r
  */
 template<typename T = void, typename... Types>
 constexpr auto of(Types&&... values)
-noexcept(noexcept(of(std::make_array<T>(std::forward<Types>(values)...))
+noexcept(noexcept(
+        of(std::array<std::conditional_t<std::is_same_v<void, T>, std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>...>, T>>(std::forward<Types>(values...)))
         .flatten()))
 -> decltype(auto) {
-  if constexpr(std::is_same_v<void, T>) {
-    using type = std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>>;
-    return of(std::array<type>(std::forward<Types>(values)...))
-        .flatten();
-  } else {
-    return of(std::array<T>(std::forward<Types>(values)...))
-        .flatten();
-  }
+  using type = std::conditional_t<
+      std::is_same_v<void, T>,
+      std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>...>,
+      T>;
+
+  return of(std::array<type>(std::forward<Types>(values)...))
+      .flatten();
 }
 
 
