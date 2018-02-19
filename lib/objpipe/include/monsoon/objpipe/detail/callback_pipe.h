@@ -16,11 +16,10 @@ namespace monsoon::objpipe::detail {
 
 template<typename T>
 class callback_push {
- private:
+ public:
   using impl_type =
       typename boost::coroutines2::coroutine<std::add_pointer_t<T>>::push_type;
 
- public:
   constexpr callback_push(impl_type&& impl)
   : impl_(impl)
   {}
@@ -39,11 +38,10 @@ class callback_push {
 
 template<typename T>
 class callback_push<const T> {
- private:
-  using impl_type =
-      typename boost::coroutines2::coroutine<std::add_pointer_t<T>>::push_type;
-
  public:
+  using impl_type =
+      typename boost::coroutines2::coroutine<std::add_pointer_t<const T>>::push_type;
+
   constexpr callback_push(impl_type&& impl)
   : impl_(impl)
   {}
@@ -69,11 +67,11 @@ class callback_fn_wrapper {
   : fn_(fn)
   {}
 
-  auto operator()(boost::coroutines2::coroutine<std::add_pointer_t<T>>&& push)
+  auto operator()(typename callback_push<T>::impl_type&& push)
   -> void {
     std::invoke(
-        std::move(fn_),
-        callback_fn_wrapper<T>(std::move(push)));
+        fn_,
+        callback_push<T>(std::move(push)));
   }
 
  private:
@@ -121,7 +119,7 @@ class callback_pipe {
 
  private:
   using coro_t = boost::coroutines2::coroutine<std::add_pointer_t<T>>;
-  using fn_type = callback_fn_wrapper<Fn>;
+  using fn_type = callback_fn_wrapper<T, Fn>;
   using result_type = std::conditional_t<std::is_const_v<T>,
         std::add_lvalue_reference_t<T>,
         std::add_rvalue_reference_t<T>>;
@@ -156,7 +154,7 @@ class callback_pipe {
     auto& coro = std::get<1>(src_);
 
     if (!coro) return { std::in_place_index<1>, objpipe_errc::closed };
-    return { std::in_place_index<0>, get() };
+    return transport<result_type>(std::in_place_index<0>, get());
   }
 
   auto pop_front()
@@ -176,7 +174,7 @@ class callback_pipe {
 
     if (!coro) return { std::in_place_index<1>, objpipe_errc::closed };
     must_advance_ = true;
-    return { std::in_place_index<0>, get() };
+    return transport<result_type>(std::in_place_index<0>, get());
   }
 
   auto try_pull() const
@@ -186,32 +184,33 @@ class callback_pipe {
 
     if (!coro) return { std::in_place_index<1>, objpipe_errc::closed };
     must_advance_ = true;
-    return { std::in_place_index<0>, get() };
+    return transport<result_type>(std::in_place_index<0>, get());
   }
 
  private:
   void ensure_init_() const {
     if (src_.index() == 0) {
       assert(!must_advance_);
-      Fn fn = std::get<0>(std::move(src_));
-      src_.emplace(std::in_place_index<1>,
+      fn_type fn = std::get<0>(std::move(src_));
+      src_.template emplace<1>(
           boost::coroutines2::protected_fixedsize_stack(),
           std::move(fn));
     }
 
-    if (std::exchange(must_advance_)) std::get<1>(src_)();
+    if (std::exchange(must_advance_, false)) std::get<1>(src_)();
   }
 
   auto get() const
   -> result_type {
-    assert(src_);
+    assert(src_.index() == 1);
+    assert(std::get<1>(src_));
     if constexpr(std::is_const_v<result_type>)
-      return *src_.get();
+      return *std::get<1>(src_).get();
     else
-      return std::move(*src_.get());
+      return std::move(*std::get<1>(src_).get());
   }
 
-  mutable std::variant<fn_type, coro_t::pull_type> src_;
+  mutable std::variant<fn_type, typename coro_t::pull_type> src_;
   mutable bool must_advance_ = false;
 };
 

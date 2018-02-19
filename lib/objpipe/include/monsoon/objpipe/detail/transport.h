@@ -67,15 +67,15 @@ class transport {
 
   template<typename... Args>
   auto emplace(std::in_place_index_t<0>, Args&&... args)
-  noexcept(std::is_nothrow_constructible_v<T, Args...>)
+  noexcept(std::is_nothrow_constructible_v<T, std::add_rvalue_reference_t<Args>...>)
   -> void {
-    data_.emplace(std::in_place_index<0>, std::forward<Args>(args)...);
+    data_.template emplace<0>(std::forward<Args>(args)...);
   }
 
   auto emplace(std::in_place_index_t<1>, objpipe_errc e)
   noexcept
   -> void {
-    data_.emplace(std::in_place_index<1>, e);
+    data_.template emplace<1>(e);
   }
 
  private:
@@ -119,13 +119,13 @@ class transport<T&> {
   auto emplace(std::in_place_index_t<0>, T& v)
   noexcept
   -> void {
-    data_.emplace(std::in_place_index<0>, std::addressof(v));
+    data_.template emplace<0>(std::addressof(v));
   }
 
   auto emplace(std::in_place_index_t<1>, objpipe_errc e)
   noexcept
   -> void {
-    data_.emplace(std::in_place_index<1>, e);
+    data_.template emplace<1>(e);
   }
 
   operator transport<std::remove_cv_t<std::remove_reference_t<type>>>() && {
@@ -178,13 +178,13 @@ class transport<T&&> {
   auto emplace(std::in_place_index_t<0>, T&& v)
   noexcept
   -> void {
-    data_.emplace(std::in_place_index<0>, std::addressof(v));
+    data_.template emplace<0>(std::addressof(v));
   }
 
   auto emplace(std::in_place_index_t<1>, objpipe_errc e)
   noexcept
   -> void {
-    data_.emplace(std::in_place_index<1>, e);
+    data_.template emplace<1>(e);
   }
 
   operator transport<std::remove_cv_t<std::remove_reference_t<type>>>() && {

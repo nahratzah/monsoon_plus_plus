@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup objpipe
 
+#include <tuple>
 #include <monsoon/objpipe/detail/interlock_pipe.h>
 #include <monsoon/objpipe/detail/adapter.h>
 
@@ -26,10 +27,10 @@ auto new_interlock()
   using reader_type = detail::adapter_t<detail::interlock_pipe<T>>;
   using writer_type = detail::interlock_writer<T>;
 
-  detail::interlock_pipe<T>*const ptr = new detail::interlock_impl<T>();
+  detail::interlock_impl<T>*const ptr = new detail::interlock_impl<T>();
   return std::make_tuple( // Never throws.
-      reader_type<T>(detail::interlock_pipe<T>(ptr)),
-      writer_type<T>(ptr));
+      reader_type(detail::interlock_pipe<T>(ptr)),
+      writer_type(ptr));
 }
 
 

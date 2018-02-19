@@ -29,7 +29,7 @@ class mock_metric_source_for_emit_time
       time_point::duration slack) const
   -> objpipe::reader<time_point> {
     last_emit_time.emplace(std::move(tr), std::move(slack));
-    return objpipe::of(result_emit_type)
+    return objpipe::of(result_emit_time.value())
         .flatten();
   }
 
@@ -72,7 +72,7 @@ TEST(constant) {
             metric_value(42)),
         reader.pull());
   }
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
 }
 
 int main() {

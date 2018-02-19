@@ -10,6 +10,7 @@
 #include <utility>
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/transport.h>
+#include <monsoon/objpipe/detail/adapt.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -32,18 +33,15 @@ noexcept(noexcept(end(std::declval<Collection&>())))
   return end(c); // ADL, with fallback to std::end
 }
 
-template<typename Source,
-    typename ValueType = std::add_lvalue_reference_t<std::remove_cv_t<std::remove_reference_t<decltype(std::declval<const Source&>().front())>>>,
-    typename = void>
+template<typename Source, typename = void>
 struct can_flatten_
 : std::false_type
 {};
 
-template<typename Source,
-    typename ValueType>
-struct can_flatten_<Source, ValueType,
-    std::void_t<decltype(flatten_op_begin_(std::declval<ValueType>())),
-        decltype(flatten_op_end_(std::declval<ValueType>()))>>
+template<typename Source>
+struct can_flatten_<Source,
+    std::void_t<decltype(flatten_op_begin_(std::declval<adapt::value_type<Source>&>())),
+        decltype(flatten_op_end_(std::declval<adapt::value_type<Source>&>()))>>
 : std::true_type
 {};
 
@@ -65,8 +63,8 @@ class flatten_op_store_copy_ {
 
   constexpr flatten_op_store_copy_(collection&& c)
   noexcept(std::is_nothrow_move_constructible_v<collection>
-      && noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(c_))))
-      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(c_)))))
+      && noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(std::declval<collection&>()))))
+      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(std::declval<collection&>())))))
   : c_(std::move(c)),
     begin_(make_move_iterator(flatten_op_begin_(c_))),
     end_(make_move_iterator(flatten_op_end_(c_)))
@@ -74,8 +72,8 @@ class flatten_op_store_copy_ {
 
   constexpr flatten_op_store_copy_(const collection& c)
   noexcept(std::is_nothrow_copy_constructible_v<collection>
-      && noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(c_))))
-      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(c_)))))
+      && noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(std::declval<const collection&>()))))
+      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(std::declval<const collection&>())))))
   : c_(c),
     begin_(make_move_iterator(flatten_op_begin_(c_))),
     end_(make_move_iterator(flatten_op_end_(c_)))
@@ -121,15 +119,15 @@ class flatten_op_store_ref_ {
       "Collection iterator must be an input iterator");
 
   constexpr flatten_op_store_ref_(collection&& c)
-  noexcept(noexcept(begin_iterator(flatten_op_begin_(c)))
-      && noexcept(end_iterator(flatten_op_end_(c))))
+  noexcept(noexcept(begin_iterator(flatten_op_begin_(std::declval<collection&>())))
+      && noexcept(end_iterator(flatten_op_end_(std::declval<collection&>()))))
   : begin_(flatten_op_begin_(c)),
     end_(flatten_op_end_(c))
   {}
 
   constexpr flatten_op_store_ref_(collection& c)
-  noexcept(noexcept(begin_iterator(flatten_op_begin_(c)))
-      && noexcept(end_iterator(flatten_op_end_(c))))
+  noexcept(noexcept(begin_iterator(flatten_op_begin_(std::declval<collection&>())))
+      && noexcept(end_iterator(flatten_op_end_(std::declval<collection&>()))))
   : begin_(flatten_op_begin_(c)),
     end_(flatten_op_end_(c))
   {}
@@ -173,8 +171,8 @@ class flatten_op_store_rref_ {
       "Collection iterator must be an input iterator");
 
   constexpr flatten_op_store_rref_(collection&& c)
-  noexcept(noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(c))))
-      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(c)))))
+  noexcept(noexcept(begin_iterator(make_move_iterator(flatten_op_begin_(std::declval<collection&>()))))
+      && noexcept(end_iterator(make_move_iterator(flatten_op_end_(std::declval<collection&>())))))
   : begin_(make_move_iterator(flatten_op_begin_(c))),
     end_(make_move_iterator(flatten_op_end_(c)))
   {}
@@ -206,7 +204,7 @@ class flatten_op_store_rref_ {
 
 template<typename Collection>
 using flatten_op_store = std::conditional_t<
-    std::is_volatile_v<Collection>,
+    std::is_volatile_v<Collection> || !std::is_reference_v<Collection>,
     flatten_op_store_copy_<std::decay_t<Collection>>,
     std::conditional_t<
         std::is_lvalue_reference_v<Collection> || std::is_const_v<Collection>,
@@ -233,6 +231,16 @@ class flatten_op {
   using store_type = flatten_op_store<raw_collection_type>;
   using item_type = decltype(std::declval<const store_type&>().deref());
 
+  static constexpr bool ensure_avail_noexcept =
+      noexcept(std::declval<const Source&>().front())
+      && noexcept(std::declval<Source&>().pop_front())
+      && noexcept(std::declval<store_type>().empty())
+      && std::is_nothrow_constructible_v<store_type, raw_collection_type>
+      && std::is_nothrow_destructible_v<store_type>
+      && (std::is_lvalue_reference_v<raw_collection_type>
+          || std::is_rvalue_reference_v<raw_collection_type>
+          || std::is_nothrow_move_constructible_v<raw_collection_type>);
+
  public:
   constexpr flatten_op(Source&& src)
   noexcept(std::is_nothrow_move_constructible_v<Source>)
@@ -242,19 +250,19 @@ class flatten_op {
 
   auto is_pullable() const
   noexcept(noexcept(std::declval<const Source&>().is_pullable())
-      && noexcept(ensure_avail_()))
+      && ensure_avail_noexcept)
   -> bool {
     return src_.is_pullable() || ensure_avail_() == objpipe_errc::success;
   }
 
   auto wait() const
-  noexcept(noexcept(ensure_avail_()))
+  noexcept(ensure_avail_noexcept)
   -> objpipe_errc {
     return ensure_avail_() == objpipe_errc::success;
   }
 
   auto front() const
-  noexcept(noexcept(ensure_avail_())
+  noexcept(ensure_avail_noexcept
       && noexcept(std::declval<store_type&>().deref())
       && (std::is_lvalue_reference_v<item_type>
           || std::is_rvalue_reference_v<item_type>
@@ -267,7 +275,7 @@ class flatten_op {
   }
 
   auto pop_front()
-  noexcept(noexcept(ensure_avail_())
+  noexcept(ensure_avail_noexcept
       && noexcept(std::declval<store_type&>().advance()))
   -> objpipe_errc {
     const objpipe_errc e = ensure_avail_();
@@ -277,15 +285,15 @@ class flatten_op {
 
  private:
   auto ensure_avail_() const
-  noexcept(noexcept(std::declval<const Source&>().front())
-      && noexcept(std::declval<store_type>().empty())
-      && std::is_nothrow_constructible_v<store_type, raw_collection_type>
-      && std::is_nothrow_destructible_v<store_type>
-      && (std::is_lvalue_reference_v<raw_collection_type>
-          || std::is_rvalue_reference_v<raw_collection_type>
-          || std::is_nothrow_move_constructible_v<raw_collection_type>))
+  noexcept(ensure_avail_noexcept)
   -> objpipe_errc {
-    while (!active_.has_value() || active_.empty()) {
+    while (!active_.has_value() || active_->empty()) {
+      if (active_.has_value() && active_->empty()) {
+        objpipe_errc e = src_.pop_front();
+        if (e != objpipe_errc::success)
+          return e;
+      }
+
       transport<raw_collection_type> front_val = src_.front();
       if (!front_val.has_value()) {
         assert(front_val.errc() != objpipe_errc::success);

@@ -27,6 +27,9 @@ namespace monsoon::objpipe::detail {
  */
 template<typename T, typename Alloc>
 class array_pipe {
+ private:
+  using data_type = std::deque<T, Alloc>;
+
  public:
   template<typename Iter>
   array_pipe(Iter b, Iter e, Alloc alloc)
@@ -44,20 +47,21 @@ class array_pipe {
   }
 
   auto wait() const
-  noexcept(noexcept(data_.empty()))
+  noexcept(noexcept(std::declval<const data_type&>().empty()))
   -> objpipe_errc {
     return (data_.empty() ? objpipe_errc::closed : objpipe_errc::success);
   }
 
   auto front() const
-  noexcept(noexcept(data_.empty()) && noexcept(data_.front()))
+  noexcept(noexcept(std::declval<const data_type&>().empty())
+      && noexcept(std::declval<const data_type&>().front()))
   -> transport<T&&> {
     if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
     return { std::in_place_index<0>, std::move(data_.front()) };
   }
 
   auto pop_front()
-  noexcept(noexcept(data_.pop_front()))
+  noexcept(noexcept(std::declval<data_type&>().pop_front()))
   -> objpipe_errc {
     if (data_.empty()) return objpipe_errc::closed;
     data_.pop_front();
@@ -65,9 +69,9 @@ class array_pipe {
   }
 
   auto pull()
-  noexcept(noexcept(data_.empty())
-      && noexcept(data_.front())
-      && noexcept(data_.pop_front())
+  noexcept(noexcept(std::declval<data_type&>().empty())
+      && noexcept(std::declval<data_type&>().front())
+      && noexcept(std::declval<data_type&>().pop_front())
       && std::is_nothrow_move_constructible_v<T>)
   -> transport<T> {
     if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
@@ -83,7 +87,7 @@ class array_pipe {
   }
 
  private:
-  mutable std::deque<T, Alloc> data_;
+  mutable data_type data_;
 };
 
 

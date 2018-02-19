@@ -129,20 +129,27 @@ constexpr bool has_flatten = has_flatten_<Source>::value;
 template<typename Source>
 using front_type = typename decltype(std::declval<const Source&>().front())::type;
 
-template<typename Source, bool = has_try_pull<Source>>
-struct try_pull_type_ {
+///\brief Trait containing the value type of Source.
+template<typename Source>
+using value_type =
+    std::remove_cv_t<std::remove_reference_t<front_type<Source>>>;
+
+template<typename Source, bool = has_try_pull<Source>> struct try_pull_type_;
+template<typename Source>
+struct try_pull_type_<Source, true> {
   using type = typename decltype(std::declval<Source&>().try_pull())::type;
 };
 template<typename Source>
 struct try_pull_type_<Source, false> {
-  using type = std::decay_t<front_type<Source>>;
+  using type = value_type<Source>;
 };
 ///\brief Trait containing the value type of Source::try_pull().
 template<typename Source>
 using try_pull_type = typename try_pull_type_<Source>::type;
 
-template<typename Source, bool = has_pull<Source>>
-struct pull_type_ {
+template<typename Source, bool = has_pull<Source>> struct pull_type_;
+template<typename Source>
+struct pull_type_<Source, true> {
   using type = typename decltype(std::declval<Source&>().pull())::type;
 };
 template<typename Source>
@@ -152,11 +159,6 @@ struct pull_type_<Source, false> {
 ///\brief Trait containing the value type of Source::pull().
 template<typename Source>
 using pull_type = typename pull_type_<Source>::type;
-
-///\brief Trait containing the value type of Source.
-template<typename Source>
-using value_type =
-    std::remove_cv_t<std::remove_reference_t<front_type<Source>>>;
 
 
 /**
@@ -359,7 +361,7 @@ noexcept(noexcept(raw_try_pull(std::declval<Source&>()))
   for (;;) {
     transport<pull_type<Source>> v = raw_try_pull(src);
     if (v.has_value())
-      return std::move(v).value();
+      return v;
 
     if (v.errc() == objpipe_errc::success)
       v.emplace(std::in_place_index<1>, wait(src));

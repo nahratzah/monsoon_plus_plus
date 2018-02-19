@@ -112,7 +112,7 @@ class interlock_impl {
     offered_ = std::addressof(v);
     read_ready_.notify_one();
     write_ready_.wait(lck_,
-        [this]() {
+        [this, &v]() {
           return offered_ != std::addressof(v) || reader_count_ == 0;
         });
 
@@ -177,48 +177,48 @@ class interlock_impl {
 };
 
 template<typename T>
-class interlocked_pipe {
+class interlock_pipe {
  public:
-  interlocked_pipe() = default;
+  interlock_pipe() = default;
 
-  explicit interlocked_pipe(interlocked_impl<T>* ptr)
+  explicit interlock_pipe(interlock_impl<T>* ptr)
   noexcept
   : ptr_(ptr)
   {
     if (ptr_ != nullptr) ptr_->inc_reader();
   }
 
-  interlocked_pipe(interlocked_pipe&& other)
+  interlock_pipe(interlock_pipe&& other)
   noexcept
   : ptr_(std::exchange(other.ptr_, nullptr))
   {}
 
-  auto operator=(interlocked_pipe&& other)
+  auto operator=(interlock_pipe&& other)
   noexcept
-  -> interlocked_pipe& {
+  -> interlock_pipe& {
     using std::swap;
     swap(ptr_, other.ptr_);
     return *this;
   }
 
-  interlocked_pipe(const interlocked_pipe& other) = delete;
-  auto operator=(const interlocked_pipe& other) -> interlocked_pipe& = delete;
+  interlock_pipe(const interlock_pipe& other) = delete;
+  auto operator=(const interlock_pipe& other) -> interlock_pipe& = delete;
 #if 0 // Can't copy, due to front() and pop_front() combination not being multiple-reader proof.
-  interlocked_pipe(const interlocked_pipe& other)
+  interlock_pipe(const interlock_pipe& other)
   noexcept
   : ptr_(other.ptr_)
   {
     if (ptr_ != nullptr) ptr_->inc_reader();
   }
 
-  auto operator=(const interlocked_pipe& other)
+  auto operator=(const interlock_pipe& other)
   noexcept
-  -> interlocked_pipe& {
-    return *this = interlocked_pipe(other);
+  -> interlock_pipe& {
+    return *this = interlock_pipe(other);
   }
 #endif
 
-  ~interlocked_pipe()
+  ~interlock_pipe()
   noexcept {
     if (ptr_ != nullptr && ptr_->subtract_reader())
       delete ptr_;
@@ -261,48 +261,48 @@ class interlocked_pipe {
   }
 
  private:
-  interlocked_impl<T>* ptr_ = nullptr;
+  interlock_impl<T>* ptr_ = nullptr;
 };
 
 template<typename T>
-class interlocked_writer {
+class interlock_writer {
  public:
-  interlocked_writer() = default;
+  interlock_writer() = default;
 
-  explicit interlocked_writer(interlocked_impl<T>* ptr)
+  explicit interlock_writer(interlock_impl<T>* ptr)
   noexcept
   : ptr_(ptr)
   {
     if (ptr_ != nullptr) ptr_->inc_writer();
   }
 
-  interlocked_writer(interlocked_writer&& other)
+  interlock_writer(interlock_writer&& other)
   noexcept
   : ptr_(std::exchange(other.ptr_, nullptr))
   {}
 
-  interlocked_writer(const interlocked_writer& other)
+  interlock_writer(const interlock_writer& other)
   noexcept
   : ptr_(other.ptr_)
   {
     if (ptr_ != nullptr) ptr_->inc_writer();
   }
 
-  auto operator=(const interlocked_writer& other)
+  auto operator=(const interlock_writer& other)
   noexcept
-  -> interlocked_writer& {
-    return *this = interlocked_writer(other);
+  -> interlock_writer& {
+    return *this = interlock_writer(other);
   }
 
-  auto operator=(interlocked_writer&& other)
+  auto operator=(interlock_writer&& other)
   noexcept
-  -> interlocked_writer& {
+  -> interlock_writer& {
     using std::swap;
     swap(ptr_, other.ptr_);
     return *this;
   }
 
-  ~interlocked_writer()
+  ~interlock_writer()
   noexcept {
     if (ptr_ != nullptr && ptr_->subtract_writer())
       delete ptr_;
@@ -311,7 +311,7 @@ class interlocked_writer {
   template<typename Arg>
   auto operator()(Arg&& arg)
   -> void {
-    assert(ptr != nullptr);
+    assert(ptr_ != nullptr);
     objpipe_errc e = ptr_->publish(std::forward<Arg>(arg));
     if (e != objpipe_errc::success) {
       throw std::system_error(
@@ -323,12 +323,12 @@ class interlocked_writer {
   template<typename Arg>
   auto operator()(Arg&& arg, objpipe_errc& e)
   -> void {
-    assert(ptr != nullptr);
+    assert(ptr_ != nullptr);
     e = ptr_->publish(std::forward<Arg>(arg));
   }
 
  private:
-  interlocked_impl<T>* ptr_ = nullptr;
+  interlock_impl<T>* ptr_ = nullptr;
 };
 
 
