@@ -9,8 +9,8 @@
 #include <iterator>
 #include <memory>
 #include <utility>
-#include <variant>
 #include <monsoon/objpipe/errc.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -51,7 +51,7 @@ class array_pipe {
 
   auto front() const
   noexcept(noexcept(data_.empty()) && noexcept(data_.front()))
-  -> std::variant<T&&, objpipe_errc> {
+  -> transport<T&&> {
     if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
     return { std::in_place_index<0>, std::move(data_.front()) };
   }
@@ -69,9 +69,9 @@ class array_pipe {
       && noexcept(data_.front())
       && noexcept(data_.pop_front())
       && std::is_nothrow_move_constructible_v<T>)
-  -> std::variant<T, objpipe_errc> {
+  -> transport<T> {
     if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
-    auto rv = std::variant<T, objpipe_errc>(std::in_place_index<0>, std::move(data_.front()));
+    auto rv = transport<T>(std::in_place_index<0>, std::move(data_.front()));
     data_.pop_front();
     return rv;
   }

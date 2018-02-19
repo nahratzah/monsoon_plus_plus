@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <utility>
 #include <monsoon/objpipe/errc.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -39,7 +40,7 @@ class interlock_impl {
   }
 
   auto front()
-  -> std::variant<front_type, objpipe_errc> {
+  -> transport<front_type> {
     std::unique_lock<std::mutex> lck_{ guard_ };
     for (;;) {
       if (offered_ != nullptr)
@@ -64,7 +65,7 @@ class interlock_impl {
   }
 
   auto pull()
-  -> std::variant<pull_type, objpipe_errc> {
+  -> transport<pull_type> {
     std::unique_lock<std::mutex> lck_{ guard_ };
     while (offered_ == nullptr) {
       if (writer_count_ == 0)
@@ -72,7 +73,7 @@ class interlock_impl {
       read_ready_.wait(lck_);
     }
 
-    auto result = std::variant<pull_type, objpipe_errc>(std::in_place_index<0>, get(lck_));
+    auto result = transport<pull_type>(std::in_place_index<0>, get(lck_));
     offered_ = nullptr;
     lck_.unlock();
     write_ready_.notify_one();
@@ -80,7 +81,7 @@ class interlock_impl {
   }
 
   auto try_pull()
-  -> std::variant<pull_type, objpipe_errc> {
+  -> transport<pull_type> {
     std::unique_lock<std::mutex> lck_{ guard_ };
     if (offered_ == nullptr) {
       if (writer_count_ == 0)
@@ -89,7 +90,7 @@ class interlock_impl {
         return { std::in_place_index<1>, objpipe_errc::success };
     }
 
-    auto result = std::variant<pull_type, objpipe_errc>(std::in_place_index<0>, get(lck_));
+    auto result = transport<pull_type>(std::in_place_index<0>, get(lck_));
     offered_ = nullptr;
     lck_.unlock();
     write_ready_.notify_one();

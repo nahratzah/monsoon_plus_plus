@@ -7,8 +7,8 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <monsoon/objpipe/errc.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -48,7 +48,7 @@ class of_pipe {
   ///\note An rvalue reference is returned, since front() is only allowed to be called at most once before pop_front() or pull().
   constexpr auto front() const
   noexcept
-  -> std::variant<std::add_rvalue_reference_t<T>, objpipe_errc> {
+  -> transport<std::add_rvalue_reference_t<T>> {
     if (val_.has_value())
       return { std::in_place_index<0>, *val_ };
     return { std::in_place_index<1>, objpipe_errc::closed };
@@ -67,16 +67,16 @@ class of_pipe {
 
   constexpr auto try_pull()
   noexcept
-  -> std::variant<T, objpipe_errc> {
+  -> transport<T> {
     return pull();
   }
 
   constexpr auto pull()
   noexcept
-  -> std::variant<T, objpipe_errc> {
+  -> transport<T> {
     if (!val_.has_value())
       return { std::in_place_index<1>, objpipe_errc::closed };
-    auto rv = std::variant<T, objpipe_errc>(std::in_place_index<0>, *std::move(val_));
+    auto rv = transport<T>(std::in_place_index<0>, *std::move(val_));
     val_.reset();
     return rv;
   }
@@ -107,7 +107,7 @@ class of_pipe<std::reference_wrapper<T>> {
 
   constexpr auto front() const
   noexcept
-  -> std::variant<std::add_lvalue_reference_t<T>, objpipe_errc> {
+  -> transport<std::add_lvalue_reference_t<T>> {
     if (val_ != nullptr)
       return { std::in_place_index<0>, *val_ };
     return { std::in_place_index<1>, objpipe_errc::closed };
@@ -123,13 +123,13 @@ class of_pipe<std::reference_wrapper<T>> {
 
   constexpr auto try_pull()
   noexcept
-  -> std::variant<std::add_lvalue_reference_t<T>, objpipe_errc> {
+  -> transport<std::add_lvalue_reference_t<T>> {
     return pull();
   }
 
   constexpr auto pull()
   noexcept
-  -> std::variant<std::add_lvalue_reference_t<T>, objpipe_errc> {
+  -> transport<std::add_lvalue_reference_t<T>> {
     if (val_ == nullptr)
       return { std::in_place_index<1>, objpipe_errc::closed };
     return { std::in_place_index<0>, *std::exchange(val_, nullptr) };

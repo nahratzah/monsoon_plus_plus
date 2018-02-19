@@ -8,8 +8,8 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <monsoon/objpipe/detail/fwd.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -229,9 +229,7 @@ using flatten_op_store = std::conditional_t<
 template<typename Source>
 class flatten_op {
  private:
-  using raw_collection_type = std::variant_alternative_t<
-      0,
-      decltype(std::declval<const Source&>().front())>;
+  using raw_collection_type = adapt::front_type<Source>;
   using store_type = flatten_op_store<raw_collection_type>;
   using item_type = decltype(std::declval<const store_type&>().deref());
 
@@ -261,7 +259,7 @@ class flatten_op {
       && (std::is_lvalue_reference_v<item_type>
           || std::is_rvalue_reference_v<item_type>
           || std::is_nothrow_move_constructible_v<item_type>))
-  -> std::variant<item_type, objpipe_errc> {
+  -> transport<item_type> {
     const objpipe_errc e = ensure_avail_();
     if (e == objpipe_errc::success)
       return { std::in_place_index<0>, active_.deref() };
@@ -288,7 +286,7 @@ class flatten_op {
           || std::is_nothrow_move_constructible_v<raw_collection_type>))
   -> objpipe_errc {
     while (!active_.has_value() || active_.empty()) {
-      std::variant<raw_collection_type, objpipe_errc> front_val = src_.front();
+      transport<raw_collection_type> front_val = src_.front();
       if (front_val.index() == 1) {
         assert(std::get<1>(front_val) != objpipe_errc::success);
         return std::get<1>(front_val);

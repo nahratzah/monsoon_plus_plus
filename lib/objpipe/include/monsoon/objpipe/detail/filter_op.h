@@ -10,10 +10,10 @@
 #include <tuple>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <monsoon/objpipe/detail/adapt.h>
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/invocable_.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -216,7 +216,7 @@ class filter_op {
   noexcept(noexcept(src_.front())
       && noexcept(src_.pop_front())
       && noexcept_test)
-  -> std::variant<adapt::front_type<Source>, objpipe_errc> {
+  -> transport<adapt::front_type<Source>> {
     while (!store_.present()) {
       objpipe_errc e = store_.load(src_);
       if (e != objpipe_errc::success) return { std::in_place_index<1>, e };
@@ -253,7 +253,7 @@ class filter_op {
   noexcept(noexcept(adapt::raw_try_pull(src_))
       && noexcept_test)
   -> std::enable_if_t<Enable,
-      std::variant<adapt::try_pull_type<Source>, objpipe_errc>> {
+      transport<adapt::try_pull_type<Source>>> {
     if (store_.present()) {
       if constexpr(std::is_lvalue_reference_v<adapt::try_pull_type<Source>>)
         return { std::in_place_index<0>, store_.release_lref() };
@@ -262,7 +262,7 @@ class filter_op {
     }
 
     for (;;) {
-      std::variant<adapt::try_pull_type<Source>, objpipe_errc> v =
+      transport<adapt::try_pull_type<Source>> v =
           adapt::raw_try_pull(src_);
       if (v.index() != 0 || test(std::get<0>(v)))
         return v;
@@ -275,8 +275,8 @@ class filter_op {
   noexcept(noexcept(adapt::raw_pull(src_))
       && noexcept_test)
   -> std::enable_if_t<Enable,
-      std::variant<adapt::pull_type<Source>, objpipe_errc>> {
-    using result_type = std::variant<adapt::pull_type<Source>, objpipe_errc>;
+      transport<adapt::pull_type<Source>>> {
+    using result_type = transport<adapt::pull_type<Source>>;
 
     if (store_.present()) {
       if constexpr(std::is_lvalue_reference_v<adapt::pull_type<Source>>)
@@ -286,7 +286,7 @@ class filter_op {
     }
 
     for (;;) {
-      std::variant<adapt::pull_type<Source>, objpipe_errc> v =
+      transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
       if (v.index() != 0 || test(std::get<0>(v)))
         return v;

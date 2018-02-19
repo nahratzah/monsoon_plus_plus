@@ -7,10 +7,10 @@
 #include <functional>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/adapt.h>
 #include <monsoon/objpipe/detail/invocable_.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -274,7 +274,7 @@ class transform_op {
       && (std::is_lvalue_reference_v<front_type>
           || std::is_rvalue_reference_v<front_type>
           || std::is_nothrow_constructible_v<std::decay_t<front_type>, raw_front_type>))
-  -> std::variant<front_type, objpipe_errc> {
+  -> transport<front_type> {
     return invoke_fn_(src_.front());
   }
 
@@ -286,13 +286,13 @@ class transform_op {
 
   constexpr auto try_pull()
   noexcept(noexcept(invoke_fn_(adapt::raw_try_pull(src_))))
-  -> std::variant<try_pull_type, objpipe_errc> {
+  -> transport<try_pull_type> {
     return invoke_fn_(adapt::raw_try_pull(src_));
   }
 
   constexpr auto pull()
   noexcept(noexcept(invoke_fn_(adapt::raw_pull(src_))))
-  -> std::variant<pull_type, objpipe_errc> {
+  -> transport<pull_type> {
     return invoke_fn_(adapt::raw_pull(src_));
   }
 
@@ -310,19 +310,15 @@ class transform_op {
 
  private:
   template<typename T>
-  constexpr auto invoke_fn_(std::variant<T, objpipe_errc>&& v) const
-  noexcept(is_nothrow_invocable_v<const fn_type&, decltype(std::get<0>(std::declval<std::variant<T, objpipe_errc>>()))>)
-  -> std::variant<
-      invoke_result_t<const fn_type&, std::add_rvalue_reference_t<T>>,
-      objpipe_errc> {
+  constexpr auto invoke_fn_(transport<T>&& v) const
+  noexcept(is_nothrow_invocable_v<const fn_type&, decltype(std::declval<transport<T>>().value())>)
+  -> transport<invoke_result_t<const fn_type&, std::add_rvalue_reference_t<T>>> {
+    using result_type = transport<invoke_result_t<const fn_type&, std::add_rvalue_reference_t<T>>>;
 
-    using result_type = std::variant<
-        invoke_result_t<const fn_type&, std::add_rvalue_reference_t<T>>,
-        objpipe_errc>;
-    if (v.index() == 0)
-      return result_type(std::in_place_index<0>, std::invoke(fn_, std::get<0>(std::move(v))));
+    if (v.has_value())
+      return result_type(std::in_place_index<0>, std::invoke(fn_, std::move(v).value()));
     else
-      return result_type(std::in_place_index<1>, std::get<1>(std::move(v)));
+      return result_type(std::in_place_index<1>, std::move(v).errc());
   }
 
   Source src_;

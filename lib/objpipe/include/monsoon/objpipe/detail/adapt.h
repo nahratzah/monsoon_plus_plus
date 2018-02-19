@@ -8,10 +8,10 @@
 #include <optional>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/peek_op.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 /**
  * \brief Adapter functions for objpipe source.
@@ -26,14 +26,14 @@
  * \code
  * auto is_pullable() const noexcept -> bool
  * auto wait() const -> objpipe_errc;
- * auto front() const -> std::variant<T, objpipe_errc>;
+ * auto front() const -> transport<T>;
  * auto pop_front() -> objpipe_errc;
  * \endcode
  *
  * Source may optionally implement:
  * \code
- * auto try_pull() -> std::variant<T, objpipe_errc>;
- * auto pull() -> std::variant<T, objpipe_errc>;
+ * auto try_pull() -> transport<T>;
+ * auto pull() -> transport<T>;
  * \endcode
  *
  * In addition, source may implement specialization of the mutator functions:
@@ -127,15 +127,11 @@ constexpr bool has_flatten = has_flatten_<Source>::value;
 
 ///\brief Trait containing the value type of Source::front() const.
 template<typename Source>
-using front_type = std::variant_alternative_t<
-    0,
-    decltype(std::declval<const Source&>().front())>;
+using front_type = typename decltype(std::declval<const Source&>().front())::type;
 
 template<typename Source, bool = has_try_pull<Source>>
 struct try_pull_type_ {
-  using type = std::variant_alternative_t<
-      0,
-      decltype(std::declval<Source&>().try_pull())>;
+  using type = typename decltype(std::declval<Source&>().try_pull())::type;
 };
 template<typename Source>
 struct try_pull_type_<Source, false> {
@@ -147,9 +143,7 @@ using try_pull_type = typename try_pull_type_<Source>::type;
 
 template<typename Source, bool = has_pull<Source>>
 struct pull_type_ {
-  using type = std::variant_alternative_t<
-      0,
-      decltype(std::declval<Source&>().pull())>;
+  using type = typename decltype(std::declval<Source&>().pull())::type;
 };
 template<typename Source>
 struct pull_type_<Source, false> {
@@ -203,7 +197,7 @@ noexcept(noexcept(std::declval<const Source&>().wait()))
  *
  * \details Adapts a call to the wait() function.
  * \tparam Source Type of the objpipe source.
- * \return A variant containing the next value or an error code.
+ * \return A transport containing the next value or an error code.
  * \throw std::system_error if the front() call fails.
  */
 template<typename Source>
@@ -211,13 +205,13 @@ auto front(
     const Source& src ///< [in] Object pipe source that is to be adapted.
     )
 -> front_type<Source> {
-  std::variant<front_type<Source>, objpipe_errc> v = src.front();
-  if (v.index() == 0)
-    return std::get<0>(std::move(v));
+  transport<front_type<Source>> v = src.front();
+  if (v.has_value())
+    return std::move(v).value();
 
-  assert(std::get<1>(v) != objpipe_errc::success);
+  assert(v.errc() != objpipe_errc::success);
   throw std::system_error(
-      static_cast<int>(std::get<1>(v)),
+      static_cast<int>(v.errc()),
       objpipe_category());
 }
 
@@ -249,7 +243,7 @@ auto pop_front(
  * \details Wraps a call to the try_pull method.
  *
  * \tparam Source Type of the objpipe source.
- * \return A variant containing the pulled value or an error code.
+ * \return A transport containing the pulled value or an error code.
  */
 template<typename Source>
 auto raw_try_pull(
@@ -257,7 +251,7 @@ auto raw_try_pull(
     )
 noexcept(noexcept(std::declval<Source&>().try_pull()))
 -> std::enable_if_t<!std::is_const_v<Source> && has_try_pull<Source>,
-    std::variant<try_pull_type<Source>, objpipe_errc>> {
+    transport<try_pull_type<Source>>> {
   return src.try_pull();
 }
 
@@ -272,7 +266,7 @@ noexcept(noexcept(std::declval<Source&>().try_pull()))
  * \note emulated using front() and pop_front().
  *
  * \tparam Source Type of the objpipe source.
- * \return A variant containing the pulled value or an error code.
+ * \return A transport containing the pulled value or an error code.
  * \throw std::system_error if the try_pull() call fails.
  */
 template<typename Source>
@@ -285,9 +279,9 @@ noexcept(noexcept(std::declval<const Source&>().front())
         || (std::is_nothrow_move_constructible_v<std::decay_t<try_pull_type<Source>>>
             && std::is_nothrow_destructible_v<std::decay_t<try_pull_type<Source>>>)))
 -> std::enable_if_t<!std::is_const_v<Source> && !has_try_pull<Source>,
-    std::variant<try_pull_type<Source>, objpipe_errc>> {
-  std::variant<try_pull_type<Source>, objpipe_errc> v = src.front();
-  if (v.index() == 0) {
+    transport<try_pull_type<Source>>> {
+  transport<try_pull_type<Source>> v = src.front();
+  if (v.has_value()) {
     objpipe_errc e = src.pop_front();
     if (e != objpipe_errc::success)
       v.emplace(std::in_place_index<1>, e);
@@ -312,13 +306,13 @@ auto try_pull(
     Source& src ///< [in] Object pipe source that is to be adapted.
     )
 -> std::optional<std::decay_t<try_pull_type<Source>>> {
-  std::variant<try_pull_type<Source>, objpipe_errc> v = raw_try_pull(src);
-  if (v.index() == 0)
-    return std::make_optional(std::get<0>(std::move(v)));
+  transport<try_pull_type<Source>> v = raw_try_pull(src);
+  if (v.has_value())
+    return std::make_optional(std::move(v).value());
 
-  if (std::get<1>(v) != objpipe_errc::success) {
+  if (v.errc() != objpipe_errc::success && v.errc() != objpipe_errc::closed) {
     throw std::system_error(
-        static_cast<int>(std::get<1>(v)),
+        static_cast<int>(v.errc()),
         objpipe_category());
   }
   return {};
@@ -330,7 +324,7 @@ auto try_pull(
  *
  * \details Adapts a call to the pull method.
  *
- * \return A variant containing the pulled value or an error code.
+ * \return A transport containing the pulled value or an error code.
  * \tparam Source Type of the objpipe source.
  */
 template<typename Source>
@@ -339,7 +333,7 @@ auto raw_pull(
     )
 noexcept(noexcept(std::declval<Source&>().pull()))
 -> std::enable_if_t<!std::is_const_v<Source> && has_pull<Source>,
-    std::variant<pull_type<Source>, objpipe_errc>> {
+    transport<pull_type<Source>>> {
   return src.pull();
 }
 
@@ -351,7 +345,7 @@ noexcept(noexcept(std::declval<Source&>().pull()))
  *
  * \note emulated using wait() and Source::try_pull().
  *
- * \return A variant containing the pulled value or an error code.
+ * \return A transport containing the pulled value or an error code.
  * \tparam Source Type of the objpipe source.
  */
 template<typename Source>
@@ -361,14 +355,15 @@ auto raw_pull(
 noexcept(noexcept(raw_try_pull(std::declval<Source&>()))
     && noexcept(std::declval<const Source&>().wait()))
 -> std::enable_if_t<!std::is_const_v<Source> && !has_pull<Source>,
-    std::variant<pull_type<Source>, objpipe_errc>> {
+    transport<pull_type<Source>>> {
   for (;;) {
-    std::variant<pull_type<Source>, objpipe_errc> v = raw_try_pull(src);
-    if (v.index() == 0)
-      return std::get<0>(std::move(v));
+    transport<pull_type<Source>> v = raw_try_pull(src);
+    if (v.has_value())
+      return std::move(v).value();
 
-    if (std::get<1>(v) == objpipe_errc::success) std::get<1>(v) = wait(src);
-    if (std::get<1>(v) != objpipe_errc::success)
+    if (v.errc() == objpipe_errc::success)
+      v.emplace(std::in_place_index<1>, wait(src));
+    if (v.errc() != objpipe_errc::success)
       return v;
   }
 }
@@ -390,11 +385,11 @@ auto pull(
     )
 -> std::enable_if_t<!std::is_const_v<Source> && has_pull<Source>,
     pull_type<Source>> {
-  std::variant<pull_type<Source>, objpipe_errc> v = raw_pull(src);
-  if (v.index() == 0) return std::get<0>(std::move(v));
+  transport<pull_type<Source>> v = raw_pull(src);
+  if (v.has_value()) return std::move(v).value();
 
-  assert(std::get<1>(v) != objpipe_errc::success);
-  throw std::system_error(static_cast<int>(std::get<1>(v)), objpipe_category());
+  assert(v.errc() != objpipe_errc::success);
+  throw std::system_error(static_cast<int>(v.errc()), objpipe_category());
 }
 
 /**
@@ -416,14 +411,11 @@ noexcept(std::is_nothrow_move_constructible_v<std::decay_t<pull_type<Source>>>
     && noexcept(raw_pull(std::declval<Source&>())))
 -> std::enable_if_t<!std::is_const_v<Source> && has_pull<Source>,
     std::optional<std::decay_t<pull_type<Source>>>> {
-  std::variant<pull_type<Source>, objpipe_errc> v = raw_pull(src);
-  if (v.index() == 0) {
-    e = objpipe_errc::success;
-    return std::make_optional(std::get<0>(std::move(v)));
-  }
+  transport<pull_type<Source>> v = raw_pull(src);
+  e = v.errc();
+  assert(v.has_value() || v.errc() != objpipe_errc::success);
 
-  assert(std::get<1>(v) != objpipe_errc::success);
-  e = std::get<1>(v);
+  if (v.has_value()) return std::make_optional(std::move(v).value());
   return {};
 }
 

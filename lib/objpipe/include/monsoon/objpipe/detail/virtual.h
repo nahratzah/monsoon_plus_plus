@@ -6,10 +6,10 @@
 
 #include <cassert>
 #include <type_traits>
-#include <variant>
 #include <memory>
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/adapt.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -23,10 +23,10 @@ class virtual_intf {
 
   virtual auto is_pullable() const noexcept -> bool = 0;
   virtual auto wait() const -> objpipe_errc = 0;
-  virtual auto front() const -> std::variant<T, objpipe_errc> = 0;
+  virtual auto front() const -> transport<T> = 0;
   virtual auto pop_front() -> objpipe_errc = 0;
-  virtual auto pull() -> std::variant<T, objpipe_errc> = 0;
-  virtual auto try_pull() -> std::variant<T, objpipe_errc> = 0;
+  virtual auto pull() -> transport<T> = 0;
+  virtual auto try_pull() -> transport<T> = 0;
 };
 
 ///\brief Internal implementation to virtualize an objpipe.
@@ -55,7 +55,7 @@ class virtual_impl
   }
 
   auto front() const
-  -> std::variant<adapt::value_type<Source>, objpipe_errc> override {
+  -> transport<adapt::value_type<Source>> override {
     return src_.front();
   }
 
@@ -65,12 +65,12 @@ class virtual_impl
   }
 
   auto try_pull()
-  -> std::variant<adapt::value_type<Source>, objpipe_errc> override {
+  -> transport<adapt::value_type<Source>> override {
     return adapt::raw_try_pull(src_);
   }
 
   auto pull()
-  -> std::variant<adapt::value_type<Source>, objpipe_errc> override {
+  -> transport<adapt::value_type<Source>> override {
     return adapt::raw_pull(src_);
   }
 
@@ -109,7 +109,7 @@ class virtual_pipe {
   }
 
   auto front() const
-  -> std::variant<T, objpipe_errc> {
+  -> transport<T> {
     assert(pimpl_ != nullptr);
     return pimpl_->front();
   }
@@ -121,13 +121,13 @@ class virtual_pipe {
   }
 
   auto try_pull()
-  -> std::variant<T, objpipe_errc> {
+  -> transport<T> {
     assert(pimpl_ != nullptr);
     return pimpl_->try_pull();
   }
 
   auto pull()
-  -> std::variant<T, objpipe_errc> {
+  -> transport<T> {
     assert(pimpl_ != nullptr);
     return pimpl_->pull();
   }

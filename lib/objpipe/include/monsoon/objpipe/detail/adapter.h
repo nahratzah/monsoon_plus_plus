@@ -21,6 +21,7 @@
 #include <monsoon/objpipe/detail/peek_op.h>
 #include <monsoon/objpipe/detail/transform_op.h>
 #include <monsoon/objpipe/detail/virtual.h>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -468,7 +469,7 @@ class adapter_t {
     objpipe_errc e = objpipe_errc::success;
 
     {
-      std::variant<adapt::pull_type<Source>, objpipe_errc> v =
+      transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
       if (v.index() != 0) e = std::get<1>(v);
 
@@ -477,7 +478,7 @@ class adapter_t {
     }
 
     while (e == objpipe_errc::success) {
-      std::variant<adapt::pull_type<Source>, objpipe_errc> v =
+      transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
       if (v.index() != 0) e = std::get<1>(v);
 
@@ -507,7 +508,7 @@ class adapter_t {
     objpipe_errc e = objpipe_errc::success;
 
     while (e == objpipe_errc::success) {
-      std::variant<adapt::pull_type<Source>, objpipe_errc> v =
+      transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
       if (v.index() != 0) e = std::get<1>(v);
 
@@ -597,7 +598,7 @@ class adapter_t {
     std::optional<value_type> result;
 
     for (;;) {
-      std::variant<adapt::pull_type<Source>, objpipe_errc> v = src_.pull();
+      transport<adapt::pull_type<Source>> v = src_.pull();
       if (v.index() != 0) {
         assert(std::get<1>(v) != objpipe_errc::success);
         if (std::get<1>(v) == objpipe_errc::closed) break;
@@ -631,7 +632,7 @@ class adapter_t {
     std::optional<value_type> result;
 
     for (;;) {
-      std::variant<adapt::pull_type<Source>, objpipe_errc> v = src_.pull();
+      transport<adapt::pull_type<Source>> v = src_.pull();
       if (v.index() != 0) {
         assert(std::get<1>(v) != objpipe_errc::success);
         if (std::get<1>(v) == objpipe_errc::closed) break;

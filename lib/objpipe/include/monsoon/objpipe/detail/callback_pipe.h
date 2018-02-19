@@ -9,6 +9,7 @@
 #include <variant>
 #include <boost/coroutine2/protected_fixedsize_stack.hpp>
 #include <boost/coroutine2/coroutine.hpp>
+#include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -150,7 +151,7 @@ class callback_pipe {
   }
 
   auto front() const
-  -> std::variant<result_type, objpipe_errc> {
+  -> transport<result_type> {
     ensure_init_();
     auto& coro = std::get<1>(src_);
 
@@ -169,7 +170,7 @@ class callback_pipe {
   }
 
   auto pull() const
-  -> std::variant<result_type, objpipe_errc> {
+  -> transport<result_type> {
     ensure_init_();
     auto& coro = std::get<1>(src_);
 
@@ -179,7 +180,7 @@ class callback_pipe {
   }
 
   auto try_pull() const
-  -> std::variant<result_type, objpipe_errc> {
+  -> transport<result_type> {
     ensure_init_();
     auto& coro = std::get<1>(src_);
 
