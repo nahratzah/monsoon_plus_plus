@@ -287,9 +287,9 @@ class flatten_op {
   -> objpipe_errc {
     while (!active_.has_value() || active_.empty()) {
       transport<raw_collection_type> front_val = src_.front();
-      if (front_val.index() == 1) {
-        assert(std::get<1>(front_val) != objpipe_errc::success);
-        return std::get<1>(front_val);
+      if (!front_val.has_value()) {
+        assert(front_val.errc() != objpipe_errc::success);
+        return front_val.errc();
       }
       active_.emplace(std::get<0>(std::move(front_val)));
     }

@@ -49,8 +49,8 @@ class filter_store_copy_ {
     assert(!present());
 
     auto v = src.front();
-    if (v.index() != 0) return std::get<1>(v);
-    val_.emplace(std::get<0>(std::move(v)));
+    if (!v.has_value()) return v.errc();
+    val_.emplace(std::move(v).value());
     return objpipe_errc::success;
   }
 
@@ -114,8 +114,8 @@ class filter_store_ref_ {
     assert(!present());
 
     auto v = src.front();
-    if (v.index() != 0) return std::get<1>(v);
-    ptr_ = std::addressof(std::get<0>(v));
+    if (!v.has_value()) return v.errc();
+    ptr_ = std::addressof(v.value());
     return objpipe_errc::success;
   }
 
@@ -264,7 +264,7 @@ class filter_op {
     for (;;) {
       transport<adapt::try_pull_type<Source>> v =
           adapt::raw_try_pull(src_);
-      if (v.index() != 0 || test(std::get<0>(v)))
+      if (!v.has_value() || test(v.value()))
         return v;
     }
   }
@@ -288,7 +288,7 @@ class filter_op {
     for (;;) {
       transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
-      if (v.index() != 0 || test(std::get<0>(v)))
+      if (!v.has_value() || test(v.value()))
         return v;
     }
   }

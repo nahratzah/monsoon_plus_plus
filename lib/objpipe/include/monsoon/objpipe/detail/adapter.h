@@ -471,19 +471,19 @@ class adapter_t {
     {
       transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
-      if (v.index() != 0) e = std::get<1>(v);
+      e = v.errc();
 
       if (e == objpipe_errc::success)
-        result.emplace(std::get<0>(v));
+        result.emplace(std::move(v).value());
     }
 
     while (e == objpipe_errc::success) {
       transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
-      if (v.index() != 0) e = std::get<1>(v);
+      e = v.errc();
 
       if (e == objpipe_errc::success)
-        result.emplace(std::invoke(fn, *std::move(result), std::get<0>(v)));
+        result.emplace(std::invoke(fn, *std::move(result), std::move(v).value()));
     }
 
     if (e != objpipe_errc::success && e != objpipe_errc::closed) {
@@ -510,10 +510,10 @@ class adapter_t {
     while (e == objpipe_errc::success) {
       transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
-      if (v.index() != 0) e = std::get<1>(v);
+      e = v.errc();
 
       if (e == objpipe_errc::success)
-        init = std::invoke(fn, std::move(init), std::get<0>(v));
+        init = std::invoke(fn, std::move(init), std::move(v).value());
     }
 
     if (e != objpipe_errc::success && e != objpipe_errc::closed) {
@@ -599,21 +599,21 @@ class adapter_t {
 
     for (;;) {
       transport<adapt::pull_type<Source>> v = src_.pull();
-      if (v.index() != 0) {
-        assert(std::get<1>(v) != objpipe_errc::success);
-        if (std::get<1>(v) == objpipe_errc::closed) break;
+      if (!v.has_value()) {
+        assert(v.errc() != objpipe_errc::success);
+        if (v.errc() == objpipe_errc::closed) break;
         throw std::system_error(
-            static_cast<int>(std::get<1>(v)),
+            static_cast<int>(v.errc()),
             objpipe_category());
       }
 
       if (!result.has_value()) {
-        result.emplace(std::get<0>(std::move(v)));
+        result.emplace(std::move(v).value());
       } else {
         const auto& result_value = *result;
-        const auto& v_value = std::get<0>(v);
+        const auto& v_value = v.value();
         if (std::invoke(pred, v_value, result_value))
-          result.emplace(std::get<0>(std::move(v)));
+          result.emplace(std::move(v).value());
       }
     }
     return result;
@@ -633,21 +633,21 @@ class adapter_t {
 
     for (;;) {
       transport<adapt::pull_type<Source>> v = src_.pull();
-      if (v.index() != 0) {
-        assert(std::get<1>(v) != objpipe_errc::success);
-        if (std::get<1>(v) == objpipe_errc::closed) break;
+      if (!v.has_value()) {
+        assert(v.errc() != objpipe_errc::success);
+        if (v.errc() == objpipe_errc::closed) break;
         throw std::system_error(
-            static_cast<int>(std::get<1>(v)),
+            static_cast<int>(v.errc()),
             objpipe_category());
       }
 
       if (!result.has_value()) {
-        result.emplace(std::get<0>(std::move(v)));
+        result.emplace(std::move(v).value());
       } else {
         const auto& result_value = *result;
-        const auto& v_value = std::get<0>(v);
+        const auto& v_value = v.value();
         if (std::invoke(pred, result_value, v_value))
-          result.emplace(std::get<0>(std::move(v)));
+          result.emplace(std::move(v).value());
       }
     }
     return result;
