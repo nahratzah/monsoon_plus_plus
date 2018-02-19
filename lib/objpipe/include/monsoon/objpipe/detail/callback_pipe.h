@@ -163,7 +163,7 @@ class callback_pipe {
     ensure_init_();
     auto& coro = std::get<1>(src_);
 
-    if (!coro) return { std::in_place_index<1>, objpipe_errc::closed };
+    if (!coro) return transport<result_type>(std::in_place_index<1>, objpipe_errc::closed);
     return transport<result_type>(std::in_place_index<0>, get());
   }
 
@@ -182,7 +182,7 @@ class callback_pipe {
     ensure_init_();
     auto& coro = std::get<1>(src_);
 
-    if (!coro) return { std::in_place_index<1>, objpipe_errc::closed };
+    if (!coro) return transport<result_type>(std::in_place_index<1>, objpipe_errc::closed);
     must_advance_ = true;
     return transport<result_type>(std::in_place_index<0>, get());
   }
@@ -192,7 +192,7 @@ class callback_pipe {
     ensure_init_();
     auto& coro = std::get<1>(src_);
 
-    if (!coro) return { std::in_place_index<1>, objpipe_errc::closed };
+    if (!coro) return transport<result_type>(std::in_place_index<1>, objpipe_errc::closed);
     must_advance_ = true;
     return transport<result_type>(std::in_place_index<0>, get());
   }

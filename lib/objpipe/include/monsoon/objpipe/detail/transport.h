@@ -91,7 +91,7 @@ class transport<T&> {
  public:
   using type = T&;
 
-  explicit constexpr transport(std::in_place_index_t<0>, T& v)
+  constexpr transport(std::in_place_index_t<0>, T& v)
   noexcept
   : data_(std::in_place_index<0>, std::addressof(v))
   {}
@@ -118,7 +118,7 @@ class transport<T&> {
   noexcept
   -> T* {
     assert(has_value());
-    return *std::get<0>(data_);
+    return std::get<0>(data_);
   }
 
   auto errc() const
@@ -157,7 +157,7 @@ class transport<T&&> {
  public:
   using type = T&&;
 
-  explicit constexpr transport(std::in_place_index_t<0>, T&& v)
+  constexpr transport(std::in_place_index_t<0>, T&& v)
   noexcept
   : data_(std::in_place_index<0>, std::addressof(static_cast<T&>(v)))
   {}
@@ -184,7 +184,7 @@ class transport<T&&> {
   noexcept
   -> T* {
     assert(has_value());
-    return *std::get<0>(data_);
+    return std::get<0>(data_);
   }
 
   auto errc() const

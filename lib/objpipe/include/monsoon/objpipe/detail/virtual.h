@@ -91,6 +91,8 @@ class virtual_impl
 template<typename T>
 class virtual_pipe {
  public:
+  constexpr virtual_pipe() = default;
+
   template<typename Source>
   explicit virtual_pipe(Source&& src)
   : pimpl_(std::make_unique<virtual_impl<std::decay_t<Source>>>(std::forward<Source>(src)))

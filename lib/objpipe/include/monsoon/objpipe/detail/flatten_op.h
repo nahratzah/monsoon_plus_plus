@@ -271,7 +271,7 @@ class flatten_op {
     const objpipe_errc e = ensure_avail_();
     if (e == objpipe_errc::success)
       return transport<item_type>(std::in_place_index<0>, active_->deref());
-    return { std::in_place_index<1>, e };
+    return transport<item_type>(std::in_place_index<1>, e);
   }
 
   auto pop_front()

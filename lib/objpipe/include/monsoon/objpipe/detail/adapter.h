@@ -52,8 +52,10 @@ class front_store_handler_data_<T, true> {
   auto get_or_assign(const Source& src) const
   -> std::add_lvalue_reference_t<T> {
     if (ptr_ == nullptr) {
-      std::add_lvalue_reference_t<T> front_ref = adapt::front(src);
-      ptr_ = std::addressof(front_ref);
+      static_assert(std::is_reference_v<decltype(adapt::front(src))>,
+          "Programmer error: front() returns a temporary, instead of a reference.");
+
+      ptr_ = addressof_(adapt::front(src));
     }
     return *ptr_;
   }
@@ -78,6 +80,16 @@ class front_store_handler_data_<T, true> {
   }
 
  private:
+  static auto addressof_(T&& arg)
+  -> std::add_pointer_t<T> {
+    return std::addressof(arg);
+  }
+
+  static auto addressof_(T& arg)
+  -> std::add_pointer_t<T> {
+    return std::addressof(arg);
+  }
+
   mutable std::add_pointer_t<T> ptr_ = nullptr;
 };
 
@@ -222,6 +234,8 @@ class adapter_t {
  public:
   using value_type = adapt::value_type<Source>;
   using iterator = adapter_iterator<Source>;
+
+  constexpr adapter_t() = default;
 
   ///\brief Constructor, wraps the given source.
   explicit constexpr adapter_t(Source&& src)
@@ -685,8 +699,8 @@ class adapter_t {
   }
 
   ///\brief Retrieve objpipe values as a vector.
-  template<typename Alloc>
-  auto to_vector(Alloc alloc = std::allocator<value_type>()) &&
+  template<typename Alloc = std::allocator<value_type>>
+  auto to_vector(Alloc alloc = Alloc()) &&
   -> std::vector<value_type, Alloc> {
     return std::vector<value_type, Alloc>(begin(), end(), alloc);
   }

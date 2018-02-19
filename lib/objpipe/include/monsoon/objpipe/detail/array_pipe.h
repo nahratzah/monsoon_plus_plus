@@ -56,7 +56,7 @@ class array_pipe {
   noexcept(noexcept(std::declval<const data_type&>().empty())
       && noexcept(std::declval<const data_type&>().front()))
   -> transport<T&&> {
-    if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
+    if (data_.empty()) return transport<T&&>(std::in_place_index<1>, objpipe_errc::closed);
     return transport<T&&>(std::in_place_index<0>, std::move(data_.front()));
   }
 
@@ -74,7 +74,7 @@ class array_pipe {
       && noexcept(std::declval<data_type&>().pop_front())
       && std::is_nothrow_move_constructible_v<T>)
   -> transport<T> {
-    if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
+    if (data_.empty()) return transport<T>(std::in_place_index<1>, objpipe_errc::closed);
     auto rv = transport<T>(std::in_place_index<0>, std::move(data_.front()));
     data_.pop_front();
     return rv;

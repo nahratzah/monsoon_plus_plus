@@ -49,9 +49,11 @@ class of_pipe {
   constexpr auto front() const
   noexcept
   -> transport<std::add_rvalue_reference_t<T>> {
+    using result_type = transport<std::add_rvalue_reference_t<T>>;
+
     if (val_.has_value())
-      return transport<std::add_rvalue_reference_t<T>>(std::in_place_index<0>, *std::move(val_));
-    return { std::in_place_index<1>, objpipe_errc::closed };
+      return result_type(std::in_place_index<0>, *std::move(val_));
+    return result_type(std::in_place_index<1>, objpipe_errc::closed);
   }
 
   constexpr auto pop_front()
@@ -74,9 +76,11 @@ class of_pipe {
   constexpr auto pull()
   noexcept
   -> transport<T> {
+    using result_type = transport<T>;
+
     if (!val_.has_value())
-      return { std::in_place_index<1>, objpipe_errc::closed };
-    auto rv = transport<T>(std::in_place_index<0>, *std::move(val_));
+      return result_type(std::in_place_index<1>, objpipe_errc::closed);
+    auto rv = result_type(std::in_place_index<0>, *std::move(val_));
     val_.reset();
     return rv;
   }
@@ -108,9 +112,11 @@ class of_pipe<std::reference_wrapper<T>> {
   constexpr auto front() const
   noexcept
   -> transport<std::add_lvalue_reference_t<T>> {
+    using result_type = transport<std::add_lvalue_reference_t<T>>;
+
     if (val_ != nullptr)
-      return { std::in_place_index<0>, *val_ };
-    return { std::in_place_index<1>, objpipe_errc::closed };
+      return result_type(std::in_place_index<0>, *val_);
+    return result_type(std::in_place_index<1>, objpipe_errc::closed);
   }
 
   constexpr auto pop_front()
@@ -130,9 +136,11 @@ class of_pipe<std::reference_wrapper<T>> {
   constexpr auto pull()
   noexcept
   -> transport<std::add_lvalue_reference_t<T>> {
+    using result_type = transport<std::add_lvalue_reference_t<T>>;
+
     if (val_ == nullptr)
-      return { std::in_place_index<1>, objpipe_errc::closed };
-    return { std::in_place_index<0>, *std::exchange(val_, nullptr) };
+      return result_type(std::in_place_index<1>, objpipe_errc::closed);
+    return result_type(std::in_place_index<0>, *std::exchange(val_, nullptr));
   }
 
  private:

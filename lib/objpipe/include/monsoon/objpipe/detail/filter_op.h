@@ -217,15 +217,17 @@ class filter_op {
       && noexcept(src_.pop_front())
       && noexcept_test)
   -> transport<adapt::front_type<Source>> {
+    using result_type = transport<adapt::front_type<Source>>;
+
     while (!store_.present()) {
       objpipe_errc e = store_.load(src_);
-      if (e != objpipe_errc::success) return { std::in_place_index<1>, e };
+      if (e != objpipe_errc::success) return result_type(std::in_place_index<1>, e);
       if (!test(store_.get())) {
         store_.reset();
         src_.pop_front();
       }
     }
-    return { std::in_place_index<0>, store_.get() };
+    return result_type(std::in_place_index<0>, store_.get());
   }
 
   constexpr auto pop_front()
@@ -254,11 +256,13 @@ class filter_op {
       && noexcept_test)
   -> std::enable_if_t<Enable,
       transport<adapt::try_pull_type<Source>>> {
+    using result_type = transport<adapt::try_pull_type<Source>>;
+
     if (store_.present()) {
       if constexpr(std::is_lvalue_reference_v<adapt::try_pull_type<Source>>)
-        return { std::in_place_index<0>, store_.release_lref() };
+        return result_type(std::in_place_index<0>, store_.release_lref());
       else
-        return { std::in_place_index<0>, store_.release_rref() };
+        return result_type(std::in_place_index<0>, store_.release_rref());
     }
 
     for (;;) {

@@ -44,9 +44,9 @@ class interlock_impl {
     std::unique_lock<std::mutex> lck_{ guard_ };
     for (;;) {
       if (offered_ != nullptr)
-        return { std::in_place_index<0>, get(lck_) };
+        return transport<front_type>(std::in_place_index<0>, get(lck_));
       if (writer_count_ == 0)
-        return { std::in_place_index<1>, objpipe_errc::closed };
+        return transport<front_type>(std::in_place_index<1>, objpipe_errc::closed);
       read_ready_.wait(lck_);
     }
   }
@@ -69,7 +69,7 @@ class interlock_impl {
     std::unique_lock<std::mutex> lck_{ guard_ };
     while (offered_ == nullptr) {
       if (writer_count_ == 0)
-        return { std::in_place_index<1>, objpipe_errc::closed };
+        return transport<pull_type>(std::in_place_index<1>, objpipe_errc::closed);
       read_ready_.wait(lck_);
     }
 
@@ -85,9 +85,9 @@ class interlock_impl {
     std::unique_lock<std::mutex> lck_{ guard_ };
     if (offered_ == nullptr) {
       if (writer_count_ == 0)
-        return { std::in_place_index<1>, objpipe_errc::closed };
+        return transport<pull_type>(std::in_place_index<1>, objpipe_errc::closed);
       else
-        return { std::in_place_index<1>, objpipe_errc::success };
+        return transport<pull_type>(std::in_place_index<1>, objpipe_errc::success);
     }
 
     auto result = transport<pull_type>(std::in_place_index<0>, get(lck_));
@@ -113,7 +113,7 @@ class interlock_impl {
     if constexpr(std::is_const_v<T>)
       v_ptr = std::addressof(v);
     else
-      v_ptr = std::addressof(static_cast<std::add_lvalue_reference_t<value_type>(v));
+      v_ptr = std::addressof(static_cast<std::add_lvalue_reference_t<value_type>>(v));
     offered_ = v_ptr;
     read_ready_.notify_one();
     write_ready_.wait(lck_,
