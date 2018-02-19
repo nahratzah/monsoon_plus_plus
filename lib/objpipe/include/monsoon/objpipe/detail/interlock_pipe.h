@@ -109,14 +109,19 @@ class interlock_impl {
         });
     if (reader_count_ == 0) return objpipe_errc::closed;
 
-    offered_ = std::addressof(v);
+    std::add_pointer_t<T> v_ptr = nullptr;
+    if constexpr(std::is_const_v<T>)
+      v_ptr = std::addressof(v);
+    else
+      v_ptr = std::addressof(static_cast<std::add_lvalue_reference_t<value_type>(v));
+    offered_ = v_ptr;
     read_ready_.notify_one();
     write_ready_.wait(lck_,
-        [this, &v]() {
-          return offered_ != std::addressof(v) || reader_count_ == 0;
+        [this, v_ptr]() {
+          return offered_ != v_ptr || reader_count_ == 0;
         });
 
-    if (offered_ != std::addressof(v)) return objpipe_errc::success;
+    if (offered_ != v_ptr) return objpipe_errc::success;
     offered_ = nullptr;
     assert(reader_count_ == 0);
     return objpipe_errc::closed;

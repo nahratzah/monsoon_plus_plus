@@ -73,7 +73,7 @@ TEST(constant) {
             metric_value(42)),
         reader.pull());
   }
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
 }
 
 int main() {

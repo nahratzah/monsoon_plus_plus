@@ -115,7 +115,7 @@ class filter_store_ref_ {
 
     auto v = src.front();
     if (!v.has_value()) return v.errc();
-    ptr_ = std::addressof(v.value());
+    ptr_ = v.value_ptr();
     return objpipe_errc::success;
   }
 

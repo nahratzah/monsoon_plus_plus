@@ -50,7 +50,7 @@ class of_pipe {
   noexcept
   -> transport<std::add_rvalue_reference_t<T>> {
     if (val_.has_value())
-      return { std::in_place_index<0>, *val_ };
+      return transport<std::add_rvalue_reference_t<T>>(std::in_place_index<0>, *std::move(val_));
     return { std::in_place_index<1>, objpipe_errc::closed };
   }
 
@@ -82,7 +82,7 @@ class of_pipe {
   }
 
  private:
-  std::optional<T> val_;
+  mutable std::optional<T> val_;
 };
 
 template<typename T>

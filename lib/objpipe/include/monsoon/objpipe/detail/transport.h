@@ -14,10 +14,14 @@ class transport {
  public:
   using type = T;
 
-  template<typename Arg>
-  constexpr transport(std::in_place_index_t<0>, Arg&& arg)
-  noexcept(std::is_nothrow_constructible_v<T, Arg>)
-  : data_(std::in_place_index<0>, std::forward<Arg>(arg))
+  constexpr transport(std::in_place_index_t<0>, type&& arg)
+  noexcept(std::is_nothrow_move_constructible_v<T>)
+  : data_(std::in_place_index<0>, std::move(arg))
+  {}
+
+  constexpr transport(std::in_place_index_t<0>, const type& arg)
+  noexcept(std::is_nothrow_copy_constructible_v<T>)
+  : data_(std::in_place_index<0>, arg)
   {}
 
   constexpr transport(std::in_place_index_t<1>, objpipe_errc e)
@@ -110,6 +114,13 @@ class transport<T&> {
     return *std::get<0>(data_);
   }
 
+  auto value_ptr() const
+  noexcept
+  -> T* {
+    assert(has_value());
+    return *std::get<0>(data_);
+  }
+
   auto errc() const
   noexcept
   -> objpipe_errc {
@@ -148,7 +159,7 @@ class transport<T&&> {
 
   explicit constexpr transport(std::in_place_index_t<0>, T&& v)
   noexcept
-  : data_(std::in_place_index<0>, std::addressof(v))
+  : data_(std::in_place_index<0>, std::addressof(static_cast<T&>(v)))
   {}
 
   constexpr transport(std::in_place_index_t<1>, objpipe_errc e)
@@ -169,6 +180,13 @@ class transport<T&&> {
     return std::move(*std::get<0>(data_));
   }
 
+  auto value_ptr() const
+  noexcept
+  -> T* {
+    assert(has_value());
+    return *std::get<0>(data_);
+  }
+
   auto errc() const
   noexcept
   -> objpipe_errc {
@@ -178,7 +196,7 @@ class transport<T&&> {
   auto emplace(std::in_place_index_t<0>, T&& v)
   noexcept
   -> void {
-    data_.template emplace<0>(std::addressof(v));
+    data_.template emplace<0>(std::addressof(static_cast<T&>(v)));
   }
 
   auto emplace(std::in_place_index_t<1>, objpipe_errc e)

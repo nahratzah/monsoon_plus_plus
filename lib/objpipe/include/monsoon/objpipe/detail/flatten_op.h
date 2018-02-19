@@ -258,7 +258,7 @@ class flatten_op {
   auto wait() const
   noexcept(ensure_avail_noexcept)
   -> objpipe_errc {
-    return ensure_avail_() == objpipe_errc::success;
+    return ensure_avail_();
   }
 
   auto front() const
@@ -270,7 +270,7 @@ class flatten_op {
   -> transport<item_type> {
     const objpipe_errc e = ensure_avail_();
     if (e == objpipe_errc::success)
-      return { std::in_place_index<0>, active_.deref() };
+      return transport<item_type>(std::in_place_index<0>, active_->deref());
     return { std::in_place_index<1>, e };
   }
 
@@ -279,7 +279,7 @@ class flatten_op {
       && noexcept(std::declval<store_type&>().advance()))
   -> objpipe_errc {
     const objpipe_errc e = ensure_avail_();
-    if (e == objpipe_errc::success) active_.advance();
+    if (e == objpipe_errc::success) active_->advance();
     return e;
   }
 
@@ -299,7 +299,7 @@ class flatten_op {
         assert(front_val.errc() != objpipe_errc::success);
         return front_val.errc();
       }
-      active_.emplace(std::get<0>(std::move(front_val)));
+      active_.emplace(std::move(front_val).value());
     }
     return objpipe_errc::success;
   }

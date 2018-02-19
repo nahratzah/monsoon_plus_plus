@@ -51,8 +51,10 @@ class front_store_handler_data_<T, true> {
   template<typename Source>
   auto get_or_assign(const Source& src) const
   -> std::add_lvalue_reference_t<T> {
-    if (ptr_ == nullptr)
-      ptr_ = std::addressof(adapt::front(src));
+    if (ptr_ == nullptr) {
+      std::add_lvalue_reference_t<T> front_ref = adapt::front(src);
+      ptr_ = std::addressof(front_ref);
+    }
     return *ptr_;
   }
 
@@ -342,6 +344,35 @@ class adapter_t {
     } else {
       return adapt::pull(src_);
     }
+  }
+
+  /**
+   * \brief Pull a value from the objpipe.
+   *
+   * \details
+   * Pulling removes a value from the objpipe, returning it.
+   *
+   * If the pull fails, the error code argument will be set to indicate.
+   * Otherwise, the error code argument will be set to objpipe_errc::success.
+   *
+   * \return The next value in the objpipe, if one is available.
+   */
+  auto pull(objpipe_errc& e)
+  noexcept(std::is_nothrow_move_constructible_v<value_type>
+      && std::is_nothrow_destructible_v<value_type>
+      && noexcept(std::declval<front_store_handler<Source>&>().present())
+      && noexcept(std::declval<front_store_handler<Source>&>().release())
+      && noexcept(adapt::pull(std::declval<Source&>(), std::declval<objpipe_errc&>())))
+  -> std::optional<value_type> {
+    if (store_.present()) {
+      auto rv = std::optional<value_type>(store_.release());
+      e = src_.pop_front();
+      if (e != objpipe_errc::success)
+        rv.reset();
+      return rv;
+    }
+
+    return adapt::pull(src_, e);
   }
 
   /**

@@ -38,7 +38,7 @@ TEST(callback) {
   CHECK_EQUAL(4, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
 

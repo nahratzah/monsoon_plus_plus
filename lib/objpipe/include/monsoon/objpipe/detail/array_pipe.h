@@ -42,7 +42,7 @@ class array_pipe {
 
   auto is_pullable() const
   noexcept
-  -> objpipe_errc {
+  -> bool {
     return !data_.empty();
   }
 
@@ -57,7 +57,7 @@ class array_pipe {
       && noexcept(std::declval<const data_type&>().front()))
   -> transport<T&&> {
     if (data_.empty()) return { std::in_place_index<1>, objpipe_errc::closed };
-    return { std::in_place_index<0>, std::move(data_.front()) };
+    return transport<T&&>(std::in_place_index<0>, std::move(data_.front()));
   }
 
   auto pop_front()

@@ -10,6 +10,7 @@
 #include <boost/coroutine2/protected_fixedsize_stack.hpp>
 #include <boost/coroutine2/coroutine.hpp>
 #include <monsoon/objpipe/detail/transport.h>
+#include <monsoon/objpipe/detail/invocable_.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -20,8 +21,10 @@ class callback_push {
   using impl_type =
       typename boost::coroutines2::coroutine<std::add_pointer_t<T>>::push_type;
 
-  constexpr callback_push(impl_type&& impl)
-  : impl_(impl)
+  constexpr callback_push() = default;
+
+  constexpr callback_push(impl_type& impl)
+  : impl_(std::addressof(impl))
   {}
 
   void operator()(const T& v) {
@@ -29,11 +32,12 @@ class callback_push {
   }
 
   void operator()(T&& v) {
-    impl_(std::addressof(v));
+    assert(impl_ != nullptr);
+    (*impl_)(std::addressof(static_cast<T&>(v)));
   }
 
  private:
-  impl_type impl_;
+  impl_type* impl_ = nullptr;
 };
 
 template<typename T>
@@ -42,16 +46,19 @@ class callback_push<const T> {
   using impl_type =
       typename boost::coroutines2::coroutine<std::add_pointer_t<const T>>::push_type;
 
-  constexpr callback_push(impl_type&& impl)
-  : impl_(impl)
+  constexpr callback_push() = default;
+
+  constexpr callback_push(impl_type& impl)
+  : impl_(std::addressof(impl))
   {}
 
   void operator()(const T& v) {
-    impl_(std::addressof(v));
+    assert(impl_ != nullptr);
+    (*impl_)(std::addressof(v));
   }
 
  private:
-  impl_type impl_;
+  impl_type* impl_ = nullptr;
 };
 
 template<typename T, typename Fn>
@@ -67,11 +74,14 @@ class callback_fn_wrapper {
   : fn_(fn)
   {}
 
-  auto operator()(typename callback_push<T>::impl_type&& push)
+  auto operator()(typename callback_push<T>::impl_type& push)
   -> void {
-    std::invoke(
-        fn_,
-        callback_push<T>(std::move(push)));
+    callback_push<T> cb_push = callback_push<T>(push);
+    if constexpr(is_invocable_v<Fn, callback_push<T>&&>) {
+      std::invoke(fn_, std::move(cb_push));
+    } else {
+      std::invoke(fn_, cb_push);
+    }
   }
 
  private:
