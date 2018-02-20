@@ -3,6 +3,7 @@
 
 ///\file
 ///\ingroup objpipe_detail
+///\brief Compatibility header that uses or implements std::is_invocable family of type traits.
 
 #include <type_traits>
 #include <functional>

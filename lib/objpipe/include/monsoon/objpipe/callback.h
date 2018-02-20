@@ -21,7 +21,7 @@ namespace objpipe {
  * \tparam Fn The type of the functor, that is to be invoked with a suitable callback.
  * \param[in] fn The functor that is to be invoked.
  * \return A reader that yields each element supplied by the callback.
- * \sa \ref monsoon::objpipe::detail::callbacked<T>
+ * \sa \ref monsoon::objpipe::detail::callback_pipe<T>
  */
 template<typename T, typename Fn>
 auto new_callback(Fn&& fn)
