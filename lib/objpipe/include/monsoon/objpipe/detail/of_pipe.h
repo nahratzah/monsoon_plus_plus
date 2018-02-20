@@ -141,7 +141,7 @@ class of_pipe<std::reference_wrapper<T>> {
   }
 
  private:
-  std::reference_wrapper<const T> val_;
+  std::add_const_t<T>* val_;
 };
 
 
