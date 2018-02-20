@@ -185,14 +185,14 @@ TEST(transform_operation) {
 }
 
 TEST(interlock) {
-  monsoon::objpipe::reader<int> reader;
-  monsoon::objpipe::writer<int> writer;
+  monsoon::objpipe::interlock_reader<int> reader;
+  monsoon::objpipe::interlock_writer<int> writer;
   std::tie(reader, writer) = monsoon::objpipe::new_interlock<int>();
 
   auto th = std::thread(std::bind(
-          [](monsoon::objpipe::writer<int>& writer) {
+          [](monsoon::objpipe::interlock_writer<int>& writer) {
             for (int i = 0; i < 5; ++i)
-              writer.push(i);
+              writer(i);
           },
           std::move(writer)));
 

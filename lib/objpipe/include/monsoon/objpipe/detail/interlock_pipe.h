@@ -62,6 +62,7 @@ class interlock_impl {
     offered_ = nullptr;
     lck_.unlock();
     write_ready_.notify_one();
+    return objpipe_errc::success;
   }
 
   auto pull()
@@ -130,7 +131,7 @@ class interlock_impl {
   template<bool Enable = !std::is_const_v<T>>
   auto publish(std::add_lvalue_reference_t<std::add_const_t<value_type>> v)
   -> std::enable_if_t<Enable, objpipe_errc> {
-    publish(T(v));
+    return publish(T(v));
   }
 
   auto inc_reader() -> void {
@@ -250,7 +251,7 @@ class interlock_pipe {
   auto pop_front() const
   -> decltype(auto) {
     assert(ptr_ != nullptr);
-    return ptr_->front();
+    return ptr_->pop_front();
   }
 
   auto pull() const
