@@ -12,6 +12,7 @@
 #include <iostream>
 #include <utility>
 #include <sstream>
+#include <string>
 
 auto open_dir(std::string dir)
 -> std::unique_ptr<monsoon::collect_history> {
@@ -25,8 +26,8 @@ std::string concat_args(char** b, char** e) {
   return std::move(oss).str();
 }
 
-void print_scalar(monsoon::expression::scalar_objpipe&& pipe);
-void print_vector(monsoon::expression::vector_objpipe&& pipe);
+auto print_scalar(monsoon::expression::scalar_objpipe&& pipe) -> monsoon::objpipe::reader<std::string>;
+auto print_vector(monsoon::expression::vector_objpipe&& pipe) -> monsoon::objpipe::reader<std::string>;
 
 int main(int argc, char** argv) {
   if (argc <= 2) {
@@ -45,32 +46,38 @@ int main(int argc, char** argv) {
       monsoon::time_point::duration(5 * 60 * 1000));
   std::visit(
       monsoon::overload(&print_scalar, &print_vector),
-      std::move(eval_stream_variant));
+      std::move(eval_stream_variant))
+      .for_each([](const auto& v) { std::cout << v << "\n"; });
 }
 
-void print_scalar(monsoon::expression::scalar_objpipe&& pipe) {
-  std::move(pipe)
+auto print_scalar(monsoon::expression::scalar_objpipe&& pipe)
+-> monsoon::objpipe::reader<std::string> {
+  return std::move(pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
-      .for_each(
-          [](auto&& v) {
-            std::cout << v.tp << ": " << std::get<1>(std::move(v.data)) << "\n";
+      .transform(
+          [](const auto& v) {
+            return (std::ostringstream() << v.tp << ": " << std::get<1>(v.data))
+                .str();
           });
 }
 
-void print_vector(monsoon::expression::vector_objpipe&& pipe) {
-  std::move(pipe)
+auto print_vector(monsoon::expression::vector_objpipe&& pipe)
+-> monsoon::objpipe::reader<std::string> {
+  return std::move(pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
-      .for_each(
-          [](auto&& v) {
-            std::cout << v.tp << ":\n";
+      .transform(
+          [](const auto& v) {
+            std::ostringstream out;
+            out << v.tp << ":";
             for (const auto& entry : std::get<1>(v.data)) {
               const monsoon::tags tags = entry.first;
               const monsoon::metric_value value = entry.second;
-              std::cout << "  " // indent
+              out << "\n" // newline separator
+                  << "  " // indent
                   << tags
                   << "="
-                  << value
-                  << "\n";
+                  << value;
             }
+            return out.str();
           });
 }
