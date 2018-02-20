@@ -11,6 +11,9 @@ namespace monsoon::objpipe::detail {
 
 template<typename T>
 class transport {
+  static_assert(!std::is_const_v<T> && !std::is_volatile_v<T>,
+      "Transport-by-value may not be const or volatile.");
+
  public:
   using type = T;
 
@@ -88,6 +91,9 @@ class transport {
 
 template<typename T>
 class transport<T&> {
+  static_assert(std::is_const_v<T>,
+      "Transport-by-reference must be const.");
+
  public:
   using type = T&;
 
@@ -154,6 +160,9 @@ class transport<T&> {
 
 template<typename T>
 class transport<T&&> {
+  static_assert(!std::is_const_v<T>,
+      "Transport-by-rvalue-reference may not be const.");
+
  public:
   using type = T&&;
 
