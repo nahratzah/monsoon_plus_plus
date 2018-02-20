@@ -183,6 +183,19 @@ class filter_op {
           || std::is_rvalue_reference_v<adapt::front_type<Source>>),
       filter_store_ref_<std::remove_reference_t<adapt::front_type<Source>>>,
       filter_store_copy_<adapt::value_type<Source>>>;
+  static constexpr bool noexcept_load =
+      noexcept(std::declval<store_type&>().load(std::declval<Source&>()))
+      && noexcept(std::declval<store_type&>().get())
+      && noexcept(std::declval<store_type&>().present())
+      && noexcept(std::declval<store_type&>().reset())
+      && noexcept(std::declval<Source&>().pop_front())
+      && noexcept_test;
+  static constexpr bool noexcept_release =
+      noexcept(std::declval<store_type&>().present())
+      && (std::is_lvalue_reference_v<adapt::pull_type<Source>>
+          ? noexcept(std::declval<store_type&>().release_lref())
+          : noexcept(std::declval<store_type&>().release_rref()))
+      && noexcept(std::declval<Source&>().pop_front());
 
  public:
   template<typename... Init>
@@ -199,72 +212,45 @@ class filter_op {
   }
 
   constexpr auto wait() const
-  noexcept(noexcept(src_.wait()))
+  noexcept(noexcept_load)
   -> objpipe_errc {
-    while (!store_.present()) {
-      objpipe_errc e = store_.load(src_);
-      if (e != objpipe_errc::success) return e;
-      if (!test(store_.get())) {
-        store_.reset();
-        src_.pop_front();
-      }
-    }
-    return objpipe_errc::success;
+    return load_();
   }
 
   constexpr auto front() const
-  noexcept(noexcept(src_.front())
-      && noexcept(src_.pop_front())
-      && noexcept_test)
+  noexcept(noexcept_load
+      && noexcept(std::declval<store_type&>().get()))
   -> transport<adapt::front_type<Source>> {
     using result_type = transport<adapt::front_type<Source>>;
 
-    while (!store_.present()) {
-      objpipe_errc e = store_.load(src_);
-      if (e != objpipe_errc::success) return result_type(std::in_place_index<1>, e);
-      if (!test(store_.get())) {
-        store_.reset();
-        src_.pop_front();
-      }
-    }
+    objpipe_errc e = load_();
+    if (e != objpipe_errc::success) return result_type(std::in_place_index<1>, e);
     return result_type(std::in_place_index<0>, store_.get());
   }
 
   constexpr auto pop_front()
-  noexcept(noexcept(src_.pop_front())
-      && noexcept(src_.front())
-      && noexcept_test)
+  noexcept(noexcept_load
+      && noexcept(std::declval<store_type&>().reset())
+      && noexcept(std::declval<Source&>().pop_front()))
   -> objpipe_errc {
-    while (!store_.present()) {
-      objpipe_errc e = store_.load(src_);
-      if (e != objpipe_errc::success) return e;
-      if (!test(store_.get())) {
-        store_.reset();
-        src_.pop_front();
-      }
+    objpipe_errc e = load_();
+    if (e == objpipe_errc::success) {
+      store_.reset();
+      e = src_.pop_front();
     }
-
-    store_.reset();
-    src_.pop_front();
-    return objpipe_errc::success;
+    return e;
   }
 
   template<bool Enable = !store_type::is_const
       || std::is_const_v<adapt::try_pull_type<Source>>>
   constexpr auto try_pull()
-  noexcept(noexcept(adapt::raw_try_pull(src_))
+  noexcept(noexcept(std::declval<store_type&>().present())
+      && noexcept_release
+      && noexcept(adapt::raw_try_pull(src_))
       && noexcept_test)
   -> std::enable_if_t<Enable,
       transport<adapt::try_pull_type<Source>>> {
-    using result_type = transport<adapt::try_pull_type<Source>>;
-
-    if (store_.present()) {
-      if constexpr(std::is_lvalue_reference_v<adapt::try_pull_type<Source>>)
-        return result_type(std::in_place_index<0>, store_.release_lref());
-      else
-        return result_type(std::in_place_index<0>, store_.release_rref());
-    }
-
+    if (store_.present()) return release_<adapt::try_pull_type<Source>>();
     for (;;) {
       transport<adapt::try_pull_type<Source>> v =
           adapt::raw_try_pull(src_);
@@ -276,19 +262,13 @@ class filter_op {
   template<bool Enable = !store_type::is_const
       || std::is_const_v<adapt::pull_type<Source>>>
   constexpr auto pull()
-  noexcept(noexcept(adapt::raw_pull(src_))
+  noexcept(noexcept(std::declval<store_type&>().present())
+      && noexcept_release
+      && noexcept(adapt::raw_pull(src_))
       && noexcept_test)
   -> std::enable_if_t<Enable,
       transport<adapt::pull_type<Source>>> {
-    using result_type = transport<adapt::pull_type<Source>>;
-
-    if (store_.present()) {
-      if constexpr(std::is_lvalue_reference_v<adapt::pull_type<Source>>)
-        return result_type(std::in_place_index<0>, store_.release_lref());
-      else
-        return result_type(std::in_place_index<0>, store_.release_rref());
-    }
-
+    if (store_.present()) return release_<adapt::pull_type<Source>>();
     for (;;) {
       transport<adapt::pull_type<Source>> v =
           adapt::raw_pull(src_);
@@ -298,6 +278,41 @@ class filter_op {
   }
 
  private:
+  constexpr auto load_() const
+  noexcept(noexcept_load)
+  -> objpipe_errc {
+    while (!store_.present()) {
+      objpipe_errc e = store_.load(src_);
+      if (e != objpipe_errc::success) return e;
+      if (!test(store_.get())) {
+        store_.reset();
+        e = src_.pop_front();
+        if (e != objpipe_errc::success) return e;
+      }
+    }
+    return objpipe_errc::success;
+  }
+
+  template<typename T>
+  auto release_()
+  noexcept(noexcept_release)
+  -> transport<T> {
+    using result_type = transport<T>;
+    assert(store_.present());
+
+    if constexpr(std::is_lvalue_reference_v<adapt::try_pull_type<Source>>) {
+      auto rv = result_type(std::in_place_index<0>, store_.release_lref());
+      objpipe_errc e = src_.pop_front();
+      if (e != objpipe_errc::success) rv.emplace(std::in_place_index<1>, e);
+      return rv;
+    } else {
+      auto rv = result_type(std::in_place_index<0>, store_.release_rref());
+      objpipe_errc e = src_.pop_front();
+      if (e != objpipe_errc::success) rv.emplace(std::in_place_index<1>, e);
+      return rv;
+    }
+  }
+
   constexpr auto test(cref v) const
   noexcept(noexcept_test)
   -> bool {
