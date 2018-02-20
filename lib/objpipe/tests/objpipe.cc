@@ -1,12 +1,14 @@
 #include <monsoon/objpipe/callback.h>
 #include <monsoon/objpipe/array.h>
 #include <monsoon/objpipe/interlock.h>
+#include <monsoon/objpipe/of.h>
 #include <monsoon/objpipe/errc.h>
 #include "UnitTest++/UnitTest++.h"
 #include "test_hacks.ii"
 #include <vector>
 #include <tuple>
 #include <thread>
+#include <functional>
 
 using monsoon::objpipe::objpipe_errc;
 
@@ -239,6 +241,12 @@ TEST(reader_to_vector) {
       std::vector<int>({ 0, 1, 2, 3, 4 }),
       monsoon::objpipe::new_array({ 0, 1, 2, 3, 4 })
           .to_vector());
+}
+
+TEST(reduce_op) {
+  CHECK_EQUAL(std::optional<int>(42),
+      monsoon::objpipe::of(7, 7, 7, 7, 7, 7)
+          .reduce(std::plus<>()));
 }
 
 int main() {
