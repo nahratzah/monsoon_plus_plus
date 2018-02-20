@@ -48,7 +48,7 @@ template<typename T = void, typename... Types>
 constexpr auto of(Types&&... values)
 noexcept(noexcept(
         of(std::array<std::conditional_t<std::is_same_v<void, T>, std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>...>, T>, sizeof...(Types)>{{ std::forward<Types>(values)... }})
-        .flatten()))
+        .iterate()))
 -> decltype(auto) {
   using type = std::conditional_t<
       std::is_same_v<void, T>,
@@ -56,7 +56,7 @@ noexcept(noexcept(
       T>;
 
   return of(std::array<type, sizeof...(Types)>{{ std::forward<Types>(values)... }})
-      .flatten();
+      .iterate();
 }
 
 

@@ -30,7 +30,7 @@ class mock_metric_source_for_emit_time
   -> objpipe::reader<time_point> {
     last_emit_time.emplace(std::move(tr), std::move(slack));
     return objpipe::of(result_emit_time.value())
-        .flatten();
+        .iterate();
   }
 
   std::optional<std::vector<time_point>> result_emit_time;

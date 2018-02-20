@@ -468,7 +468,7 @@ class adapter_t {
    * \return An objpipe where each collection element is replaced with its elements.
    */
   template<bool Enable = can_flatten<Source>>
-  auto flatten()
+  auto iterate()
   noexcept(noexcept(adapter(adapt::flatten(std::declval<Source>()))))
   -> decltype(adapter(adapt::flatten(std::declval<std::enable_if_t<Enable, Source>>()))) {
     return adapter(adapt::flatten(std::move(src_)));

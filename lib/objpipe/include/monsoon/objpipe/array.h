@@ -20,10 +20,10 @@ namespace objpipe {
  * \note If you want to iterate an entire collection,
  * \ref monsoon::objpipe::of "objpipe::of"
  * followed by
- * \ref monsoon::ojbpipe::detail::adapter_t::flatten ".flatten()"
+ * \ref monsoon::ojbpipe::detail::adapter_t::iterate ".iterate()"
  * will have better performance.
  * \code
- * of(collection).flatten()
+ * of(collection).iterate()
  * \endcode
  *
  * \param[in] b,e The values to iterate over.
@@ -46,10 +46,10 @@ auto new_array(Iter b, Iter e, Alloc alloc = Alloc())
  * \note If you want to iterate an entire collection,
  * \ref monsoon::objpipe::of "objpipe::of"
  * followed by
- * \ref monsoon::ojbpipe::detail::adapter_t::flatten ".flatten()"
+ * \ref monsoon::ojbpipe::detail::adapter_t::iterate ".iterate()"
  * will have better performance.
  * \code
- * of(collection).flatten()
+ * of(collection).iterate()
  * \endcode
  *
  * \param[in] values The values to iterate over.
