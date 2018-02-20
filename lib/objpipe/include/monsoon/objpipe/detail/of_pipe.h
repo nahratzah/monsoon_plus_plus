@@ -22,75 +22,76 @@ namespace monsoon::objpipe::detail {
  */
 template<typename T>
 class of_pipe {
+ private:
+  using type = std::add_rvalue_reference_t<T>;
+  using transport_type = transport<type>;
+
  public:
   explicit constexpr of_pipe(T&& v)
   noexcept(std::is_nothrow_move_constructible_v<T>)
-  : val_(std::in_place, std::move(v))
+  : val_(std::move(v))
   {}
 
   explicit constexpr of_pipe(const T& v)
   noexcept(std::is_nothrow_copy_constructible_v<T>)
-  : val_(std::in_place, v)
+  : val_(v)
   {}
 
   constexpr auto is_pullable() const
   noexcept
   -> bool {
-    return val_.has_value();
+    return !consumed_;
   }
 
   constexpr auto wait() const
   noexcept
   -> objpipe_errc {
-    return (val_.has_value() ? objpipe_errc::success : objpipe_errc::closed);
+    return (!consumed_ ? objpipe_errc::success : objpipe_errc::closed);
   }
 
   ///\note An rvalue reference is returned, since front() is only allowed to be called at most once before pop_front() or pull().
   constexpr auto front() const
   noexcept
-  -> transport<std::add_rvalue_reference_t<T>> {
-    using result_type = transport<std::add_rvalue_reference_t<T>>;
-
-    if (val_.has_value())
-      return result_type(std::in_place_index<0>, *std::move(val_));
-    return result_type(std::in_place_index<1>, objpipe_errc::closed);
+  -> transport_type {
+    if (consumed_)
+      return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+    return transport_type(std::in_place_index<0>, std::move(val_));
   }
 
   constexpr auto pop_front()
   noexcept
   -> objpipe_errc {
-    if (val_.has_value()) {
-      val_.reset();
-      return objpipe_errc::success;
-    } else {
-      return objpipe_errc::closed;
-    }
+    if (consumed_) return objpipe_errc::closed;
+    consumed_ = true;
+    return objpipe_errc::success;
   }
 
   constexpr auto try_pull()
   noexcept
-  -> transport<T> {
+  -> transport_type {
     return pull();
   }
 
   constexpr auto pull()
   noexcept
-  -> transport<T> {
-    using result_type = transport<T>;
-
-    if (!val_.has_value())
-      return result_type(std::in_place_index<1>, objpipe_errc::closed);
-    auto rv = result_type(std::in_place_index<0>, *std::move(val_));
-    val_.reset();
-    return rv;
+  -> transport_type {
+    if (consumed_)
+      return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+    consumed_ = true;
+    return transport_type(std::in_place_index<0>, std::move(val_));
   }
 
  private:
-  mutable std::optional<T> val_;
+  mutable bool consumed_ = false;
+  mutable T val_;
 };
 
 template<typename T>
 class of_pipe<std::reference_wrapper<T>> {
+ private:
+  using type = std::add_lvalue_reference_t<std::add_const_t<T>>;
+  using transport_type = transport<type>;
+
  public:
   explicit constexpr of_pipe(std::reference_wrapper<T> ref)
   noexcept
@@ -111,40 +112,36 @@ class of_pipe<std::reference_wrapper<T>> {
 
   constexpr auto front() const
   noexcept
-  -> transport<std::add_lvalue_reference_t<T>> {
-    using result_type = transport<std::add_lvalue_reference_t<T>>;
-
-    if (val_ != nullptr)
-      return result_type(std::in_place_index<0>, *val_);
-    return result_type(std::in_place_index<1>, objpipe_errc::closed);
+  -> transport_type {
+    if (val_ == nullptr)
+      return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+    return transport_type(std::in_place_index<0>, val_);
   }
 
   constexpr auto pop_front()
   noexcept
   -> objpipe_errc {
-    return (std::exchange(val_, nullptr) != nullptr
-        ? objpipe_errc::success
-        : objpipe_errc::closed);
+    if (val_ == nullptr) return objpipe_errc::closed;
+    val_ = nullptr;
+    return objpipe_errc::success;
   }
 
   constexpr auto try_pull()
   noexcept
-  -> transport<std::add_lvalue_reference_t<T>> {
+  -> transport_type {
     return pull();
   }
 
   constexpr auto pull()
   noexcept
-  -> transport<std::add_lvalue_reference_t<T>> {
-    using result_type = transport<std::add_lvalue_reference_t<T>>;
-
-    if (val_ == nullptr)
-      return result_type(std::in_place_index<1>, objpipe_errc::closed);
-    return result_type(std::in_place_index<0>, *std::exchange(val_, nullptr));
+  -> transport_type {
+    auto rv = front();
+    val_ = nullptr;
+    return rv;
   }
 
  private:
-  T* val_;
+  std::reference_wrapper<const T> val_;
 };
 
 

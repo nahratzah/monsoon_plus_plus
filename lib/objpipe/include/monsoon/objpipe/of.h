@@ -19,7 +19,7 @@ namespace monsoon::objpipe {
  * \details
  * The value is copied during construction of the objpipe.
  *
- * If the argument is an std::reference_wrapper, a reference will be used instead.
+ * If the argument is an std::reference_wrapper, a const reference will be used instead.
  * In this case, the lifetime of the referenced value must exceed the lifetime of the objpipe.
  *
  * \param[in] v The value to iterate over.
