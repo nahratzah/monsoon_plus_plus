@@ -716,6 +716,65 @@ class adapter_t {
     return reader<value_type>(virtual_pipe<value_type>(std::move(src_)));
   }
 
+  /**
+   * \brief Perform a sequence of operations on an objpipe.
+   *
+   * \details
+   * This allows a pattern of
+   * \code
+   * MyObjPipe
+   *     .perform(SequenceOfOperationsFn)
+   * \endcode
+   * to be used, in favour of
+   * \code
+   * SequenceOfOperations(MyObjPipe)
+   * \endcode
+   *
+   * The latter becomes very hard to read when using chains:
+   * \code
+   * SequenceOfOperations(
+   *     of(1, 2, 3, 4)
+   *         .map(...)
+   *         .map(...)
+   *         .filter(...)
+   *         // etc
+   *     )
+   *     .map(...)
+   *     // etc
+   *     ;
+   * \endcode
+   *
+   * The nesting of the former becomes nightmarish, especially if multiple
+   * functions are done thusly.
+   *
+   * Instead, replace with:
+   * \code
+   * of(1, 2, 3, 4)
+   *     .map(...)
+   *     .map(...)
+   *     .filter(...)
+   *     // etc
+   *     .perform(SequenceOfOperations)
+   *     .map(...)
+   *     // etc
+   *     ;
+   * \endcode
+   * This has the advantage that it shows SequenceOfOperations at the point in
+   * the call chain where it is actually used.
+   *
+   * \param seq_op [in] An invokable.
+   * It is invoked with this objpipe passed rvalue reference.
+   *
+   * \note \p seq_op is not required to return an objpipe.
+   * It is valid to evaluate the objpipe.
+   */
+  template<typename SeqOp>
+  auto perform(SeqOp&& seq_op) &&
+  noexcept(is_nothrow_invocable_v<std::add_rvalue_reference_t<SeqOp>, adapter_t&&>)
+  -> invoke_result_t<std::add_rvalue_reference_t<SeqOp>, adapter_t&&> {
+    return std::invoke(std::forward<SeqOp>(seq_op), std::move(*this));
+  }
+
  private:
   Source src_;
   front_store_handler<Source> store_;
