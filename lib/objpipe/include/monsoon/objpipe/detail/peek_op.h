@@ -23,12 +23,6 @@ namespace monsoon::objpipe::detail {
  */
 template<typename Fn>
 class peek_adapter {
- private:
-  template<typename Arg>
-  static constexpr bool is_cref_invocable = is_invocable_v<const Fn&, std::add_lvalue_reference_t<std::add_const_t<Arg>>>;
-  template<typename Arg>
-  static constexpr bool is_lref_invocable = is_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>;
-
  public:
   explicit constexpr peek_adapter(Fn&& fn)
   noexcept(std::is_nothrow_move_constructible_v<Fn>)
@@ -41,30 +35,22 @@ class peek_adapter {
   {}
 
   template<typename Arg>
-  constexpr auto operator()(const Arg& arg) const
-  noexcept(is_nothrow_invocable_v<const Fn&, const Arg&>)
-  -> std::enable_if_t<is_cref_invocable<Arg>, const Arg&> {
-    std::invoke(fn_, arg);
-    return arg;
-  }
-
-  template<typename Arg>
-  constexpr auto operator()(const Arg& arg) const
-  noexcept(std::is_nothrow_copy_constructible_v<Arg>
-      && is_nothrow_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>)
-  -> std::enable_if_t<!is_cref_invocable<Arg> && is_lref_invocable<Arg>, Arg> {
-    Arg tmp = arg;
-    std::invoke(fn_, arg);
-    return tmp;
-  }
-
-  template<typename Arg>
   constexpr auto operator()(Arg&& arg) const
-  noexcept(is_nothrow_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>)
-  -> std::enable_if_t<!std::is_const_v<Arg> && is_lref_invocable<std::remove_reference_t<Arg>>,
-      std::add_rvalue_reference_t<Arg>> {
-    std::invoke(fn_, arg);
-    return arg;
+  noexcept(is_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>
+      ? is_nothrow_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>
+      : is_nothrow_invocable_v<const Fn&,
+          std::add_lvalue_reference_t<std::add_lvalue_reference_t<std::remove_cv_t<std::remove_reference_t<Arg>>>>>)
+  -> std::conditional_t<is_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>,
+      std::add_rvalue_reference_t<Arg>,
+      std::remove_cv_t<std::remove_reference_t<Arg>>> {
+    if constexpr(is_invocable_v<const Fn&, std::add_lvalue_reference_t<Arg>>) {
+      std::invoke(fn_, arg);
+      return static_cast<std::add_rvalue_reference_t<Arg>>(arg);
+    } else {
+      std::remove_cv_t<std::remove_reference_t<Arg>> copy_of_arg = std::forward<Arg>(arg);
+      std::invoke(fn_, copy_of_arg);
+      return copy_of_arg;
+    }
   }
 
  private:

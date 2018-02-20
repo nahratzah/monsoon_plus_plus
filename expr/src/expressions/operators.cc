@@ -39,8 +39,8 @@ class monsoon_expr_local_ unop_t final
  private:
   void do_ostream(std::ostream&) const override;
 
-  static auto apply_scalar_(scalar_emit_type&, functor) -> scalar_emit_type&;
-  static auto apply_vector_(vector_emit_type&, functor) -> vector_emit_type&;
+  static auto apply_scalar_(scalar_emit_type&, functor) -> void;
+  static auto apply_vector_(vector_emit_type&, functor) -> void;
 
   functor fn_;
   expression_ptr nested_;
@@ -104,12 +104,12 @@ auto unop_t::operator()(
           [this](scalar_objpipe&& s)
           -> std::variant<scalar_objpipe, vector_objpipe> {
             return std::move(s)
-                .transform_copy(std::bind(&unop_t::apply_scalar_, _1, fn_));
+                .peek(std::bind(&unop_t::apply_scalar_, _1, fn_));
           },
           [this](vector_objpipe&& s)
           -> std::variant<scalar_objpipe, vector_objpipe> {
             return std::move(s)
-                .transform_copy(std::bind(&unop_t::apply_vector_, _1, fn_));
+                .peek(std::bind(&unop_t::apply_vector_, _1, fn_));
           }),
       std::invoke(*nested_, src, tr, std::move(slack), out_mc));
 }
@@ -128,17 +128,16 @@ void unop_t::do_ostream(std::ostream& out) const {
 }
 
 auto unop_t::apply_scalar_(scalar_emit_type& emt, functor fn)
--> scalar_emit_type& {
+-> void {
   std::visit(
       [fn](metric_value& v) {
         v = std::invoke(fn, std::move(v));
       },
       emt.data);
-  return emt;
 }
 
 auto unop_t::apply_vector_(vector_emit_type& emt, functor fn)
--> vector_emit_type& {
+-> void {
   std::visit(
       overload(
           [fn](speculative_vector& v) {
@@ -149,7 +148,6 @@ auto unop_t::apply_vector_(vector_emit_type& emt, functor fn)
               elem.second = std::invoke(fn, std::move(elem.second));
           }),
       emt.data);
-  return emt;
 }
 
 
