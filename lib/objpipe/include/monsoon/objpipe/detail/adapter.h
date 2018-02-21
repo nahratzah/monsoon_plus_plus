@@ -20,6 +20,8 @@
 #include <monsoon/objpipe/detail/flatten_op.h>
 #include <monsoon/objpipe/detail/peek_op.h>
 #include <monsoon/objpipe/detail/transform_op.h>
+#include <monsoon/objpipe/detail/deref_op.h>
+#include <monsoon/objpipe/detail/select_op.h>
 #include <monsoon/objpipe/detail/virtual.h>
 #include <monsoon/objpipe/detail/transport.h>
 
@@ -276,7 +278,7 @@ class adapter_t {
    * \return An \ref monsoon::ojbpipe::errc "objpipe_errc" indicating if the call succeeded.
    */
   auto wait() const
-  noexcept(noexcept(adapt::wait(src_)))
+  noexcept(noexcept(adapt::wait(std::declval<const Source&>())))
   -> objpipe_errc {
     return adapt::wait(src_);
   }
@@ -287,7 +289,7 @@ class adapter_t {
    * \return True if the objpipe is empty, false if the objpipe has a pending value.
    */
   auto empty() const
-  noexcept(noexcept(src_.wait()))
+  noexcept(noexcept(std::declval<const Source&>().wait()))
   -> bool {
     const objpipe_errc e = src_.wait();
     return e == objpipe_errc::closed;
@@ -400,7 +402,7 @@ class adapter_t {
    */
   template<typename Pred>
   auto filter(Pred&& pred) &&
-  noexcept(noexcept(adapter(adapt::filter(std::move(src_), std::forward<Pred>(pred)))))
+  noexcept(noexcept(adapter(adapt::filter(std::declval<Source>(), std::forward<Pred>(pred)))))
   -> decltype(auto) {
     return adapter(adapt::filter(std::move(src_), std::forward<Pred>(pred)));
   }
@@ -422,9 +424,88 @@ class adapter_t {
    */
   template<typename Fn>
   auto transform(Fn&& fn) &&
-  noexcept(noexcept(adapter(adapt::transform(std::move(src_), std::forward<Fn>(fn)))))
+  noexcept(noexcept(adapter(adapt::transform(std::declval<Source>(), std::forward<Fn>(fn)))))
   -> decltype(auto) {
     return adapter(adapt::transform(std::move(src_), std::forward<Fn>(fn)));
+  }
+
+  /**
+   * \brief Transform each element by dereferencing it.
+   *
+   * \details
+   * Invokes
+   * \code
+   * *element
+   * \endcode
+   * for each element in the objpipe.
+   *
+   * \returns An objpipe of the dereferenced elements from the original objpipe.
+   */
+  template<bool Enable = deref_op::is_valid<value_type>>
+  auto deref() &&
+  noexcept(noexcept(std::declval<adapter_t>().transform(deref_op())))
+  -> decltype(auto) {
+    return std::move(*this).transform(deref_op());
+  }
+
+  /**
+   * \brief Transform each element by invoking std::get<Idx>.
+   * \returns An objpipe of elements selected using the given \p Index.
+   */
+  template<size_t Index>
+  auto select() &&
+  noexcept(noexcept(std::declval<adapter_t>().transform(
+              std::enable_if_t<
+                  select_index_op<Index>::template is_valid<value_type>,
+                  select_index_op<Index>>())))
+  -> decltype(std::declval<adapter_t>().transform(
+          std::enable_if_t<
+              select_index_op<Index>::template is_valid<value_type>,
+              select_index_op<Index>>())) {
+    return std::move(*this).transform(select_index_op<Index>());
+  }
+
+  /**
+   * \brief Transform each element by invoking std::get<Type>.
+   * \returns An objpipe of elements selected using the given \p Type.
+   */
+  template<typename Type>
+  auto select() &&
+  noexcept(noexcept(std::declval<adapter_t>().transform(
+              std::enable_if_t<
+                  select_type_op<Type>::template is_valid<value_type>,
+                  select_type_op<Type>>())))
+  -> decltype(std::declval<adapter_t>().transform(
+          std::enable_if_t<
+              select_type_op<Type>::template is_valid<value_type>,
+              select_type_op<Type>>())) {
+    return std::move(*this).transform(select_type_op<Type>());
+  }
+
+  /**
+   * \brief Transform each element pair by selecting its first member.
+   * \returns An objpipe of the first member-variable of elements in the original objpipe.
+   */
+  template<bool Enable = select_first_op::is_valid<value_type>>
+  auto select_first() &&
+  noexcept(noexcept(std::declval<adapter_t>().transform(
+              std::enable_if_t<Enable, select_first_op>())))
+  -> decltype(std::declval<adapter_t>().transform(
+          std::enable_if_t<Enable, select_first_op>())) {
+    return std::move(*this).transform(select_first_op());
+  }
+
+  /**
+   * \brief Transform each element pair by selecting its second member.
+   * \returns An objpipe of the second member-variable of elements in the original objpipe.
+   */
+  template<bool Enable = select_second_op::is_valid<value_type>>
+  auto select_second() &&
+  noexcept(noexcept(std::declval<adapter_t>().transform(
+              std::enable_if_t<Enable, select_second_op>())))
+  -> decltype(std::declval<adapter_t>().transform(
+          std::enable_if_t<Enable, select_second_op>())) {
+    return std::move(*this).transform(select_second_op());
   }
 
   /**
@@ -438,7 +519,7 @@ class adapter_t {
    */
   template<typename Fn>
   auto peek(Fn&& fn) &&
-  noexcept(noexcept(adapter(adapt::peek(std::move(src_), std::forward<Fn>(fn)))))
+  noexcept(noexcept(adapter(adapt::peek(std::declval<Source>(), std::forward<Fn>(fn)))))
   -> decltype(auto) {
     return adapter(adapt::peek(std::move(src_), std::forward<Fn>(fn)));
   }
@@ -451,7 +532,7 @@ class adapter_t {
    */
   template<typename Fn>
   auto assertion(Fn&& fn) &&
-  noexcept(noexcept(adapter(adapt::assertion(std::move(src_), std::forward<Fn>(fn)))))
+  noexcept(noexcept(adapter(adapt::assertion(std::declval<Source>(), std::forward<Fn>(fn)))))
   -> decltype(auto) {
     return adapter(adapt::assertion(std::move(src_), std::forward<Fn>(fn)));
   }
@@ -637,8 +718,8 @@ class adapter_t {
    * \return The min value.
    * If the objpipe has no elements, an empty optional is returned.
    */
-  template<typename Pred>
-  auto min(Pred&& pred = std::less<>()) &&
+  template<typename Pred = std::less<value_type>>
+  auto min(Pred&& pred = Pred()) &&
   -> std::optional<value_type> {
     std::optional<value_type> result;
 
@@ -671,8 +752,8 @@ class adapter_t {
    * \return The max value.
    * If the objpipe has no elements, an empty optional is returned.
    */
-  template<typename Pred>
-  auto max(Pred&& pred = std::less<>()) &&
+  template<typename Pred = std::less<value_type>>
+  auto max(Pred&& pred = Pred()) &&
   -> std::optional<value_type> {
     std::optional<value_type> result;
 

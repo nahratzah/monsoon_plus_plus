@@ -29,7 +29,7 @@ class transform_fn_adapter {
  private:
   using inner_fn_type = transform_fn_adapter<Arg, Fn>;
   using outer_fn_type = transform_fn_adapter<
-      invoke_result_t<const inner_fn_type&, Arg>,
+      std::remove_cv_t<std::remove_reference_t<invoke_result_t<const inner_fn_type&, Arg>>>,
       Tail...>;
 
  public:
@@ -55,7 +55,7 @@ class transform_fn_adapter {
       std::is_nothrow_move_constructible<Tail>...,
       std::is_nothrow_constructible<std::decay_t<NextFn>, std::add_rvalue_reference_t<NextFn>>>)
   -> decltype(auto) {
-    return transform_fn_adapter<Fn, Tail..., std::decay_t<NextFn>>(
+    return transform_fn_adapter<Arg, Fn, Tail..., std::decay_t<NextFn>>(
         std::move(inner_),
         std::move(outer_).extend(std::forward<NextFn>(next_fn)));
   }
@@ -212,6 +212,17 @@ class transform_fn_adapter<Arg, Fn> {
     return std::invoke(next_fn, std::invoke(fn_, std::move(v)));
   }
 
+  template<typename NextFn>
+  constexpr auto extend(NextFn&& next_fn) &&
+  noexcept(std::conjunction_v<
+      std::is_nothrow_move_constructible<Fn>,
+      std::is_nothrow_constructible<std::decay_t<NextFn>, std::add_rvalue_reference_t<NextFn>>>)
+  -> decltype(auto) {
+    return transform_fn_adapter<Arg, Fn, std::decay_t<NextFn>>(
+        std::move(*this),
+        std::forward<NextFn>(next_fn));
+  }
+
  private:
   functor_type fn_;
 };
@@ -312,8 +323,8 @@ class transform_op {
   template<typename T>
   constexpr auto invoke_fn_(transport<T>&& v) const
   noexcept(is_nothrow_invocable_v<const fn_type&, decltype(std::declval<transport<T>>().value())>)
-  -> transport<invoke_result_t<const fn_type&, std::add_rvalue_reference_t<T>>> {
-    using result_type = transport<invoke_result_t<const fn_type&, std::add_rvalue_reference_t<T>>>;
+  -> transport<invoke_result_t<const fn_type&, decltype(std::declval<transport<T>>().value())>> {
+    using result_type = transport<invoke_result_t<const fn_type&, decltype(std::declval<transport<T>>().value())>>;
 
     if (v.has_value())
       return result_type(std::in_place_index<0>, std::invoke(fn_, std::move(v).value()));
