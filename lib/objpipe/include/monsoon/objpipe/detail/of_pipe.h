@@ -115,7 +115,7 @@ class of_pipe<std::reference_wrapper<T>> {
   -> transport_type {
     if (val_ == nullptr)
       return transport_type(std::in_place_index<1>, objpipe_errc::closed);
-    return transport_type(std::in_place_index<0>, val_);
+    return transport_type(std::in_place_index<0>, *val_);
   }
 
   constexpr auto pop_front()
