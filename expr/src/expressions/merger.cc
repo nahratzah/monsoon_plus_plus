@@ -276,7 +276,8 @@ auto scalar_sink::forward_to_time(time_point tp)
   assert(invariant());
 }
 
-auto scalar_sink::accept(expression::scalar_emit_type&& emt) -> bool {
+auto scalar_sink::accept(expression::scalar_emit_type&& emt)
+-> bool {
   assert(invariant());
 
   time_point& tp = emt.tp;
@@ -375,14 +376,18 @@ noexcept
 }
 
 
-auto vector_sink::suggest_emit_tp() const noexcept -> std::optional<time_point> {
+auto vector_sink::suggest_emit_tp() const
+noexcept
+-> std::optional<time_point> {
   return objpipe::of(std::cref(data_))
       .iterate()
       .select_second()
       .transform(&scalar_sink::suggest_emit_tp)
-      // Work around libc++ bug: https://bugs.llvm.org/show_bug.cgi?id=36469
-      // .filter(&std::optional<time_point>::has_value)
+#if 0 // Work around libc++ bug: https://bugs.llvm.org/show_bug.cgi?id=36469
+      .filter(&std::optional<time_point>::has_value)
+#else
       .filter([](const std::optional<time_point>& v) { return v.has_value(); })
+#endif
       .deref()
       .min();
 }
