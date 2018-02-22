@@ -2,6 +2,7 @@
 ///\ingroup expr
 
 #include <monsoon/expressions/merger.h>
+#include <algorithm>
 #include <deque>
 #include <functional>
 #include <iterator>
@@ -114,26 +115,51 @@ struct monsoon_expr_local_ tagged_vector {
   {}
 };
 
+/**
+ * \brief Scalar sink.
+ * \ingroup expr
+ *
+ * \details
+ * Accepts scalars and stores them.
+ * Stored scalars are used for emitting and interpolating.
+ */
 class monsoon_expr_local_ scalar_sink {
  private:
   struct value {
     value() = delete;
 
+    ///\brief Constructor.
+    ///\param[in] tp The \ref monsoon::time_point "time point" of the scalar.
+    ///\param[in] data The \ref monsoon::metric_value "scalar value".
+    ///\param[in] is_fact Indicates if the scalar is a fact, as opposed to a speculation.
     value(time_point tp, const metric_value& data, bool is_fact)
     : tp(tp),
       data(data),
-      is_fact(is_fact)
+      is_fact(is_fact),
+      is_emitted(false)
     {}
 
+    ///\brief Constructor.
+    ///\param[in] tp The \ref monsoon::time_point "time point" of the scalar.
+    ///\param[in] data The \ref monsoon::metric_value "scalar value".
+    ///\param[in] is_fact Indicates if the scalar is a fact, as opposed to a speculation.
     value(time_point tp, metric_value&& data, bool is_fact) noexcept
     : tp(tp),
       data(std::move(data)),
-      is_fact(is_fact)
+      is_fact(is_fact),
+      is_emitted(false)
     {}
 
+    ///\brief The \ref monsoon::time_point "time point" of the scalar.
     time_point tp;
+    ///\brief The \ref monsoon::metric_value "value" of the scalar.
     metric_value data;
-    bool is_fact;
+    ///\brief Indicates if the scalar is a fact, as opposed to a speculation.
+    bool is_fact : 1;
+
+    ///\brief Indicates if this scalar has been emitted.
+    ///\details Emitted scalars still participate in interpolation.
+    bool is_emitted : 1;
   };
 
   ///\brief Type of the data_ member.
@@ -300,6 +326,14 @@ class monsoon_expr_local_ scalar_sink {
   std::optional<recent_type> recent_;
 };
 
+/**
+ * \brief Vector sink.
+ * \ingroup expr
+ *
+ * \details
+ * Accepts vectors and stores them.
+ * Stored vectors are used for emitting and interpolating.
+ */
 class monsoon_expr_local_ vector_sink {
  public:
   vector_sink(const std::shared_ptr<const match_clause>& mc);
@@ -380,7 +414,9 @@ class monsoon_expr_local_ vector_sink {
 /**
  * \brief Wrapper that connects a source and its associated sink.
  * \ingroup expr
- * \details Reads data from the \p Pipe (an \ref monsoon::objpipe::reader<T> "objpipe")
+ *
+ * \details
+ * Reads data from the \p Pipe (an \ref monsoon::objpipe::reader<T> "objpipe")
  * into the appropriate sink.
  *
  * \tparam Pipe An object pipe. Must be an instance of
@@ -440,8 +476,9 @@ class monsoon_expr_local_ pull_cycle {
 
   ///\brief Read data from source, transferring it into sink.
   ///\details Stops reading if data fails to read, or after a fact was transferred.
+  ///\param[in] block If set, the read will block until data is available.
   ///\returns True if a fact was transferred.
-  auto read_more() -> bool;
+  auto read_more(bool block = false) -> bool;
 
   /**
    * \brief Invariant.
@@ -478,8 +515,10 @@ noexcept
 -> std::optional<time_point> {
   assert(invariant());
 
-  if (data_.empty()) return {};
-  return data_.front().tp;
+  const auto emit_iter = std::find_if(data_.begin(), data_.end(),
+      [](const value& v) { return !v.is_emitted; });
+  if (emit_iter == data_.end()) return {};
+  return emit_iter->tp;
 }
 
 auto scalar_sink::fact_end() const
@@ -634,8 +673,9 @@ auto scalar_sink::accept(expression::scalar_emit_type&& emt)
       tp_compare_());
   if (at_or_successor->tp == tp) {
     assert(!at_or_successor->is_fact);
-    std::tie(at_or_successor->data, at_or_successor->is_fact) =
-        std::forward_as_tuple(std::move(mv), is_fact);
+    at_or_successor->data = std::move(mv);
+    at_or_successor->is_fact = is_fact;
+    at_or_successor->is_emitted = false;
 
     ins_pos = at_or_successor;
   } else if (!at_or_successor->is_fact || is_fact) {
@@ -675,10 +715,10 @@ noexcept
   return
       std::all_of(
           data_.begin(), speculative_begin,
-          std::mem_fn(&value::is_fact))
+          [](const value& v) { return v.is_fact; })
       && std::none_of(
           speculative_begin, data_.end(),
-          std::mem_fn(&value::is_fact))
+          [](const value& v) { return v.is_fact; })
       && std::is_sorted(
           data_.begin(), data_.end(),
           tp_compare_());
@@ -881,14 +921,28 @@ auto pull_cycle<Pipe>::get(time_point tp, time_point min_interp_tp, time_point m
 }
 
 template<typename Pipe>
-auto pull_cycle<Pipe>::read_more()
+auto pull_cycle<Pipe>::read_more(bool block)
 -> bool {
   assert(invariant());
 
+  if (!source_.is_pullable()) return false;
   bool accepted_fact = false;
+
   do {
-    auto next = source_.try_pull();
+    std::optional<typename Pipe::value_type> next;
+
+    if (!next_tp_.has_value() && block) {
+      try {
+        next = source_.pull();
+      } catch (const std::system_error& e) {
+        if (e.code() != objpipe::objpipe_errc::closed)
+          throw;
+      }
+    } else {
+      next = source_.try_pull();
+    }
     if (!next.has_value()) break;
+
     const bool is_fact = (next->data.index() == 1);
     const time_point tp = next->tp;
 
