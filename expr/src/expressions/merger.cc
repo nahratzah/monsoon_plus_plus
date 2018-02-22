@@ -243,6 +243,13 @@ class monsoon_expr_local_ scalar_sink {
   auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
 
   /**
+   * \brief Mark time point as having been emitted.
+   * \details Prevents suggest_emit_tp() from suggesting this time point.
+   * \param[in] tp The time point to mark as emitted.
+   */
+  auto mark_emitted(time_point tp) noexcept -> void;
+
+  /**
    * \brief The newest factual time point held.
    * \returns The time point of the most recent fact.
    */
@@ -345,6 +352,13 @@ class monsoon_expr_local_ vector_sink {
    * \returns The time point of the oldest time point held.
    */
   auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
+
+  /**
+   * \brief Mark time point as having been emitted.
+   * \details Prevents suggest_emit_tp() from suggesting this time point.
+   * \param[in] tp The time point to mark as emitted.
+   */
+  auto mark_emitted(time_point tp) noexcept -> void;
 
   /**
    * \brief The newest factual time point held.
@@ -460,6 +474,13 @@ class monsoon_expr_local_ pull_cycle {
   auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
 
   /**
+   * \brief Mark time point as having been emitted.
+   * \details Prevents suggest_emit_tp() from suggesting this time point.
+   * \param[in] tp The time point to mark as emitted.
+   */
+  auto mark_emitted(time_point tp) noexcept -> void;
+
+  /**
    * \brief Retrieve value at the given time point.
    *
    * \details Invokes
@@ -519,6 +540,24 @@ noexcept
       [](const value& v) { return !v.is_emitted; });
   if (emit_iter == data_.end()) return {};
   return emit_iter->tp;
+}
+
+auto scalar_sink::mark_emitted(time_point tp)
+noexcept
+-> void {
+  assert(invariant());
+
+  // Optimize for first element.
+  if (!data_.empty() && data_.front().tp == tp) {
+    data_.front().is_emitted = true;
+  } else {
+    const auto at_or_after = std::lower_bound(data_.begin(), data_.end(),
+        tp, tp_compare_());
+    if (at_or_after != data_.end() && at_or_after->tp == tp)
+      at_or_after->is_emitted = true;
+  }
+
+  assert(invariant());
 }
 
 auto scalar_sink::fact_end() const
@@ -753,6 +792,19 @@ noexcept
   return min;
 }
 
+auto vector_sink::mark_emitted(time_point tp)
+noexcept
+-> void {
+  assert(invariant());
+
+  std::for_each(data_.begin(), data_.end(),
+      [tp](auto& data_elem) {
+        data_elem.second.mark_emitted(tp);
+      });
+
+  assert(invariant());
+}
+
 auto vector_sink::fact_end() const
 noexcept
 -> std::optional<time_point> {
@@ -903,6 +955,18 @@ auto pull_cycle<Pipe>::suggest_emit_tp() const noexcept
   assert(invariant());
 
   return next_tp_;
+}
+
+template<typename Pipe>
+auto pull_cycle<Pipe>::mark_emitted(time_point tp)
+noexcept
+-> void {
+  assert(invariant());
+
+  sink_.mark_emitted(tp);
+  next_tp_ = sink_.suggest_emit_tp();
+
+  assert(invariant());
 }
 
 template<typename Pipe>
