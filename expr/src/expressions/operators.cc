@@ -181,12 +181,13 @@ auto binop_t::operator()(const metric_source& src,
     const std::shared_ptr<const match_clause>& out_mc) const
 -> std::variant<scalar_objpipe, vector_objpipe> {
   return std::visit(
-      [this, &out_mc](auto&&... pipes)
+      [this, &out_mc, slack](auto&&... pipes)
       -> std::variant<scalar_objpipe, vector_objpipe> {
         return make_merger(
             fn_,
             mc_,
             out_mc,
+            slack,
             std::forward<decltype(pipes)>(pipes)...);
       },
       (*x_)(src, tr, slack, mc_),

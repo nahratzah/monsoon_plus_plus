@@ -85,6 +85,40 @@ struct monsoon_expr_local_ scalar {
   }
 };
 
+struct merger_apply_scalar {
+  metric_value value;
+  bool is_fact;
+
+  merger_apply_scalar(metric_value&& value, bool is_fact)
+  noexcept
+  : value(std::move(value)),
+    is_fact(is_fact)
+  {}
+
+  merger_apply_scalar(const metric_value& value, bool is_fact)
+  : value(value),
+    is_fact(is_fact)
+  {}
+
+  ///\brief Convert the scalar to a \ref expression::scalar_emit_type "scalar emit type".
+  auto as_emit(time_point tp) &&
+  -> expression::scalar_emit_type {
+    if (is_fact)
+      return expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(value));
+    else
+      return expression::scalar_emit_type(tp, std::in_place_index<0>, std::move(value));
+  }
+};
+
+template<typename Fn>
+auto merger_apply(Fn&& fn, const scalar& x, const scalar& y)
+-> merger_apply_scalar {
+  assert(x.value.has_value() && y.value.has_value());
+  return merger_apply_scalar(
+      std::invoke(std::forward<Fn>(fn), x.value.value(), y.value.value()),
+      x.is_fact && y.is_fact);
+}
+
 /**
  * \brief Describes a tagged vector.
  * \ingroup expr
@@ -303,6 +337,7 @@ class monsoon_expr_local_ scalar_sink {
    *
    * \details Tests if the invariant holds.
    */
+  [[maybe_unused, nodiscard]]
   auto invariant() const noexcept -> bool;
 
  private:
@@ -408,6 +443,7 @@ class monsoon_expr_local_ vector_sink {
    *
    * \details Tests if the invariant holds.
    */
+  [[maybe_unused, nodiscard]]
   auto invariant() const noexcept -> bool;
 
  private:
@@ -502,10 +538,28 @@ class monsoon_expr_local_ pull_cycle {
   auto read_more(bool block = false) -> bool;
 
   /**
+   * \brief Ensure the buffered, emittable time points are all after the given time point.
+   *
+   * \details Ensures the only pending data is after the given time point.
+   * \param[in] tp The time point to forward to.
+   * \param[in] expire_before All data before this time point will be dropped,
+   * keeping it from being used in future interpolations.
+   */
+  auto forward_to_time(time_point tp, time_point expire_before) -> void;
+
+  /**
+   * \brief Test if the underlying objpipe is pullable.
+   */
+  auto is_pullable() const noexcept -> bool {
+    return source_.is_pullable();
+  }
+
+  /**
    * \brief Invariant.
    *
    * \details Tests if the invariant holds.
    */
+  [[maybe_unused, nodiscard]]
   auto invariant() const noexcept -> bool;
 
  private:
@@ -663,9 +717,9 @@ auto scalar_sink::forward_to_time(time_point tp, time_point expire_before)
       tp_compare_());
 
   if (keep_begin != data_.begin()) {
-    const auto first_speculative = std::upper_bound(
+    const auto first_speculative = std::lower_bound(
         data_.begin(), keep_begin,
-        true,
+        false,
         factflag_compare_());
     if (first_speculative != data_.begin()) {
       const auto last_dropped_fact = std::prev(first_speculative);
@@ -892,13 +946,13 @@ auto vector_sink::accept(expression::vector_emit_type&& emt)
 #if __cplusplus >= 201703
             while (!v.empty()) {
               auto nh = v.extract(v.begin());
-              const bool accepted = data_[std::move(nh.key())]
+              [[maybe_unused]] const bool accepted = data_[std::move(nh.key())]
                   .accept(expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(nh.mapped())));
               assert(accepted);
             }
 #else
             for (auto& item : v) {
-              const bool accepted = data_[item.first]
+              [[maybe_unused]] const bool accepted = data_[item.first]
                   .accept(expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(item.second)));
               assert(accepted);
             }
@@ -1048,8 +1102,242 @@ noexcept
   return next_tp_ == sink_.suggest_emit_tp();
 }
 
+template<typename Pipe>
+auto pull_cycle<Pipe>::forward_to_time(time_point tp, time_point expire_before)
+-> void {
+  sink_.forward_to_time(tp, expire_before);
+}
+
 template class monsoon_expr_local_ pull_cycle<expression::scalar_objpipe>;
 template class monsoon_expr_local_ pull_cycle<expression::vector_objpipe>;
+
+
+template<typename Pipe>
+auto create_sink_for([[maybe_unused]] const std::shared_ptr<const match_clause>& mc)
+-> std::enable_if_t<
+    std::is_same_v<expression::scalar_emit_type, typename Pipe::value_type>,
+    scalar_sink> {
+  return scalar_sink();
+}
+
+template<typename Pipe>
+auto create_sink_for(std::shared_ptr<const match_clause> mc)
+-> std::enable_if_t<
+    std::is_same_v<expression::vector_emit_type, typename Pipe::value_type>,
+    vector_sink> {
+  assert(mc != nullptr);
+  return vector_sink(std::move(mc));
+}
+
+template<typename PipeX, typename PipeY, typename Fn>
+class pair_merger_pipe {
+ public:
+  using objpipe_errc = objpipe::objpipe_errc;
+
+  using result_type = decltype(
+      merger_apply(
+          std::declval<const Fn&>(),
+          std::declval<const pull_cycle<PipeX>&>().get(
+              std::declval<time_point>(),
+              std::declval<time_point>(),
+              std::declval<time_point>()),
+          std::declval<const pull_cycle<PipeX>&>().get(
+              std::declval<time_point>(),
+              std::declval<time_point>(),
+              std::declval<time_point>()))
+          .as_emit(std::declval<time_point>()));
+  using transport_type = objpipe::detail::transport<result_type>;
+
+  template<typename FnArg>
+  pair_merger_pipe(PipeX&& x, PipeY&& y,
+      const std::shared_ptr<const match_clause>& mc,
+      std::shared_ptr<const match_clause> out_mc,
+      time_point::duration slack,
+      FnArg&& fn)
+  : x_(std::move(x), create_sink_for<PipeX>(mc)),
+    y_(std::move(y), create_sink_for<PipeY>(mc)),
+    out_mc_(std::move(out_mc)),
+    fn_(std::forward<FnArg>(fn)),
+    slack_(slack)
+  {}
+
+  auto wait() const -> objpipe_errc {
+    assert(!last_front_tp_.has_value());
+
+    std::optional<time_point> x_tp = x_.suggest_emit_tp();
+    if (!x_tp.has_value()) {
+      x_.read_more(true);
+      x_tp = x_.suggest_emit_tp();
+    }
+    assert(x_tp.has_value() || !x_.is_pullable());
+
+    std::optional<time_point> y_tp = y_.suggest_emit_tp();
+    if (!y_tp.has_value()) {
+      y_.read_more(true);
+      y_tp = y_.suggest_emit_tp();
+    }
+    assert(y_tp.has_value() || !y_.is_pullable());
+
+    if (x_tp.has_value() && y_tp.has_value())
+      return objpipe_errc::success;
+    else
+      return objpipe_errc::closed;
+  }
+
+  auto is_pullable() const
+  noexcept
+  -> bool {
+    return x_.is_pullable() && y_.is_pullable();
+  }
+
+  auto front() const
+  -> transport_type {
+    assert(!last_front_tp_.has_value());
+
+    std::optional<time_point> x_tp = x_.suggest_emit_tp();
+    if (!x_tp.has_value()) {
+      x_.read_more(true);
+      x_tp = x_.suggest_emit_tp();
+    }
+    assert(x_tp.has_value() || !x_.is_pullable());
+
+    std::optional<time_point> y_tp = y_.suggest_emit_tp();
+    if (!y_tp.has_value()) {
+      y_.read_more(true);
+      y_tp = y_.suggest_emit_tp();
+    }
+    assert(y_tp.has_value() || !y_.is_pullable());
+
+    if (!x_tp.has_value() || !y_tp.has_value())
+      return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+
+    const time_point tp = std::min(*x_tp, *y_tp);
+    last_front_tp_.emplace(tp);
+
+    auto result = merger_apply(
+        fn_,
+        x_.get(tp, tp - slack_, tp + slack_),
+        y_.get(tp, tp - slack_, tp + slack_));
+    if (result.is_fact) { // Factual emit
+      x_.forward_to_time(tp, tp - slack_);
+      y_.forward_to_time(tp, tp - slack_);
+    }
+
+    return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  }
+
+  auto pop_front()
+  -> objpipe_errc {
+    if (!last_front_tp_.has_value()) {
+      transport_type front_result = front();
+      if (front_result.errc() != objpipe_errc::success)
+        return front_result.errc();
+    }
+    assert(last_front_tp_.has_value());
+
+    x_.mark_emitted(*last_front_tp_);
+    y_.mark_emitted(*last_front_tp_);
+    last_front_tp_.reset();
+    return objpipe_errc::success;
+  }
+
+  auto pull()
+  -> transport_type {
+    assert(!last_front_tp_.has_value());
+
+    std::optional<time_point> x_tp = x_.suggest_emit_tp();
+    if (!x_tp.has_value()) {
+      x_.read_more(true);
+      x_tp = x_.suggest_emit_tp();
+    }
+    assert(x_tp.has_value() || !x_.is_pullable());
+
+    std::optional<time_point> y_tp = y_.suggest_emit_tp();
+    if (!y_tp.has_value()) {
+      y_.read_more(true);
+      y_tp = y_.suggest_emit_tp();
+    }
+    assert(y_tp.has_value() || !y_.is_pullable());
+
+    if (!x_tp.has_value() || !y_tp.has_value())
+      return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+
+    const time_point tp = std::min(*x_tp, *y_tp);
+    auto result = merger_apply(
+        fn_,
+        x_.get(tp, tp - slack_, tp + slack_),
+        y_.get(tp, tp - slack_, tp + slack_));
+    if (result.is_fact) { // Factual emit
+      x_.forward_to_time(tp, tp - slack_);
+      y_.forward_to_time(tp, tp - slack_);
+    }
+
+    x_.mark_emitted(tp);
+    y_.mark_emitted(tp);
+    return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  }
+
+  auto try_pull()
+  -> transport_type {
+    assert(!last_front_tp_.has_value());
+
+    std::optional<time_point> x_tp = x_.suggest_emit_tp();
+    if (!x_tp.has_value()) {
+      x_.read_more(false);
+      x_tp = x_.suggest_emit_tp();
+    }
+
+    std::optional<time_point> y_tp = y_.suggest_emit_tp();
+    if (!y_tp.has_value()) {
+      y_.read_more(false);
+      y_tp = y_.suggest_emit_tp();
+    }
+
+    if (!x_tp.has_value() || !y_tp.has_value()) {
+      if (!x_.is_pullable() && !y_.is_pullable())
+        return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+      else
+        return transport_type(std::in_place_index<1>, objpipe_errc::success);
+    }
+
+    const time_point tp = std::min(*x_tp, *y_tp);
+    auto result = merger_apply(
+        fn_,
+        x_.get(tp, tp - slack_, tp + slack_),
+        y_.get(tp, tp - slack_, tp + slack_));
+    if (result.is_fact) { // Factual emit
+      x_.forward_to_time(tp, tp - slack_);
+      y_.forward_to_time(tp, tp - slack_);
+    }
+
+    x_.mark_emitted(tp);
+    y_.mark_emitted(tp);
+    return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  }
+
+ private:
+  mutable pull_cycle<PipeX> x_;
+  mutable pull_cycle<PipeY> y_;
+  std::shared_ptr<const match_clause> out_mc_;
+  Fn fn_;
+  time_point::duration slack_;
+  mutable std::optional<time_point> last_front_tp_;
+};
+
+auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    expression::scalar_objpipe&& x,
+    expression::scalar_objpipe&& y,
+    time_point::duration slack)
+-> expression::scalar_objpipe {
+  using impl_type = pair_merger_pipe<
+      expression::scalar_objpipe,
+      expression::scalar_objpipe,
+      metric_value(*)(const metric_value&, const metric_value&)>;
+
+  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn));
+}
 
 
 } /* namespace monsoon::expressions */
