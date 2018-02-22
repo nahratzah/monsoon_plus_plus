@@ -20,6 +20,7 @@
 #include <monsoon/expr_export_.h>
 
 namespace monsoon::expressions {
+namespace {
 
 
 /**
@@ -1324,12 +1325,16 @@ class pair_merger_pipe {
   mutable std::optional<time_point> last_front_tp_;
 };
 
+
+} /* namespace monsoon::expressions::<unnamed> */
+
+
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     std::shared_ptr<const match_clause> mc,
     std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
     expression::scalar_objpipe&& x,
-    expression::scalar_objpipe&& y,
-    time_point::duration slack)
+    expression::scalar_objpipe&& y)
 -> expression::scalar_objpipe {
   using impl_type = pair_merger_pipe<
       expression::scalar_objpipe,
