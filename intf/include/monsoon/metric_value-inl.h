@@ -6,16 +6,6 @@
 namespace monsoon {
 
 
-inline metric_value::metric_value(metric_value&& other) noexcept
-: value_(std::move(other.value_))
-{}
-
-inline auto metric_value::operator=(metric_value&& other) noexcept
-->  metric_value& {
-  value_ = std::move(other.value_);
-  return *this;
-}
-
 inline metric_value::metric_value(bool v) noexcept
 : value_(std::in_place_type<bool>, v)
 {}

@@ -115,10 +115,11 @@ class monsoon_intf_export_ metric_value {
    * \brief Default constructor creates an \ref empty metric value.
    */
   constexpr metric_value() noexcept = default;
-  metric_value(const metric_value&) = default;
+  metric_value(const metric_value&);
   metric_value(metric_value&&) noexcept;
-  metric_value& operator=(const metric_value&) = default;
+  metric_value& operator=(const metric_value&);
   metric_value& operator=(metric_value&&) noexcept;
+  ~metric_value() noexcept;
 
   /**
    * \brief Create a metric value from a boolean.

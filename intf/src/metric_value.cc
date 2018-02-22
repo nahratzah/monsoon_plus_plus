@@ -478,6 +478,28 @@ struct shift_right {
 } /* namespace monsoon::metric_value_ops */
 
 
+metric_value::metric_value(const metric_value& other)
+: value_(other.value_)
+{}
+
+metric_value::metric_value(metric_value&& other) noexcept
+: value_(std::move(other.value_))
+{}
+
+auto metric_value::operator=(const metric_value& other)
+-> metric_value& {
+  value_ = other.value_;
+  return *this;
+}
+
+auto metric_value::operator=(metric_value&& other) noexcept
+-> metric_value& {
+  value_ = std::move(other.value_);
+  return *this;
+}
+
+metric_value::~metric_value() noexcept {}
+
 auto metric_value::operator==(const metric_value& other) const noexcept
 ->  bool {
   return std::visit(
