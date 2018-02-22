@@ -4,6 +4,7 @@
 #include <monsoon/expressions/merger.h>
 #include <deque>
 #include <functional>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <tuple>
@@ -17,8 +18,7 @@
 #include <monsoon/objpipe/of.h>
 #include <monsoon/expr_export_.h>
 
-namespace monsoon {
-namespace expressions {
+namespace monsoon::expressions {
 
 
 /**
@@ -132,7 +132,7 @@ class monsoon_expr_local_ scalar_sink {
     {}
 
     time_point tp;
-    expression::speculative_scalar data;
+    metric_value data;
     bool is_fact;
   };
 
@@ -153,9 +153,10 @@ class monsoon_expr_local_ scalar_sink {
     {}
 
     time_point tp;
-    expression::speculative_scalar data;
+    metric_value data;
   };
 
+  ///\brief Comparator that compares \ref monsoon::time_point "time points" of arguments.
   class tp_compare_ {
    public:
     template<typename X, typename Y>
@@ -179,27 +180,64 @@ class monsoon_expr_local_ scalar_sink {
     }
   };
 
+  ///\brief Comparator that compares the fact property of arguments.
+  ///\note True compares before false.
+  class factflag_compare_ {
+   public:
+    template<typename X, typename Y>
+    auto operator()(const X& x, const Y& y) const
+    noexcept
+    -> bool {
+      return is_fact_(x) > is_fact_(y);
+    }
+
+   private:
+    static constexpr auto is_fact_(const bool& is_fact)
+    noexcept
+    -> bool {
+      return is_fact;
+    }
+
+    static constexpr auto is_fact_(const value& x)
+    noexcept
+    -> bool {
+      return x.is_fact;
+    }
+  };
+
  public:
   scalar_sink();
   ~scalar_sink() noexcept;
 
   /**
-   * \brief Suggest the next emit time point for factual emit.
+   * \brief Suggest the next emit time point for emit.
    *
-   * \returns The time point of the oldest factual time point held.
+   * \returns The time point of the oldest time point held.
    */
   auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
+
+  /**
+   * \brief The newest factual time point held.
+   * \returns The time point of the most recent fact.
+   */
+  auto fact_end() const noexcept -> std::optional<time_point>;
 
   /**
    * \brief Retrieve value at the given time point.
    *
    * \details The value may be interpolated, if needed.
    * \param[in] tp The time point for which a value is requested.
+   * \param[in] min_interp_tp The min time point which may be considered when interpolating.
    * \param[in] max_interp_tp The max time point which may be considered when interpolating.
    * \param[in] is_closed Indicates the source of values is closed.
    * \returns Value at the given time point.
    */
-  auto get(time_point tp, time_point max_interp_tp, bool is_closed) const -> scalar;
+  auto get(time_point tp, time_point min_interp_tp, time_point max_interp_tp, bool is_closed) const -> scalar;
+
+  /**
+   * \brief Drop all speculative values before the given time point.
+   */
+  auto drop_speculative_before(time_point tp) -> void;
 
   /**
    * \brief Test if this holds any data.
@@ -264,16 +302,21 @@ class monsoon_expr_local_ scalar_sink {
 
 class monsoon_expr_local_ vector_sink {
  public:
-  vector_sink(const std::shared_ptr<const match_clause>& mc)
-  : data_(0, mc, mc)
-  {}
+  vector_sink(const std::shared_ptr<const match_clause>& mc);
+  ~vector_sink() noexcept;
 
   /**
-   * \brief Suggest the next emit time point for factual emit.
+   * \brief Suggest the next emit time point for emit.
    *
-   * \returns The time point of the oldest factual time point held.
+   * \returns The time point of the oldest time point held.
    */
   auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
+
+  /**
+   * \brief The newest factual time point held.
+   * \returns The time point of the most recent fact.
+   */
+  auto fact_end() const noexcept -> std::optional<time_point>;
 
   /**
    * \brief Retrieve value at the given time point.
@@ -284,7 +327,7 @@ class monsoon_expr_local_ vector_sink {
    * \param[in] is_closed Indicates the source of values is closed.
    * \returns Value at the given time point.
    */
-  auto get(time_point tp, time_point max_interp_tp, bool is_closed) const -> tagged_vector;
+  auto get(time_point tp, time_point min_interp_tp, time_point max_interp_tp, bool is_closed) const -> tagged_vector;
 
   /**
    * \brief Test if this holds any data.
@@ -325,6 +368,12 @@ class monsoon_expr_local_ vector_sink {
    */
   std::unordered_map<tags, scalar_sink, class match_clause::hash, match_clause::equal_to>
       data_;
+
+  /**
+   * \brief Time point of the most recently accepted fact.
+   * \details We need to record this separately, in order to handle empty facts.
+   */
+  std::optional<time_point> last_known_fact_tp_;
 };
 
 
@@ -368,9 +417,9 @@ class monsoon_expr_local_ pull_cycle {
   {}
 
   /**
-   * \brief Suggest the next emit time point for factual emit.
+   * \brief Suggest the next emit time point for emit.
    *
-   * \returns The time point of the oldest factual time point held.
+   * \returns The time point of the oldest time point held.
    */
   auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
 
@@ -379,23 +428,42 @@ class monsoon_expr_local_ pull_cycle {
    *
    * \details Invokes
    * \code
-   * sink.get(tp, max_interp_tp);
+   * sink_.get(tp, min_interp_tp, max_interp_tp, ...);
    * \endcode
    * \param tp The time point for which a value is requested.
    * \param max_interp_tp The max time point which may be considered when interpolating.
    * \returns Value at the given time point.
    */
-  auto get(time_point tp, time_point max_interp_tp) const
+  auto get(time_point tp, time_point min_interp_tp, time_point max_interp_tp) const
   -> decltype(std::declval<const sink_type&>()
-      .get(std::declval<time_point>(), std::declval<time_point>(), std::declval<bool>()));
+      .get(std::declval<time_point>(), std::declval<time_point>(), std::declval<time_point>(), std::declval<bool>()));
 
   ///\brief Read data from source, transferring it into sink.
   ///\details Stops reading if data fails to read, or after a fact was transferred.
-  void read_more();
+  ///\returns True if a fact was transferred.
+  auto read_more() -> bool;
+
+  /**
+   * \brief Invariant.
+   *
+   * \details Tests if the invariant holds.
+   */
+  auto invariant() const noexcept -> bool;
 
  private:
+  /**
+   * \brief Try to read facts up-to-and-including \p tp.
+   *
+   * \details Repeatedly invokes read_more(), until sink_.fact_end() exceeds tp.
+   * \note While this function is const, it mutates the underlying data.
+   *
+   * \param The time point we would like to have facts on.
+   */
+  auto try_forward_to_(time_point tp) const -> void;
+
   sink_type sink_;
   Pipe source_;
+  std::optional<time_point> next_tp_;
 };
 
 extern template class monsoon_expr_local_ pull_cycle<expression::scalar_objpipe>;
@@ -403,7 +471,6 @@ extern template class monsoon_expr_local_ pull_cycle<expression::vector_objpipe>
 
 
 scalar_sink::scalar_sink() {}
-
 scalar_sink::~scalar_sink() noexcept {}
 
 auto scalar_sink::suggest_emit_tp() const
@@ -411,14 +478,30 @@ noexcept
 -> std::optional<time_point> {
   assert(invariant());
 
-  if (data_.empty() || !data_.front().is_fact) return {};
+  if (data_.empty()) return {};
   return data_.front().tp;
 }
 
-auto scalar_sink::get(time_point tp, time_point max_interp_tp,
+auto scalar_sink::fact_end() const
+noexcept
+-> std::optional<time_point> {
+  assert(invariant());
+
+  const auto first_speculation = std::upper_bound(
+      data_.begin(), data_.end(),
+      true,
+      factflag_compare_());
+  if (first_speculation == data_.begin())
+    return {};
+  return std::prev(first_speculation)->tp;
+}
+
+auto scalar_sink::get(time_point tp,
+    time_point min_interp_tp,
+    time_point max_interp_tp,
     bool is_closed) const
 -> scalar {
-  assert(tp <= max_interp_tp);
+  assert(min_interp_tp <= tp && tp <= max_interp_tp);
   assert(invariant());
 
   const auto at_or_successor = std::lower_bound(
@@ -439,7 +522,7 @@ auto scalar_sink::get(time_point tp, time_point max_interp_tp,
 
   // at_or_successor is a successor.
   if (at_or_successor == data_.begin()) { // Interpolate using stored most-recent fact.
-    if (!recent_.has_value())
+    if (!recent_.has_value() || recent_->tp < min_interp_tp)
       return scalar::absent(at_or_successor->is_fact);
     return scalar(
         interpolate(tp,
@@ -451,6 +534,8 @@ auto scalar_sink::get(time_point tp, time_point max_interp_tp,
     // Note: at_or_successor->is_fact implies predecessor->is_fact
     assert(predecessor->is_fact || !at_or_successor->is_fact);
 
+    if (predecessor->tp < min_interp_tp)
+      return scalar::absent(at_or_successor->is_fact);
     return scalar(
         interpolate(tp,
             { predecessor->tp, predecessor->data },
@@ -458,6 +543,24 @@ auto scalar_sink::get(time_point tp, time_point max_interp_tp,
         at_or_successor->is_fact);
   }
   // unreachable
+}
+
+auto scalar_sink::drop_speculative_before(time_point tp) -> void {
+  assert(invariant());
+
+  auto tp_begin = std::lower_bound(data_.begin(), data_.end(),
+      tp,
+      tp_compare_());
+  if (tp_begin != data_.end() && tp_begin->is_fact) return;
+
+  auto spec_begin = std::lower_bound(data_.begin(), tp_begin,
+      false,
+      factflag_compare_());
+  data_.erase(spec_begin, tp_begin);
+
+  assert(invariant());
+  assert(std::lower_bound(data_.begin(), data_.end(), false, factflag_compare_()) == data_.end()
+      || std::lower_bound(data_.begin(), data_.end(), false, factflag_compare_())->tp >= tp);
 }
 
 auto scalar_sink::empty() const
@@ -485,9 +588,7 @@ auto scalar_sink::forward_to_time(time_point tp, time_point expire_before)
     const auto first_speculative = std::upper_bound(
         data_.begin(), keep_begin,
         true,
-        overload(
-            [](const value& x, bool y) { return x.is_fact > y; },
-            [](bool x, const value& y) { return x > y.is_fact; }));
+        factflag_compare_());
     if (first_speculative != data_.begin()) {
       const auto last_dropped_fact = std::prev(first_speculative);
       assert(last_dropped_fact->is_fact);
@@ -550,9 +651,7 @@ auto scalar_sink::accept(expression::scalar_emit_type&& emt)
     const auto first_spec = std::upper_bound(
         data_.begin(), ins_pos,
         true,
-        overload(
-            [](const value& x, bool y) { return x.is_fact > y; },
-            [](bool x, const value& y) { return x > y.is_fact; }));
+        factflag_compare_());
     data_.erase(first_spec, ins_pos);
   }
 
@@ -571,9 +670,7 @@ noexcept
   const auto speculative_begin = std::lower_bound(
       data_.begin(), data_.end(),
       false,
-      overload( // Compare true before false.
-          [](const value& x, bool y) noexcept { return x.is_fact > y; },
-          [](bool x, const value& y) noexcept { return x > y.is_fact; }));
+      factflag_compare_());
 
   return
       std::all_of(
@@ -588,10 +685,18 @@ noexcept
 }
 
 
+vector_sink::vector_sink(const std::shared_ptr<const match_clause>& mc)
+: data_(0, mc, mc)
+{}
+
+vector_sink::~vector_sink() noexcept {}
+
 auto vector_sink::suggest_emit_tp() const
 noexcept
 -> std::optional<time_point> {
-  return objpipe::of(std::cref(data_))
+  assert(invariant());
+
+  std::optional<time_point> min = objpipe::of(std::cref(data_))
       .iterate()
       .select_second()
       .transform(&scalar_sink::suggest_emit_tp)
@@ -602,11 +707,26 @@ noexcept
 #endif
       .deref()
       .min();
+
+  if (!min.has_value())
+    min = last_known_fact_tp_;
+  return min;
 }
 
-auto vector_sink::get(time_point tp, time_point max_interp_tp,
+auto vector_sink::fact_end() const
+noexcept
+-> std::optional<time_point> {
+  assert(invariant());
+
+  return last_known_fact_tp_;
+}
+
+auto vector_sink::get(time_point tp,
+    time_point min_interp_tp,
+    time_point max_interp_tp,
     bool is_closed) const
 -> tagged_vector {
+  assert(min_interp_tp <= tp && tp <= max_interp_tp);
   assert(invariant());
 
   tagged_vector result = tagged_vector(
@@ -617,14 +737,24 @@ auto vector_sink::get(time_point tp, time_point max_interp_tp,
 
   std::for_each(
       data_.begin(), data_.end(),
-      [&result, tp, max_interp_tp, is_closed](const auto& elem) {
+      [this, &result, tp, min_interp_tp, max_interp_tp, is_closed](const auto& elem) {
         const auto& t = elem.first;
-        auto s = elem.second.get(tp, max_interp_tp, is_closed);
+        auto s = elem.second.get(tp, min_interp_tp, max_interp_tp, is_closed);
 
-        if (!s.is_fact) result.is_fact = false;
+        // Only mark result as speculative, if the value is speculative.
+        //
+        // The scalar_sink is unaware of absent values (because scalars
+        // can never be absent) and thus we need to verify the speculation-flag
+        // against last_known_fact_tp_.
+        if (!s.is_fact && last_known_fact_tp_ < max_interp_tp)
+          result.is_fact = false;
+
         if (s.value.has_value())
           result.values.emplace(t, *std::move(s.value));
       });
+
+  // When max_interp_tp is known, everything is a fact.
+  assert(last_known_fact_tp_ < max_interp_tp || result.is_fact);
   return result;
 }
 
@@ -658,6 +788,8 @@ auto vector_sink::accept(expression::vector_emit_type&& emt)
   assert(invariant());
 
   const time_point tp = emt.tp;
+  assert(last_known_fact_tp_ < tp);
+
   bool accepted = std::visit(
       overload(
           [this, &tp](expression::speculative_vector&& v) {
@@ -665,22 +797,33 @@ auto vector_sink::accept(expression::vector_emit_type&& emt)
                 .accept(expression::scalar_emit_type(tp, std::in_place_index<0>, std::get<1>(std::move(v))));
           },
           [this, &tp](expression::factual_vector&& v) {
-            bool accepted = false;
 #if __cplusplus >= 201703
             while (!v.empty()) {
               auto nh = v.extract(v.begin());
-              if (data_[std::move(nh.key())]
-                  .accept(expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(nh.mapped()))))
-                accepted = true;
+              const bool accepted = data_[std::move(nh.key())]
+                  .accept(expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(nh.mapped())));
+              assert(accepted);
             }
 #else
             for (auto& item : v) {
-              if (data_[item.first]
-                  .accept(expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(item.second))))
-                accepted = true;
+              const bool accepted = data_[item.first]
+                  .accept(expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(item.second)));
+              assert(accepted);
             }
 #endif
-            return accepted;
+
+            // Remove speculative records preceding this fact.
+            auto data_iter = data_.begin();
+            while (data_iter != data_.end()) {
+              data_iter->second.drop_speculative_before(tp);
+              if (data_iter->second.empty())
+                data_iter = data_.erase(data_iter);
+              else
+                ++data_iter;
+            }
+
+            last_known_fact_tp_.emplace(tp);
+            return true;
           }),
       std::move(emt.data));
 
@@ -691,45 +834,104 @@ auto vector_sink::accept(expression::vector_emit_type&& emt)
 auto vector_sink::invariant() const
 noexcept
 -> bool {
-  return objpipe::of(std::ref(data_))
+  const std::optional<time_point> last_scalar_fact = objpipe::of(std::cref(data_))
       .iterate()
       .select_second()
-      .transform(&scalar_sink::empty)
-      .transform(std::logical_not<bool>())
-      .reduce(std::logical_and<bool>())
-      .value_or(true);
+      .transform(&scalar_sink::fact_end)
+#if 0 // Work around libc++ bug: https://bugs.llvm.org/show_bug.cgi?id=36469
+      .filter(&std::optional<time_point>::has_value)
+#else
+      .filter([](const std::optional<time_point>& v) { return v.has_value(); })
+#endif
+      .deref()
+      .max();
+
+  return last_known_fact_tp_ >= last_scalar_fact
+      && (objpipe::of(std::ref(data_))
+          .iterate()
+          .select_second()
+          .transform(&scalar_sink::empty)
+          .transform(std::logical_not<bool>())
+          .reduce(std::logical_and<bool>())
+          .value_or(true));
 }
 
 
 template<typename Pipe>
 auto pull_cycle<Pipe>::suggest_emit_tp() const noexcept
 -> std::optional<time_point> {
-  return sink_.suggest_emit_tp();
+  assert(invariant());
+
+  return next_tp_;
 }
 
 template<typename Pipe>
-auto pull_cycle<Pipe>::get(time_point tp, time_point max_interp_tp) const
+auto pull_cycle<Pipe>::get(time_point tp, time_point min_interp_tp, time_point max_interp_tp) const
 -> decltype(std::declval<const sink_type&>()
-    .get(std::declval<time_point>(), std::declval<time_point>(), std::declval<bool>())) {
-  return sink_.get(tp, max_interp_tp, !source_.is_pullable());
+    .get(std::declval<time_point>(), std::declval<time_point>(), std::declval<time_point>(), std::declval<bool>())) {
+  assert(invariant());
+
+  // Read up to and including max_interp_tp,
+  // to favour facts that are known correct
+  // (as opposed to using facts that may change
+  // due to interpolation and thus have to be labelled
+  // speculative).
+  try_forward_to_(max_interp_tp);
+  return sink_.get(tp, min_interp_tp, max_interp_tp, !source_.is_pullable());
 }
 
 template<typename Pipe>
 auto pull_cycle<Pipe>::read_more()
--> void {
+-> bool {
+  assert(invariant());
+
   bool accepted_fact = false;
   do {
     auto next = source_.try_pull();
     if (!next.has_value()) break;
     const bool is_fact = (next->data.index() == 1);
+    const time_point tp = next->tp;
 
     const bool accepted = sink_.accept(*std::move(next));
     accepted_fact = (accepted && is_fact);
+
+    if (accepted_fact && (!next_tp_.has_value() || *next_tp_ < tp))
+      next_tp_ = sink_.suggest_emit_tp();
+
+    assert(invariant());
   } while (!accepted_fact);
+
+  assert(invariant());
+  return accepted_fact;
+}
+
+template<typename Pipe>
+auto pull_cycle<Pipe>::try_forward_to_(time_point tp) const
+-> void {
+  assert(invariant());
+
+  bool failed_to_read = !source_.is_pullable();
+  while (!failed_to_read && sink_.fact_end() < tp) {
+    // We hide that we're actually changing data underneath,
+    // since this is the only function that requires it.
+    //
+    // It's semantically const, in that it does not affect the
+    // logical view of the data.
+    failed_to_read = !const_cast<pull_cycle&>(*this).read_more();
+  }
+
+  assert(invariant());
+}
+
+template<typename Pipe>
+auto pull_cycle<Pipe>::invariant() const
+noexcept
+-> bool {
+  return next_tp_ == sink_.suggest_emit_tp();
 }
 
 template class monsoon_expr_local_ pull_cycle<expression::scalar_objpipe>;
 template class monsoon_expr_local_ pull_cycle<expression::vector_objpipe>;
 
 
-}} /* namespace monsoon::expressions */
+} /* namespace monsoon::expressions */
