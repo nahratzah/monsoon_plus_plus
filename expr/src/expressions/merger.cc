@@ -189,7 +189,7 @@ struct merger_apply_vector {
 };
 
 template<typename Fn>
-auto merger_apply(Fn&& fn, const scalar& x, const scalar& y,
+auto merger_apply(Fn&& fn, scalar x, scalar y,
     [[maybe_unused]] const std::shared_ptr<const match_clause>& out_mc)
 -> merger_apply_scalar {
   if (x.value.has_value() && y.value.has_value()) {
@@ -204,7 +204,7 @@ auto merger_apply(Fn&& fn, const scalar& x, const scalar& y,
 }
 
 template<typename Fn>
-auto merger_apply(Fn&& fn, const scalar& x, tagged_vector&& y,
+auto merger_apply(Fn&& fn, scalar x, tagged_vector y,
     const std::shared_ptr<const match_clause>& out_mc)
 -> merger_apply_vector {
   merger_apply_vector result = merger_apply_vector(
@@ -221,8 +221,9 @@ auto merger_apply(Fn&& fn, const scalar& x, tagged_vector&& y,
             [&fn, &x](const auto& pair) {
               return std::make_pair(pair.first, std::invoke(fn, x.value.value(), pair.second));
             })
+        .filter([&out_mc](const auto& pair) { return out_mc->pass(pair.first); })
         .for_each(
-            [&result](std::pair<const tags, metric_value>&& pair) {
+            [&result](std::pair<tags, metric_value>&& pair) {
               auto ins_pos = result.values.emplace(pair.first, std::move(pair.second));
               if (ins_pos.second == false)
                 ins_pos.first->second = metric_value(); // Invalidate collision.
@@ -233,7 +234,7 @@ auto merger_apply(Fn&& fn, const scalar& x, tagged_vector&& y,
 }
 
 template<typename Fn>
-auto merger_apply(Fn&& fn, tagged_vector&& x, const scalar& y,
+auto merger_apply(Fn&& fn, tagged_vector x, scalar y,
     const std::shared_ptr<const match_clause>& out_mc)
 -> merger_apply_vector {
   merger_apply_vector result = merger_apply_vector(
@@ -250,6 +251,7 @@ auto merger_apply(Fn&& fn, tagged_vector&& x, const scalar& y,
             [&fn, &y](const auto& pair) {
               return std::make_pair(pair.first, std::invoke(fn, pair.second, y.value.value()));
             })
+        .filter([&out_mc](const auto& pair) { return out_mc->pass(pair.first); })
         .for_each(
             [&result](std::pair<tags, metric_value>&& pair) {
               auto ins_pos = result.values.emplace(std::move(pair.first), std::move(pair.second));
@@ -262,9 +264,10 @@ auto merger_apply(Fn&& fn, tagged_vector&& x, const scalar& y,
 }
 
 template<typename Fn>
-auto merger_apply(Fn&& fn, tagged_vector&& x, const tagged_vector& y,
+auto merger_apply(Fn&& fn, tagged_vector x, tagged_vector y,
     const std::shared_ptr<const match_clause>& out_mc)
 -> merger_apply_vector {
+  const std::shared_ptr<const match_clause> mc = x.values.hash_function().mc;
   merger_apply_vector result = merger_apply_vector(
       x.values.bucket_count(),
       out_mc,
@@ -275,13 +278,16 @@ auto merger_apply(Fn&& fn, tagged_vector&& x, const tagged_vector& y,
       .transform(&tagged_vector::values)
       .iterate()
       .transform(
-          [&fn, &y](const std::pair<const tags, metric_value>& pair) -> std::optional<std::pair<tags, metric_value>> {
+          [&fn, &y, &mc](const std::pair<const tags, metric_value>& pair) -> std::optional<std::pair<tags, metric_value>> {
             auto y_val = y.values.find(pair.first);
             if (y_val == y.values.end()) return {};
-            return std::make_pair(pair.first, std::invoke(fn, pair.second, y_val->second));
+            return std::make_pair(
+                mc->reduce(pair.first, y_val->first),
+                std::invoke(fn, pair.second, y_val->second));
           })
       .filter([](const auto& opt_pair) { return opt_pair.has_value(); })
       .deref()
+      .filter([&out_mc](const auto& pair) { return out_mc->pass(pair.first); })
       .for_each(
           [&result](std::pair<tags, metric_value>&& pair) {
             auto ins_pos = result.values.emplace(std::move(pair.first), std::move(pair.second));
@@ -738,7 +744,7 @@ class pair_merger_pipe {
               std::declval<time_point>(),
               std::declval<time_point>(),
               std::declval<time_point>()),
-          std::declval<const pull_cycle<PipeX>&>().get(
+          std::declval<const pull_cycle<PipeY>&>().get(
               std::declval<time_point>(),
               std::declval<time_point>(),
               std::declval<time_point>()),
@@ -1505,7 +1511,6 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
       .iterate();
 }
 
-#if 0
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     std::shared_ptr<const match_clause> mc,
     std::shared_ptr<const match_clause> out_mc,
@@ -1537,7 +1542,6 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
   return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
       .iterate();
 }
-#endif
 
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     std::shared_ptr<const match_clause> mc,
