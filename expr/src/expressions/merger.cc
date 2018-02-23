@@ -169,8 +169,8 @@ struct merger_apply_vector {
       class match_clause::hash hash,
       match_clause::equal_to eq,
       bool is_fact)
-  : is_fact(is_fact),
-    values(bucket_count, std::move(hash), std::move(eq))
+  : values(bucket_count, std::move(hash), std::move(eq)),
+    is_fact(is_fact)
   {}
 
   ///\brief Convert the vector to a \ref expression::vector_emit_type "vector emit type".
@@ -651,8 +651,8 @@ class pull_cycle {
   pull_cycle(Pipe&& source, sink_type&& sink)
   noexcept(std::is_nothrow_move_constructible_v<Pipe>
       && std::is_nothrow_move_constructible_v<sink_type>)
-  : source_(std::move(source)),
-    sink_(std::move(sink))
+  : sink_(std::move(sink)),
+    source_(std::move(source))
   {}
 
   /**
