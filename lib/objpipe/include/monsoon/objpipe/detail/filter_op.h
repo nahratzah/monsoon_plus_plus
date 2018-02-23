@@ -51,6 +51,7 @@ class filter_store_copy_ {
     auto v = src.front();
     if (!v.has_value()) return v.errc();
     val_.emplace(std::move(v).value());
+    present_ = true;
     return objpipe_errc::success;
   }
 
