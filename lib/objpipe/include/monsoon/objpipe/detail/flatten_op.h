@@ -244,7 +244,7 @@ class flatten_op {
  public:
   constexpr flatten_op(Source&& src)
   noexcept(std::is_nothrow_move_constructible_v<Source>)
-  : src_(src),
+  : src_(std::move(src)),
     active_()
   {}
 
@@ -281,6 +281,34 @@ class flatten_op {
     const objpipe_errc e = ensure_avail_();
     if (e == objpipe_errc::success) active_->advance();
     return e;
+  }
+
+  auto pull()
+  noexcept(ensure_avail_noexcept
+      && noexcept(std::declval<store_type&>().deref())
+      && (std::is_lvalue_reference_v<item_type>
+          || std::is_rvalue_reference_v<item_type>
+          || std::is_nothrow_move_constructible_v<item_type>)
+      && noexcept(std::declval<store_type&>().advance()))
+  -> transport<item_type> {
+    const objpipe_errc e = ensure_avail_();
+    if (e == objpipe_errc::success) {
+      auto result = transport<item_type>(std::in_place_index<0>, active_->deref());
+      active_->advance();
+      return result;
+    }
+    return transport<item_type>(std::in_place_index<1>, e);
+  }
+
+  auto try_pull()
+  noexcept(ensure_avail_noexcept
+      && noexcept(std::declval<store_type&>().deref())
+      && (std::is_lvalue_reference_v<item_type>
+          || std::is_rvalue_reference_v<item_type>
+          || std::is_nothrow_move_constructible_v<item_type>)
+      && noexcept(std::declval<store_type&>().advance()))
+  -> transport<item_type> {
+    return pull();
   }
 
  private:

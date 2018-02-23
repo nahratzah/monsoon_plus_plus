@@ -13,6 +13,8 @@ template<typename T>
 class transport {
   static_assert(!std::is_const_v<T> && !std::is_volatile_v<T>,
       "Transport-by-value may not be const or volatile.");
+  static_assert(!std::is_reference_v<T>,
+      "Programmer error: one of the reference specializations is to be selected.");
 
  public:
   using type = T;
