@@ -3,8 +3,6 @@ project (monsoon_objpipe)
 find_package (Boost COMPONENTS context REQUIRED)
 
 add_library (monsoon_objpipe
-  src/base_objpipe.cc
-  src/reader_intf.cc
   src/errc.cc)
 target_include_directories(monsoon_objpipe PUBLIC include)
 target_include_directories(monsoon_objpipe PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)

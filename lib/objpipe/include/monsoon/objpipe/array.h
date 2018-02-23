@@ -4,51 +4,63 @@
 ///\file
 ///\ingroup objpipe
 
-#include <monsoon/objpipe/detail/base_objpipe.h>
-#include <monsoon/objpipe/detail/arrayed.h>
-#include <monsoon/objpipe/reader.h>
+#include <monsoon/objpipe/detail/array_pipe.h>
+#include <monsoon/objpipe/detail/adapter.h>
 
 namespace monsoon {
 namespace objpipe {
 
 
 /**
- * \brief Create a new objpipe returning a collection.
+ * \brief Create an objpipe that iterates over the given range.
  * \ingroup objpipe
  *
- * \tparam T The type of elements used in the callbacked pipe.
- * \tparam Alloc Allocator type to store objects.
- * \param b,e Iterator range of elements that are to be emitted.
- * \param alloc Allocator to store objects.
- * \return A reader that yields each element supplied by the iterator range.
- * \note The elements are copied.
- * \sa \ref monsoon::objpipe::detail::arrayed<T>
+ * \details The elements in the range are copied at construction time.
+ *
+ * \note If you want to iterate an entire collection,
+ * \ref monsoon::objpipe::of "objpipe::of"
+ * followed by
+ * \ref monsoon::ojbpipe::detail::adapter_t::iterate ".iterate()"
+ * will have better performance.
+ * \code
+ * of(collection).iterate()
+ * \endcode
+ *
+ * \param[in] b,e The values to iterate over.
+ * \param[in] alloc The allocator used to allocate internal storage.
+ * \return An objpipe that iterates the values in the given range.
+ * \sa \ref monsoon::ojbpipe::detail::array_pipe
  */
-template<typename T, typename Alloc = std::allocator<T>, typename Iter>
-auto new_array(Iter b, Iter e, Alloc alloc = Alloc()) -> reader<T> {
-  detail::arrayed<T, std::decay_t<Alloc>>* ptr =
-      new detail::arrayed<T, Alloc>(b, e, std::move(alloc));
-  return reader<T>(detail::reader_release::link(ptr)); // Never throws
+template<typename Iter, typename Alloc = std::allocator<typename std::iterator_traits<Iter>::value_type>>
+auto new_array(Iter b, Iter e, Alloc alloc = Alloc())
+-> decltype(auto) {
+  return detail::adapter(detail::array_pipe<typename std::iterator_traits<Iter>::value_type, Alloc>(b, e, alloc));
 }
 
 /**
- * \brief Create a new objpipe returning a collection.
+ * \brief Create an objpipe that iterates over the given values.
  * \ingroup objpipe
  *
- * \tparam T The type of elements used in the callbacked pipe.
- * \tparam Alloc Allocator type to store objects.
- * \param il Initializer list of values to be emitted.
- * \param alloc Allocator to store objects.
- * \return A reader that yields each element supplied by the iterator range.
- * \note The elements are copied.
- * \sa \ref monsoon::objpipe::detail::arrayed<T>
+ * \details The elements in the range are copied at construction time.
+ *
+ * \note If you want to iterate an entire collection,
+ * \ref monsoon::objpipe::of "objpipe::of"
+ * followed by
+ * \ref monsoon::ojbpipe::detail::adapter_t::iterate ".iterate()"
+ * will have better performance.
+ * \code
+ * of(collection).iterate()
+ * \endcode
+ *
+ * \param[in] values The values to iterate over.
+ * \param[in] alloc The allocator used to allocate internal storage.
+ * \return An objpipe that iterates the values in the given range.
+ * \sa \ref monsoon::ojbpipe::detail::array_pipe
  */
 template<typename T, typename Alloc = std::allocator<T>>
-auto new_array(std::initializer_list<T> il, Alloc alloc = Alloc())
--> reader<T> {
-  detail::arrayed<T, std::decay_t<Alloc>>* ptr =
-      new detail::arrayed<T, Alloc>(il, std::move(alloc));
-  return reader<T>(detail::reader_release::link(ptr)); // Never throws
+auto new_array(std::initializer_list<T> values, Alloc alloc = Alloc())
+-> decltype(auto) {
+  return detail::adapter(detail::array_pipe<T, Alloc>(values, alloc));
 }
 
 

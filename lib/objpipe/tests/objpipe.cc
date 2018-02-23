@@ -1,12 +1,14 @@
 #include <monsoon/objpipe/callback.h>
 #include <monsoon/objpipe/array.h>
 #include <monsoon/objpipe/interlock.h>
+#include <monsoon/objpipe/of.h>
 #include <monsoon/objpipe/errc.h>
 #include "UnitTest++/UnitTest++.h"
 #include "test_hacks.ii"
 #include <vector>
 #include <tuple>
 #include <thread>
+#include <functional>
 
 using monsoon::objpipe::objpipe_errc;
 
@@ -38,7 +40,7 @@ TEST(callback) {
   CHECK_EQUAL(4, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
 
@@ -50,7 +52,7 @@ TEST(callback) {
 
 TEST(array_using_iterators) {
   std::vector<int> il = { 0, 1, 2, 3, 4 };
-  auto reader = monsoon::objpipe::new_array<int>(il.begin(), il.end());
+  auto reader = monsoon::objpipe::new_array(il.begin(), il.end());
 
   CHECK_EQUAL(false, reader.empty());
 
@@ -73,7 +75,7 @@ TEST(array_using_iterators) {
   CHECK_EQUAL(4, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
 
@@ -84,7 +86,7 @@ TEST(array_using_iterators) {
 }
 
 TEST(array_using_initializer_list) {
-  auto reader = monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 });
+  auto reader = monsoon::objpipe::new_array({ 0, 1, 2, 3, 4 });
 
   CHECK_EQUAL(false, reader.empty());
 
@@ -107,7 +109,7 @@ TEST(array_using_initializer_list) {
   CHECK_EQUAL(4, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
 
@@ -118,7 +120,7 @@ TEST(array_using_initializer_list) {
 }
 
 TEST(filter_operation) {
-  auto reader = monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 })
+  auto reader = monsoon::objpipe::new_array({ 0, 1, 2, 3, 4 })
       .filter([](int x) { return x % 2 == 0; });
 
   CHECK_EQUAL(false, reader.empty());
@@ -139,7 +141,7 @@ TEST(filter_operation) {
   CHECK_EQUAL(4, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
 
@@ -150,7 +152,7 @@ TEST(filter_operation) {
 }
 
 TEST(transform_operation) {
-  auto reader = monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 })
+  auto reader = monsoon::objpipe::new_array({ 0, 1, 2, 3, 4 })
       .transform([](int x) { return 2 * x; });
 
   CHECK_EQUAL(false, reader.empty());
@@ -174,7 +176,7 @@ TEST(transform_operation) {
   CHECK_EQUAL(8, reader.pull());
 
   // No more elements.
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
 
@@ -185,14 +187,14 @@ TEST(transform_operation) {
 }
 
 TEST(interlock) {
-  monsoon::objpipe::reader<int> reader;
-  monsoon::objpipe::writer<int> writer;
+  monsoon::objpipe::interlock_reader<int> reader;
+  monsoon::objpipe::interlock_writer<int> writer;
   std::tie(reader, writer) = monsoon::objpipe::new_interlock<int>();
 
   auto th = std::thread(std::bind(
-          [](monsoon::objpipe::writer<int>& writer) {
+          [](monsoon::objpipe::interlock_writer<int>& writer) {
             for (int i = 0; i < 5; ++i)
-              writer.push(i);
+              writer(i);
           },
           std::move(writer)));
 
@@ -224,7 +226,7 @@ TEST(interlock) {
   // No more elements.
   CHECK_EQUAL(true, reader.empty());
   CHECK_EQUAL(objpipe_errc::closed, reader.wait());
-  CHECK_EQUAL(false, bool(reader));
+  CHECK_EQUAL(false, reader.is_pullable());
 
   objpipe_errc e;
   std::optional<int> failed_pull = reader.pull(e);
@@ -235,11 +237,16 @@ TEST(interlock) {
 }
 
 TEST(reader_to_vector) {
-
   CHECK_EQUAL(
       std::vector<int>({ 0, 1, 2, 3, 4 }),
-      monsoon::objpipe::new_array<int>({ 0, 1, 2, 3, 4 })
+      monsoon::objpipe::new_array({ 0, 1, 2, 3, 4 })
           .to_vector());
+}
+
+TEST(reduce_op) {
+  CHECK_EQUAL(std::optional<int>(42),
+      monsoon::objpipe::of(7, 7, 7, 7, 7, 7)
+          .reduce(std::plus<>()));
 }
 
 int main() {

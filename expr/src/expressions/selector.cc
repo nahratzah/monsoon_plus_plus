@@ -9,13 +9,6 @@ namespace monsoon {
 namespace expressions {
 
 
-monsoon_expr_local_
-auto selector_accept_wrapper_(
-    const std::shared_ptr<const match_clause>& mc,
-    const metric_source::emit_type&)
--> expression::vector_emit_type;
-
-
 class monsoon_expr_local_ selector_with_tags
 : public expression
 {
@@ -76,7 +69,48 @@ auto selector_with_tags::operator()(
 
   return source
       .emit(tr, group_, tags_, metric_, slack)
-      .transform(std::bind(&selector_accept_wrapper_, mc, _1));
+      .transform(
+          [mc](const metric_source::emit_type& src) -> expression::vector_emit_type {
+            using match_clause_hash = class match_clause::hash;
+            using match_clause_equal_to = match_clause::equal_to;
+
+            if (src.index() == 0) {
+              const auto& speculative = std::get<0>(src);
+              const time_point& tp = std::get<0>(speculative);
+              const tags& tag_set = std::get<1>(speculative).get_tags();
+              const metric_value& value = std::get<3>(speculative);
+
+              return {
+                  tp,
+                  std::in_place_index<0>,
+                  tag_set,
+                  value
+              };
+            } else {
+              const auto& factual = std::get<1>(src);
+              const time_point tp = std::get<0>(factual);
+              const auto& map = std::get<1>(factual);
+
+              // Fill in the map of the factual result.
+              expression::factual_vector out_map = expression::factual_vector(
+                  8u,
+                  match_clause_hash(mc),
+                  match_clause_equal_to(mc));
+              std::transform(map.begin(), map.end(),
+                  std::inserter(out_map, out_map.end()),
+                  [](const auto& metric) {
+                    return std::forward_as_tuple(
+                        std::get<0>(metric.first).get_tags(),
+                        metric.second);
+                  });
+
+              return {
+                  tp,
+                  std::in_place_index<1>,
+                  std::move(out_map)
+              };
+            }
+          });
 }
 
 bool selector_with_tags::is_scalar() const noexcept {
@@ -89,52 +123,6 @@ bool selector_with_tags::is_vector() const noexcept {
 
 void selector_with_tags::do_ostream(std::ostream& out) const {
   out << group_ << tags_ << "::" << metric_;
-}
-
-
-auto selector_accept_wrapper_(
-    const std::shared_ptr<const match_clause>& mc,
-    const metric_source::emit_type& src)
--> expression::vector_emit_type {
-  using match_clause_hash = class match_clause::hash;
-  using match_clause_equal_to = match_clause::equal_to;
-
-  if (src.index() == 0) {
-    const auto& speculative = std::get<0>(src);
-    const time_point& tp = std::get<0>(speculative);
-    const tags& tag_set = std::get<1>(speculative).get_tags();
-    const metric_value& value = std::get<3>(speculative);
-
-    return {
-        tp,
-        std::in_place_index<0>,
-        tag_set,
-        value
-    };
-  } else {
-    const auto& factual = std::get<1>(src);
-    const time_point tp = std::get<0>(factual);
-    const auto& map = std::get<1>(factual);
-
-    // Fill in the map of the factual result.
-    expression::factual_vector out_map = expression::factual_vector(
-        8u,
-        match_clause_hash(mc),
-        match_clause_equal_to(mc));
-    std::transform(map.begin(), map.end(),
-        std::inserter(out_map, out_map.end()),
-        [](const auto& metric) {
-          return std::forward_as_tuple(
-              std::get<0>(metric.first).get_tags(),
-              metric.second);
-        });
-
-    return {
-        tp,
-        std::in_place_index<1>,
-        std::move(out_map)
-    };
-  }
 }
 
 

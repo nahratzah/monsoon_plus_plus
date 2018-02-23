@@ -21,9 +21,7 @@ int main(int argc, char** argv) {
   }
 
   auto history = open_dir(argv[1]);
-  std::uintmax_t counter = 0u;
-  for (auto e : history->emit_time(monsoon::time_range()))
-    ++counter;
+  auto counter = history->emit_time(monsoon::time_range()).count();
   std::cout << counter << " scrapes\n";
   return 0;
 }
