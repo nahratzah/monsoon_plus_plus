@@ -10,6 +10,7 @@
 #include <optional>
 #include <tuple>
 #include <variant>
+#include <vector>
 #include <monsoon/interpolate.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/overload.h>
@@ -86,40 +87,6 @@ struct scalar {
   }
 };
 
-struct merger_apply_scalar {
-  metric_value value;
-  bool is_fact;
-
-  merger_apply_scalar(metric_value&& value, bool is_fact)
-  noexcept
-  : value(std::move(value)),
-    is_fact(is_fact)
-  {}
-
-  merger_apply_scalar(const metric_value& value, bool is_fact)
-  : value(value),
-    is_fact(is_fact)
-  {}
-
-  ///\brief Convert the scalar to a \ref expression::scalar_emit_type "scalar emit type".
-  auto as_emit(time_point tp) &&
-  -> expression::scalar_emit_type {
-    if (is_fact)
-      return expression::scalar_emit_type(tp, std::in_place_index<1>, std::move(value));
-    else
-      return expression::scalar_emit_type(tp, std::in_place_index<0>, std::move(value));
-  }
-};
-
-template<typename Fn>
-auto merger_apply(Fn&& fn, const scalar& x, const scalar& y)
--> merger_apply_scalar {
-  assert(x.value.has_value() && y.value.has_value());
-  return merger_apply_scalar(
-      std::invoke(std::forward<Fn>(fn), x.value.value(), y.value.value()),
-      x.is_fact && y.is_fact);
-}
-
 /**
  * \brief Describes a tagged vector.
  * \ingroup expr
@@ -149,6 +116,181 @@ struct tagged_vector {
     values(bucket_count, std::move(hash), std::move(eq))
   {}
 };
+
+struct merger_apply_scalar {
+  std::optional<metric_value> value;
+  bool is_fact;
+
+  merger_apply_scalar(metric_value&& value, bool is_fact)
+  noexcept
+  : value(std::move(value)),
+    is_fact(is_fact)
+  {}
+
+  merger_apply_scalar(const metric_value& value, bool is_fact)
+  : value(value),
+    is_fact(is_fact)
+  {}
+
+  merger_apply_scalar(std::nullptr_t, bool is_fact)
+  : value(),
+    is_fact(is_fact)
+  {}
+
+  ///\brief Convert the scalar to a \ref expression::scalar_emit_type "scalar emit type".
+  auto as_emit(time_point tp) &&
+  -> std::vector<expression::scalar_emit_type> {
+    std::vector<expression::scalar_emit_type> result;
+    if (value.has_value()) {
+      if (is_fact)
+        result.emplace_back(tp, std::in_place_index<1>, *std::move(value));
+      else
+        result.emplace_back(tp, std::in_place_index<0>, *std::move(value));
+    }
+    return result;
+  }
+};
+
+struct merger_apply_vector {
+  using map_type = std::unordered_map<
+      tags, metric_value,
+      class match_clause::hash,
+      match_clause::equal_to>;
+
+  map_type values;
+  bool is_fact;
+
+  ///\brief Create an empty tagged vector.
+  ///\param[in] bucket_count The number of initial buckets to create.
+  ///\param[in] hash The hash function for the map.
+  ///\param[in] eq The equality function for the map.
+  ///\param[in] is_fact Indicates if the data is factual.
+  merger_apply_vector(map_type::size_type bucket_count,
+      class match_clause::hash hash,
+      match_clause::equal_to eq,
+      bool is_fact)
+  : is_fact(is_fact),
+    values(bucket_count, std::move(hash), std::move(eq))
+  {}
+
+  ///\brief Convert the vector to a \ref expression::vector_emit_type "vector emit type".
+  auto as_emit(time_point tp) &&
+  -> std::vector<expression::vector_emit_type> {
+    std::vector<expression::vector_emit_type> result;
+    if (is_fact) {
+      result.emplace_back(tp, std::in_place_index<1>, std::move(values));
+    } else {
+      result.reserve(values.size());
+      for (auto& value : values)
+        result.emplace_back(tp, std::in_place_index<0>, std::move(value.first), std::move(value.second));
+    }
+    return result;
+  }
+};
+
+template<typename Fn>
+auto merger_apply(Fn&& fn, const scalar& x, const scalar& y,
+    [[maybe_unused]] const std::shared_ptr<const match_clause>& out_mc)
+-> merger_apply_scalar {
+  if (x.value.has_value() && y.value.has_value()) {
+    return merger_apply_scalar(
+        std::invoke(std::forward<Fn>(fn), x.value.value(), y.value.value()),
+        x.is_fact && y.is_fact);
+  } else {
+    return merger_apply_scalar(
+        nullptr,
+        x.is_fact && y.is_fact);
+  }
+}
+
+template<typename Fn>
+auto merger_apply(Fn&& fn, const scalar& x, tagged_vector&& y,
+    const std::shared_ptr<const match_clause>& out_mc)
+-> merger_apply_vector {
+  merger_apply_vector result = merger_apply_vector(
+      y.values.bucket_count(),
+      out_mc,
+      out_mc,
+      x.is_fact && y.is_fact);
+
+  if (x.value.has_value()) {
+    objpipe::of(std::move(y))
+        .transform(&tagged_vector::values)
+        .iterate()
+        .transform(
+            [&fn, &x](const auto& pair) {
+              return std::make_pair(pair.first, std::invoke(fn, x.value.value(), pair.second));
+            })
+        .for_each(
+            [&result](std::pair<const tags, metric_value>&& pair) {
+              auto ins_pos = result.values.emplace(pair.first, std::move(pair.second));
+              if (ins_pos.second == false)
+                ins_pos.first->second = metric_value(); // Invalidate collision.
+            });
+  }
+
+  return result;
+}
+
+template<typename Fn>
+auto merger_apply(Fn&& fn, tagged_vector&& x, const scalar& y,
+    const std::shared_ptr<const match_clause>& out_mc)
+-> merger_apply_vector {
+  merger_apply_vector result = merger_apply_vector(
+      x.values.bucket_count(),
+      out_mc,
+      out_mc,
+      x.is_fact && y.is_fact);
+
+  if (y.value.has_value()) {
+    objpipe::of(std::move(x))
+        .transform(&tagged_vector::values)
+        .iterate()
+        .transform(
+            [&fn, &y](const auto& pair) {
+              return std::make_pair(pair.first, std::invoke(fn, pair.second, y.value.value()));
+            })
+        .for_each(
+            [&result](std::pair<tags, metric_value>&& pair) {
+              auto ins_pos = result.values.emplace(std::move(pair.first), std::move(pair.second));
+              if (ins_pos.second == false)
+                ins_pos.first->second = metric_value(); // Invalidate collision.
+            });
+  }
+
+  return result;
+}
+
+template<typename Fn>
+auto merger_apply(Fn&& fn, tagged_vector&& x, const tagged_vector& y,
+    const std::shared_ptr<const match_clause>& out_mc)
+-> merger_apply_vector {
+  merger_apply_vector result = merger_apply_vector(
+      x.values.bucket_count(),
+      out_mc,
+      out_mc,
+      x.is_fact && y.is_fact);
+
+  objpipe::of(std::move(x))
+      .transform(&tagged_vector::values)
+      .iterate()
+      .transform(
+          [&fn, &y](const std::pair<const tags, metric_value>& pair) -> std::optional<std::pair<tags, metric_value>> {
+            auto y_val = y.values.find(pair.first);
+            if (y_val == y.values.end()) return {};
+            return std::make_pair(pair.first, std::invoke(fn, pair.second, y_val->second));
+          })
+      .filter([](const auto& opt_pair) { return opt_pair.has_value(); })
+      .deref()
+      .for_each(
+          [&result](std::pair<tags, metric_value>&& pair) {
+            auto ins_pos = result.values.emplace(std::move(pair.first), std::move(pair.second));
+            if (ins_pos.second == false)
+              ins_pos.first->second = metric_value(); // Invalidate collision.
+          });
+
+  return result;
+}
 
 /**
  * \brief Scalar sink.
@@ -267,6 +409,7 @@ class scalar_sink {
   };
 
  public:
+  scalar_sink(scalar_sink&&) noexcept = default;
   scalar_sink();
   ~scalar_sink() noexcept;
 
@@ -379,6 +522,7 @@ class scalar_sink {
  */
 class vector_sink {
  public:
+  vector_sink(vector_sink&&) noexcept = default;
   vector_sink(const std::shared_ptr<const match_clause>& mc);
   ~vector_sink() noexcept;
 
@@ -491,12 +635,14 @@ class pull_cycle {
               vector_sink>>
       ::type;
 
+  pull_cycle(pull_cycle&&) noexcept = default;
+
   /**
    * \brief Constructs a new cycle, taking values from
    * the \ref monsoon::objpipe::reader<T> "objpipe" \p source
    * and storing them into \p sink.
    */
-  pull_cycle(Pipe&& source, sink_type&& sink = sink_type())
+  pull_cycle(Pipe&& source, sink_type&& sink)
   noexcept(std::is_nothrow_move_constructible_v<Pipe>
       && std::is_nothrow_move_constructible_v<sink_type>)
   : source_(std::move(source)),
@@ -595,10 +741,12 @@ class pair_merger_pipe {
           std::declval<const pull_cycle<PipeX>&>().get(
               std::declval<time_point>(),
               std::declval<time_point>(),
-              std::declval<time_point>()))
+              std::declval<time_point>()),
+          std::declval<std::shared_ptr<const match_clause>>())
           .as_emit(std::declval<time_point>()));
   using transport_type = objpipe::detail::transport<result_type>;
 
+  pair_merger_pipe(pair_merger_pipe&&) = default;
   template<typename FnArg>
   pair_merger_pipe(PipeX&& x, PipeY&& y,
       const std::shared_ptr<const match_clause>& mc,
@@ -873,11 +1021,7 @@ noexcept
       .iterate()
       .select_second()
       .transform(&scalar_sink::suggest_emit_tp)
-#if 0 // Work around libc++ bug: https://bugs.llvm.org/show_bug.cgi?id=36469
-      .filter(&std::optional<time_point>::has_value)
-#else
       .filter([](const std::optional<time_point>& v) { return v.has_value(); })
-#endif
       .deref()
       .min();
 
@@ -1024,11 +1168,7 @@ noexcept
       .iterate()
       .select_second()
       .transform(&scalar_sink::fact_end)
-#if 0 // Work around libc++ bug: https://bugs.llvm.org/show_bug.cgi?id=36469
-      .filter(&std::optional<time_point>::has_value)
-#else
       .filter([](const std::optional<time_point>& v) { return v.has_value(); })
-#endif
       .deref()
       .max();
 
@@ -1241,7 +1381,8 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::front() const
   auto result = merger_apply(
       fn_,
       x_.get(tp, tp - slack_, tp + slack_),
-      y_.get(tp, tp - slack_, tp + slack_));
+      y_.get(tp, tp - slack_, tp + slack_),
+      out_mc_);
   if (result.is_fact) { // Factual emit
     x_.forward_to_time(tp, tp - slack_);
     y_.forward_to_time(tp, tp - slack_);
@@ -1292,7 +1433,8 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::pull()
   auto result = merger_apply(
       fn_,
       x_.get(tp, tp - slack_, tp + slack_),
-      y_.get(tp, tp - slack_, tp + slack_));
+      y_.get(tp, tp - slack_, tp + slack_),
+      out_mc_);
   if (result.is_fact) { // Factual emit
     x_.forward_to_time(tp, tp - slack_);
     y_.forward_to_time(tp, tp - slack_);
@@ -1331,7 +1473,8 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::try_pull()
   auto result = merger_apply(
       fn_,
       x_.get(tp, tp - slack_, tp + slack_),
-      y_.get(tp, tp - slack_, tp + slack_));
+      y_.get(tp, tp - slack_, tp + slack_),
+      out_mc_);
   if (result.is_fact) { // Factual emit
     x_.forward_to_time(tp, tp - slack_);
     y_.forward_to_time(tp, tp - slack_);
@@ -1358,7 +1501,58 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
       expression::scalar_objpipe,
       metric_value(*)(const metric_value&, const metric_value&)>;
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn));
+  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+      .iterate();
+}
+
+#if 0
+auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
+    expression::vector_objpipe&& x,
+    expression::scalar_objpipe&& y)
+-> expression::vector_objpipe {
+  using impl_type = pair_merger_pipe<
+      expression::vector_objpipe,
+      expression::scalar_objpipe,
+      metric_value(*)(const metric_value&, const metric_value&)>;
+
+  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+      .iterate();
+}
+
+auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
+    expression::scalar_objpipe&& x,
+    expression::vector_objpipe&& y)
+-> expression::vector_objpipe {
+  using impl_type = pair_merger_pipe<
+      expression::scalar_objpipe,
+      expression::vector_objpipe,
+      metric_value(*)(const metric_value&, const metric_value&)>;
+
+  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+      .iterate();
+}
+#endif
+
+auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
+    expression::vector_objpipe&& x,
+    expression::vector_objpipe&& y)
+-> expression::vector_objpipe {
+  using impl_type = pair_merger_pipe<
+      expression::vector_objpipe,
+      expression::vector_objpipe,
+      metric_value(*)(const metric_value&, const metric_value&)>;
+
+  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+      .iterate();
 }
 
 

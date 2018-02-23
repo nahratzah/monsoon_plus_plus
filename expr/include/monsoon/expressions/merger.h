@@ -29,7 +29,7 @@ auto monsoon_expr_export_ make_merger(
     time_point::duration slack,
     expression::vector_objpipe&& x,
     expression::scalar_objpipe&& y)
--> expression::scalar_objpipe;
+-> expression::vector_objpipe;
 
 auto monsoon_expr_export_ make_merger(
     metric_value(*fn)(const metric_value&, const metric_value&),
@@ -38,7 +38,7 @@ auto monsoon_expr_export_ make_merger(
     time_point::duration slack,
     expression::scalar_objpipe&& x,
     expression::vector_objpipe&& y)
--> expression::scalar_objpipe;
+-> expression::vector_objpipe;
 
 auto monsoon_expr_export_ make_merger(
     metric_value(*fn)(const metric_value&, const metric_value&),
@@ -47,7 +47,7 @@ auto monsoon_expr_export_ make_merger(
     time_point::duration slack,
     expression::vector_objpipe&& x,
     expression::vector_objpipe&& y)
--> expression::scalar_objpipe;
+-> expression::vector_objpipe;
 
 
 } /* namespace monsoon::expressions */
