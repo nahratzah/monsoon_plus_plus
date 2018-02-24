@@ -1,5 +1,7 @@
 #include "tsdata_list.h"
 #include "../raw_file_segment_writer.h"
+#include <monsoon/objpipe/callback.h>
+#include <monsoon/objpipe/of.h>
 
 namespace monsoon {
 namespace history {
@@ -58,170 +60,96 @@ void tsdata_v2_list::push_back(const time_series& ts) {
   data_.update_addr(tsfile_ptr);
 }
 
-void tsdata_v2_list::emit(
-    const std::function<void(time_point, emit_map&&)>& accept_fn,
+auto tsdata_v2_list::emit(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const path_matcher& group_filter,
     const tag_matcher& tag_filter,
-    const path_matcher& metric_filter) const {
-  using std::swap;
+    const path_matcher& metric_filter) const
+-> objpipe::reader<emit_type> {
+  std::shared_ptr<const tsdata_v2_list> self = shared_from_this();
 
-  // Reorder map, used to deal with non-distinct/non-sorted file.
-  // The reorder map contains:
-  // - 0 elements, if is_sorted() && is_distinct()
-  // - 1 elements, if is_sorted() && !is_distinct()
-  // - * elements, if !is_sorted()
-  std::vector<std::tuple<time_point, emit_map>> reorder_map;
-
-  visit(
-      [&](
-          const time_point& ts,
-          std::shared_ptr<const tsdata_list::record_array> records) {
-        if ((tr_begin.has_value() && tr_begin.value() > ts)
-            || (tr_end.has_value() && tr_end.value() < ts))
-          return; /* SKIP */
-
-        emit_map emit_data;
-
-        std::for_each(records->begin(), records->end(),
-            [&emit_data, &group_filter, &tag_filter, &metric_filter](const auto& group_entry) {
-              const auto& group_name = std::get<0>(group_entry);
-
-              if (group_filter(group_name.get_path())
-                  && tag_filter(group_name.get_tags())) {
-                const auto metrics = std::get<1>(group_entry).get();
-                std::for_each(metrics->begin(), metrics->end(),
-                    [&group_name, &emit_data, &metric_filter](
-                        const auto& metric_entry) {
-                      const auto& metric_name = std::get<0>(metric_entry);
-                      const auto& metric_value = std::get<1>(metric_entry);
-
-                      if (metric_filter(metric_name)) {
-                        emit_data.emplace(
-                            std::piecewise_construct,
-                            std::forward_as_tuple(group_name, metric_name),
-                            std::forward_as_tuple(metric_value));
-                      }
-                    });
-              }
-            });
-
-        if (!is_sorted()) { // Collect everything and bulk handle at end.
-          reorder_map.emplace_back(ts, std::move(emit_data));
-        } else if (!is_distinct()) {
-          // Sorted, but not distinct. Keep trailing element in reorder_map
-          // and emit/merge appropriately.
-          if (reorder_map.empty()) {
-            reorder_map.emplace_back(ts, std::move(emit_data));
-          } else {
-            assert(reorder_map.size() == 1u);
-            auto& reorder_ts = std::get<0>(reorder_map.back());
-            auto& reorder_data = std::get<1>(reorder_map.back());
-
-            if (reorder_ts == ts) {
-              swap(reorder_data, emit_data); // Keep last emit.
-#if __cplusplus >= 201703
-              if (reorder_data.get_allocator() == emit_data.get_allocator())
-                reorder_data.merge(std::move(emit_data));
-              else
-#endif
-                reorder_data.insert(
-                  std::make_move_iterator(emit_data.begin()),
-                  std::make_move_iterator(emit_data.end()));
-            } else {
-              // Emit old data, now that it is cleaned up.
-              accept_fn(
-                  reorder_ts,
-                  std::move(reorder_data));
-              // Store new data into reorder_map.
-              std::tie(reorder_ts, reorder_data) =
-                  std::forward_as_tuple(ts, std::move(emit_data));
-            }
-          }
-        } else {
-          // Sorted and unique, emit directly.
-          accept_fn(ts, std::move(emit_data));
-        }
-      });
-
-  if (!is_sorted()) {
-    // Stable sort, to maintain encounter order.
-    std::stable_sort(reorder_map.begin(), reorder_map.end(),
-        [](const auto& x, const auto& y) {
-          return std::get<0>(x) < std::get<0>(y);
-        });
-    // Reverse, so we can use it as a stack.
-    // NOTE: we can't use > in the sort function, as that would
-    // not reverse encounter order.
-    std::reverse(reorder_map.begin(), reorder_map.end());
-  } else {
-    assert(reorder_map.size() <= 1u);
-  }
-
-  while (!reorder_map.empty()) {
-    time_point ts;
-    emit_map emit_data;
-    std::tie(ts, emit_data) = std::move(reorder_map.back());
-    reorder_map.pop_back();
-
-    if (!is_distinct()) {
-      while (!reorder_map.empty() && std::get<0>(reorder_map.back()) == ts) {
-        // Keep later encountered data before earlier data,
-        // so that stable_sort, unique can erase overwritten data.
-        // NOTE: swap followed by insert-at-end
-        // is effectively the same as intert-at-begin.
-        swap(emit_data, std::get<1>(reorder_map.back()));
-#if __cplusplus >= 201703
-        if (emit_data.get_allocator() == reorder_map.back().get_allocator())
-          emit_data.merge(std::move(reorder_map.back()));
-        else
-#endif
-          emit_data.insert(
-              std::make_move_iterator(std::get<1>(reorder_map.back()).begin()),
-              std::make_move_iterator(std::get<1>(reorder_map.back()).end()));
-        reorder_map.pop_back();
-      }
+  if (is_sorted()) {
+    if (is_distinct()) {
+      return objpipe::new_callback<emit_type>(
+          [self, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto& cb) {
+            self->direct_emit_cb_(tr_begin, tr_end, group_filter, tag_filter, metric_filter, cb);
+          });
+    } else {
+      return objpipe::new_callback<emit_type>(
+          [self, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto& cb) {
+            self->emit_cb_sorted_with_duplicates_(tr_begin, tr_end, group_filter, tag_filter, metric_filter, cb);
+          });
     }
-
-    accept_fn(ts, std::move(emit_data));
+  } else {
+    return objpipe::new_callback<emit_type>(
+        [self, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto& cb) {
+          self->emit_cb_unsorted_(tr_begin, tr_end, group_filter, tag_filter, metric_filter, cb);
+        });
   }
 }
 
-void tsdata_v2_list::emit_time(
-    const std::function<void(time_point)>& accept_fn,
-    std::optional<time_point> tr_begin, std::optional<time_point> tr_end) const {
-  std::vector<time_point> reorder_map;
-  visit(
-      [&](
-          const time_point& ts,
-          const std::shared_ptr<const tsdata_list::record_array>& records) {
-        if (!is_sorted()) {
-          reorder_map.push_back(ts);
-        } else if (!is_distinct()) {
-          if (reorder_map.empty()) {
-            reorder_map.push_back(ts);
-          } else if (reorder_map.back() == ts) {
-            /* SKIP */
-          } else {
-            accept_fn(reorder_map.back());
-            reorder_map.back() = ts;
-          }
-        } else {
-          // Sorted and unique, emit directly.
-          accept_fn(ts);
-        }
-      });
+auto tsdata_v2_list::emit_time(
+    std::optional<time_point> tr_begin, std::optional<time_point> tr_end) const
+-> objpipe::reader<time_point> {
+  std::shared_ptr<const tsdata_v2_list> self = shared_from_this();
 
-  if (!is_sorted()) {
-    std::sort(reorder_map.begin(), reorder_map.end());
-    if (!is_distinct()) {
-      reorder_map.erase(
-          std::unique(reorder_map.begin(), reorder_map.end()),
-          reorder_map.end());
+  if (is_sorted()) {
+    if (is_distinct()) {
+      return objpipe::new_callback<time_point>(
+          [self, tr_begin, tr_end](auto& cb) {
+            self->visit(
+                [&cb, &tr_begin, &tr_end](const time_point& tp, [[maybe_unused]] const auto& records) {
+                  if ((!tr_begin.has_value() || *tr_begin <= tp)
+                      && (!tr_end.has_value() || *tr_end >= tp))
+                    cb(std::move(tp));
+                });
+          })
+          .filter(
+              [tr_begin](const time_point& tp) {
+                return !tr_begin.has_value() || *tr_begin <= tp;
+              })
+          .filter(
+              [tr_end](const time_point& tp) {
+                return !tr_end.has_value() || *tr_end >= tp;
+              });
+    } else { // sorted, with duplicates
+      return objpipe::new_callback<time_point>(
+          [self, tr_begin, tr_end](auto cb) {
+            std::optional<time_point> previous_tp;
+            self->visit(
+                [&cb, &previous_tp](const time_point& tp, [[maybe_unused]] const auto& records) {
+                  if (previous_tp != tp) {
+                    previous_tp = tp;
+                    cb(std::move(tp));
+                  }
+                });
+          })
+          .filter(
+              [tr_begin](const time_point& tp) {
+                return !tr_begin.has_value() || *tr_begin <= tp;
+              })
+          .filter(
+              [tr_end](const time_point& tp) {
+                return !tr_end.has_value() || *tr_end >= tp;
+              });
     }
+  } else { // unsorted
+    std::vector<time_point> data;
+    visit(
+        [&data, &tr_begin, &tr_end](const time_point& tp, [[maybe_unused]] const auto& records) {
+          if ((!tr_begin.has_value() || *tr_begin <= tp)
+              && (!tr_end.has_value() || *tr_end >= tp))
+            data.push_back(tp);
+        });
+    std::sort(data.begin(), data.end());
+    if (!is_distinct()) {
+      data.erase(
+          std::unique(data.begin(), data.end()),
+          data.end());
+    }
+    return objpipe::of(std::move(data))
+        .iterate();
   }
-
-  std::for_each(reorder_map.begin(), reorder_map.end(), std::ref(accept_fn));
 }
 
 

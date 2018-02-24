@@ -16,11 +16,7 @@ namespace history {
 
 class monsoon_dirhistory_export_ tsdata {
  public:
-  using metrics_hash = metric_source::metrics_hash;
-  using emit_map = std::unordered_map<
-      std::tuple<group_name, metric_name>,
-      metric_value,
-      metrics_hash>;
+  using emit_type = metric_source::metric_emit;
 
   virtual ~tsdata() noexcept;
 
@@ -41,42 +37,65 @@ class monsoon_dirhistory_export_ tsdata {
   static auto new_file(io::fd&&) -> std::shared_ptr<tsdata>;
 
   /**
-   * Return the file version.
+   * \brief Return the file version.
    */
   virtual auto version() const noexcept
-      -> std::tuple<std::uint16_t, std::uint16_t> = 0;
+  -> std::tuple<std::uint16_t, std::uint16_t> = 0;
   /**
-   * Read all time series.
+   * \brief Read all time series.
    *
-   * Note: this is inefficient and potentially requires a lot of memory.
+   * \note This is inefficient and potentially requires a lot of memory.
    * It is mainly intended for testing/debugging.
    */
   virtual std::vector<time_series> read_all() const = 0;
 
   /**
-   * Test if the tsdata can handle appending a single time_series at a time.
+   * \brief Test if the tsdata can handle appending a single time_series at a time.
    */
   virtual bool is_writable() const noexcept = 0;
 
   /**
-   * Returns the range of timestamps (inclusive) this tsdata covers.
+   * \brief Returns the range of timestamps (inclusive) this tsdata covers.
    */
   virtual auto time() const -> std::tuple<time_point, time_point> = 0;
 
   virtual void push_back(const time_series&) = 0;
 
-  virtual void emit(
-      const std::function<void(time_point, emit_map&&)>&,
-      std::optional<time_point>,
-      std::optional<time_point>,
-      const path_matcher&,
-      const tag_matcher&,
-      const path_matcher&)
-      const = 0;
-  virtual void emit_time(
-      const std::function<void(time_point)>&,
-      std::optional<time_point>,
-      std::optional<time_point>) const = 0;
+  /**
+   * \brief Emit metrics matching the given constraints.
+   *
+   * \details
+   * Metrics are read from the file and emitted if they match the given constraints.
+   * Metrics are emitted in ascending order to time stamp.
+   *
+   * \param[in] begin,end Describes the range of time stamps to emit.
+   * \param[in] group_filter Only groups matching the filter will be emitted.
+   * \param[in] tag_filter Only groups with matching tags will be emitted.
+   * \param[in] metric_filter Only metric names matching the filter will be emitted.
+   * \returns An objpipe containing maps of metrics, by timestamp,
+   * in ascending order of time.
+   */
+  virtual auto emit(
+      std::optional<time_point> begin,
+      std::optional<time_point> end,
+      const path_matcher& group_filter,
+      const tag_matcher& tag_filter,
+      const path_matcher& metric_filter)
+      const
+  -> objpipe::reader<emit_type> = 0;
+
+  /**
+   * \brief Emit timestamps between the given constraint (inclusive).
+   *
+   * \param[in] begin The lowest time point that may be emitted.
+   * \param[in] end The highest time point that may be emitted.
+   * \returns An objpipe containing all timestamps in this tsdata,
+   * between the range [\p begin, \p end], in ascending order.
+   */
+  virtual auto emit_time(
+      std::optional<time_point> begin,
+      std::optional<time_point> end) const
+  -> objpipe::reader<time_point> = 0;
 };
 
 

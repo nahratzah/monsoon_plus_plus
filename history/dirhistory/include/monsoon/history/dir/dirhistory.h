@@ -41,11 +41,11 @@ class monsoon_dirhistory_export_ dirhistory
       tag_matcher,
       path_matcher,
       time_point::duration = time_point::duration(0)) const
-      -> objpipe::reader<emit_type> override;
+  -> objpipe::reader<emit_type> override;
   auto emit_time(
       time_range,
       time_point::duration = time_point::duration(0)) const
-      -> objpipe::reader<time_point> override;
+  -> objpipe::reader<time_point> override;
 
  private:
   dirhistory(const dirhistory&&) = delete;

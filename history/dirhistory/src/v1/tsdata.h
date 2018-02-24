@@ -80,18 +80,18 @@ class monsoon_dirhistory_local_ tsdata_v1
 
   static std::shared_ptr<tsdata_v1> new_file(io::fd&&, time_point tp);
 
-  void emit(
-      const std::function<void(time_point, emit_map&&)>&,
+  auto emit(
       std::optional<time_point>,
       std::optional<time_point>,
       const path_matcher&,
       const tag_matcher&,
       const path_matcher&)
-      const override;
-  virtual void emit_time(
-      const std::function<void(time_point)>&,
+      const
+  -> objpipe::reader<emit_type> override;
+  auto emit_time(
       std::optional<time_point>,
-      std::optional<time_point>) const override;
+      std::optional<time_point>) const
+  -> objpipe::reader<time_point> override;
 
  private:
   auto make_xdr_istream(bool) const -> std::unique_ptr<xdr::xdr_istream>;
