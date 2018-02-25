@@ -18,7 +18,6 @@ if (NOT STD_FILESYSTEM)
   include_directories (${Boost_INCLUDE_DIR})
 endif ()
 add_library (monsoon_dirhistory
-  src/emit_visitor.cc
   src/raw_file_segment_reader.cc
   src/raw_file_segment_writer.cc
   src/hdir_exception.cc

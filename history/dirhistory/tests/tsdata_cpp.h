@@ -3,6 +3,7 @@
 
 #include <monsoon/time_series.h>
 #include <monsoon/time_point.h>
+#include <monsoon/metric_source.h>
 #include <monsoon/history/dir/tsdata.h>
 #include <tuple>
 #include <vector>
@@ -16,11 +17,11 @@ std::unordered_set<monsoon::simple_group> expected_simple_groups();
 auto expected_tagged_metrics()
 -> std::unordered_set<
     std::tuple<monsoon::group_name, monsoon::metric_name>,
-    monsoon::history::tsdata::metrics_hash>;
+    monsoon::metric_source::metrics_hash>;
 auto expected_untagged_metrics()
 -> std::unordered_set<
     std::tuple<monsoon::simple_group, monsoon::metric_name>,
-    monsoon::history::tsdata::metrics_hash>;
+    monsoon::metric_source::metrics_hash>;
 
 /**
  * Expected time range.

@@ -856,10 +856,61 @@ class adapter_t {
     return std::invoke(std::forward<SeqOp>(seq_op), std::move(*this));
   }
 
+  /**
+   * \brief Retrieve the underlying source.
+   */
+  auto underlying() const &
+  -> const Source& {
+    return src_;
+  }
+
+  /**
+   * \brief Retrieve the underlying source.
+   */
+  auto underlying() &
+  -> Source& {
+    return src_;
+  }
+
+  /**
+   * \brief Retrieve the underlying source.
+   */
+  auto underlying() &&
+  -> Source&& {
+    return std::move(src_);
+  }
+
  private:
   Source src_;
   front_store_handler<Source> store_;
 };
+
+namespace {
+template<typename Source> void adapter_fn_(adapter_t<Source>) {}
+template<typename T, typename = void>
+struct is_adapter_
+: std::false_type
+{};
+template<typename T>
+struct is_adapter_<T, std::void_t<decltype(adapter_fn_(std::declval<T>()))>>
+: std::true_type
+{};
+}
+///\brief Tests if T is an adapter.
+template<typename T>
+using is_adapter = typename is_adapter_<std::decay_t<T>>::type;
+///\brief Tests if T is an adapter.
+template<typename T>
+constexpr bool is_adapter_v = is_adapter<T>::value;
+
+template<typename T>
+struct adapter_underlying_type {};
+template<typename T>
+struct adapter_underlying_type<adapter_t<T>> {
+  using type = T;
+};
+template<typename T>
+using adapter_underlying_type_t = typename adapter_underlying_type<T>::type;
 
 
 } /* namespace monsoon::objpipe::detail */

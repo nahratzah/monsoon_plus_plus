@@ -14,8 +14,8 @@
 #include <type_traits>
 #include <algorithm>
 #include <queue>
-#include <boost/coroutine2/coroutine.hpp>
-#include <boost/coroutine2/protected_fixedsize_stack.hpp>
+#include <monsoon/objpipe/callback.h>
+#include <monsoon/objpipe/merge.h>
 
 namespace monsoon {
 namespace history {
@@ -165,9 +165,10 @@ class monsoon_dirhistory_local_ metric_iteration {
   metric_table::const_iterator b_, e_;
 };
 
+template<typename Callback>
 void monsoon_dirhistory_local_ emit_fdtblock(
     std::shared_ptr<const file_data_tables_block> block,
-    std::function<void(time_point, tsdata_v2_tables::emit_map&&)> cb,
+    Callback& cb,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const path_matcher& group_filter,
     const tag_matcher& tag_filter,
@@ -210,17 +211,18 @@ void monsoon_dirhistory_local_ emit_fdtblock(
       });
 
   // Emit timestamps and parallel iterators.
-  auto emit = tsdata_v2_tables::emit_map();
+  auto emit = tsdata_v2_tables::emit_type();
   for (const time_point& tp : timestamps) {
-    emit.clear();
-    emit.reserve(data.size());
+    std::get<0>(emit) = tp;
+    std::get<1>(emit).clear();
+    std::get<1>(emit).reserve(data.size());
 
     std::for_each(data.begin(), data.end(),
         [&emit](auto& iter) {
           if (iter) {
             auto opt_tpl = iter.next();
             if (opt_tpl.has_value()) {
-              emit.emplace(
+              std::get<1>(emit).emplace(
                   std::piecewise_construct,
                   std::forward_as_tuple(
                       std::get<0>(std::move(opt_tpl.value())),
@@ -233,155 +235,83 @@ void monsoon_dirhistory_local_ emit_fdtblock(
 
     if ((!tr_begin.has_value() || tp >= tr_begin)
         && (!tr_end.has_value() || tp <= tr_end))
-      cb(tp, std::move(emit));
+      cb(std::move(emit));
   }
 }
 
-void tsdata_v2_tables::emit(
-    const std::function<void(time_point, emit_map&&)>& accept_fn,
+auto tsdata_v2_tables::emit(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const path_matcher& group_filter,
     const tag_matcher& tag_filter,
     const path_matcher& metric_filter)
-    const {
+    const
+-> objpipe::reader<emit_type> {
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();
 
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
-    using namespace std::placeholders;
-
-    for (const file_data_tables_block& block : *file_data_tables) {
-      emit_fdtblock(
-          std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
-          accept_fn,
-          tr_begin, tr_end, group_filter, tag_filter, metric_filter);
-    }
-  } else { // parallel iteration of blocks.
-    // Declare parallel iteration
-    class iterators_value_type {
-     public:
-      using co_arg_type = std::tuple<time_point, emit_map>;
-      using co_type = boost::coroutines2::coroutine<co_arg_type>;
-
-      iterators_value_type() = default;
-
-      iterators_value_type(iterators_value_type&& o) noexcept
-      : val_(std::move(o.val_)),
-        co_(std::move(o.co_))
-      {}
-
-      iterators_value_type& operator=(iterators_value_type&& o) noexcept {
-        val_ = std::move(o.val_);
-        co_ = std::move(o.co_);
-        return *this;
-      }
-
-      iterators_value_type(
-          std::shared_ptr<const file_data_tables_block> block,
-          std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
-          const path_matcher& group_filter,
-          const tag_matcher& tag_filter,
-          const path_matcher& metric_filter)
-      : co_(boost::coroutines2::protected_fixedsize_stack(),
-          [block, tr_begin, tr_end, &group_filter, &tag_filter, &metric_filter](
-              co_type::push_type& yield) {
+    return objpipe::new_callback<emit_type>(
+        [file_data_tables, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
+          for (const file_data_tables_block& block : *file_data_tables) {
             emit_fdtblock(
-                block,
-                [&yield](time_point tp, emit_map&& v) {
-                  yield(co_arg_type(std::move(tp), std::move(v)));
-                },
+                std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
+                cb,
                 tr_begin, tr_end, group_filter, tag_filter, metric_filter);
-          })
-      {
-        if (co_) val_ = co_.get();
-      }
+          }
+        });
+  } else { // Parallel iteration of blocks.
+    auto callback_factory =
+        [&](const file_data_tables_block& block) {
+          auto block_ptr = std::shared_ptr<const file_data_tables_block>(file_data_tables, &block);
+          return objpipe::new_callback<emit_type>(
+              [block_ptr, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
+                emit_fdtblock(
+                    block_ptr,
+                    cb,
+                    tr_begin, tr_end, group_filter, tag_filter, metric_filter);
+              });
+        };
+    using callback_factory_type = std::decay_t<decltype(callback_factory(std::declval<const file_data_tables_block&>()))>;
 
-      explicit operator bool() const noexcept {
-        return bool(co_);
-      }
-
-      co_arg_type& get() {
-        assert(val_.has_value());
-        return val_.value();
-      }
-
-      time_point ts() const {
-        assert(val_.has_value());
-        return std::get<0>(val_.value());
-      }
-
-      void advance() {
-        co_();
-        if (co_)
-          val_ = co_.get();
-        else
-          val_ = {};
-      }
-
-     private:
-      std::optional<co_arg_type> val_;
-      mutable co_type::pull_type co_;
+    auto less = [](const emit_type& x, const emit_type& y) noexcept {
+      return std::get<0>(x) < std::get<0>(y);
     };
-    struct iterators_cmp {
-      bool operator()(const iterators_value_type& x,
-          const iterators_value_type& y) const {
-        if (!x) return !y;
-        if (!y) return false;
-        return x.ts() > y.ts();
-      }
-    };
-    auto iterators = std::vector<iterators_value_type>();
-    iterators.reserve(file_data_tables->size());
 
-    // Build parallel iteration.
-    for (const file_data_tables_block& block : *file_data_tables) {
-      iterators.emplace_back(
-          std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
-          tr_begin, tr_end, group_filter, tag_filter, metric_filter);
-    }
-    std::make_heap(iterators.begin(), iterators.end(), iterators_cmp());
+    std::vector<callback_factory_type> parallel;
+    for (const file_data_tables_block& block : *file_data_tables)
+      parallel.emplace_back(callback_factory(block));
 
-    // Traverse iteration.
-    time_point last_ts;
-    emit_map last_val;
-    while (!iterators.empty()) {
-      std::pop_heap(iterators.begin(), iterators.end(), iterators_cmp());
-      auto& top = iterators.back();
-      if (!top) {
-        iterators.pop_back();
-        continue;
-      }
-
-      // Handle argument.
-      auto& arg = top.get();
-      if (last_val.empty()) { // First iteration.
-        std::tie(last_ts, last_val) = arg;
-      } else if (std::get<0>(arg) == last_ts) { // Merge with same-time entry.
+    if (is_distinct()) { // Merge only.
+      return objpipe::merge(
+          std::make_move_iterator(parallel.begin()),
+          std::make_move_iterator(parallel.end()),
+          std::move(less));
+    } else {
+      auto combine = [](emit_type& x, emit_type&& y) -> emit_type& {
 #if __cplusplus >= 201703
-        if (last_val.get_allocator() == std::get<1>(arg).get_allocator())
-          last_val.merge(std::get<1>(std::move(arg)));
-        else
+        std::get<1>(x).merge(std::get<1>(std::move(y)));
+#else
+        std::copy(
+            std::get<1>(y).begin(),
+            std::get<1>(y).end(),
+            std::inserter(std::get<1>(x), std::get<1>(x).end()));
 #endif
-          last_val.insert(
-              std::make_move_iterator(std::get<1>(arg).begin()),
-              std::make_move_iterator(std::get<1>(arg).end()));
-      } else { // Emit previous and make current the 'last' value.
-        accept_fn(std::move(last_ts), std::move(last_val));
-        std::tie(last_ts, last_val) = arg;
-      }
+        return x;
+      };
 
-      top.advance(); // Advance co routine
-      std::push_heap(iterators.begin(), iterators.end(), iterators_cmp());
+      return objpipe::merge_combine(
+          std::make_move_iterator(parallel.begin()),
+          std::make_move_iterator(parallel.end()),
+          std::move(less),
+          std::move(combine));
     }
-    if (!last_val.empty()) // Push last unpushed value
-      accept_fn(std::move(last_ts), std::move(last_val));
   }
 }
 
-void tsdata_v2_tables::emit_time(
-    const std::function<void(time_point)>& accept_fn,
+auto tsdata_v2_tables::emit_time(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end)
-    const {
+    const
+-> objpipe::reader<time_point> {
   using iterator =
       typename std::tuple_element_t<0, file_data_tables_block>::const_iterator;
 
@@ -389,47 +319,51 @@ void tsdata_v2_tables::emit_time(
       data_.get();
 
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
-    using namespace std::placeholders;
+    return objpipe::new_callback<time_point>(
+        [file_data_tables, tr_begin, tr_end](auto cb) {
+          for (const file_data_tables_block& block : *file_data_tables) {
+            iterator b = std::get<0>(block).begin();
+            iterator e = std::get<0>(block).end();
+            if (tr_begin.has_value())
+              b = std::lower_bound(b, e, tr_begin.value());
+            if (tr_end.has_value())
+              e = std::upper_bound(b, e, tr_end.value());
 
-    for (const file_data_tables_block& block : *file_data_tables) {
-      iterator b = std::get<0>(block).begin();
-      iterator e = std::get<0>(block).end();
-      if (tr_begin.has_value())
-        b = std::lower_bound(b, e, tr_begin.value());
-      if (tr_end.has_value())
-        e = std::upper_bound(b, e, tr_end.value());
+            std::for_each(b, e, cb);
+          }
+        });
+  } else {
+    auto callback_factory =
+        [&](const file_data_tables_block& block) {
+          auto block_ptr = std::shared_ptr<const file_data_tables_block>(file_data_tables, &block);
+          return objpipe::new_callback<time_point>(
+              [block_ptr, tr_begin, tr_end](auto cb) {
+                iterator b = std::get<0>(*block_ptr).begin();
+                iterator e = std::get<0>(*block_ptr).end();
+                if (tr_begin.has_value())
+                  b = std::lower_bound(b, e, tr_begin.value());
+                if (tr_end.has_value())
+                  e = std::upper_bound(b, e, tr_end.value());
 
-      std::for_each(b, e, std::ref(accept_fn));
-    }
-  } else { // parallel iteration of blocks.
-    using iter_pair = std::pair<iterator, iterator>;
-    struct iter_heap_cmp {
-      bool operator()(const iter_pair& x, const iter_pair& y) const {
-        assert(x.first != x.second);
-        assert(y.first != y.second);
-        return *y.first > *x.first;
-      }
-    };
-    using queue = std::priority_queue<iter_pair, std::vector<iter_pair>, iter_heap_cmp>;
+                std::for_each(b, e, cb);
+              });
+        };
+    using callback_factory_type = std::decay_t<decltype(callback_factory(std::declval<const file_data_tables_block&>()))>;
 
-    queue iters;
-    for (const file_data_tables_block& block : *file_data_tables) {
-      iterator b = std::get<0>(block).begin();
-      iterator e = std::get<0>(block).end();
-      if (tr_begin.has_value())
-        b = std::lower_bound(b, e, tr_begin.value());
-      if (tr_end.has_value())
-        e = std::upper_bound(b, e, tr_end.value());
-      if (b != e)
-        iters.push(std::forward_as_tuple(std::move(b), std::move(e)));
-    }
+    std::vector<callback_factory_type> parallel;
+    for (const file_data_tables_block& block : *file_data_tables)
+      parallel.emplace_back(callback_factory(block));
 
-    while (!iters.empty()) {
-      iter_pair top = iters.top();
-      iters.pop();
-      accept_fn(*top.first);
-      ++top.first;
-      if (top.first != top.second) iters.push(std::move(top));
+    if (is_distinct()) { // Merge only.
+      return objpipe::merge(
+          std::make_move_iterator(parallel.begin()),
+          std::make_move_iterator(parallel.end()));
+    } else {
+      return objpipe::merge_combine(
+          std::make_move_iterator(parallel.begin()),
+          std::make_move_iterator(parallel.end()),
+          std::less<>(),
+          [](const auto& x, [[maybe_unused]] const auto& y) { return x; });
     }
   }
 }

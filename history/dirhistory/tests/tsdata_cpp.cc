@@ -90,10 +90,10 @@ std::unordered_set<monsoon::simple_group> expected_simple_groups() {
 auto expected_tagged_metrics()
 -> std::unordered_set<
     std::tuple<monsoon::group_name, monsoon::metric_name>,
-    monsoon::history::tsdata::metrics_hash> {
+    monsoon::metric_source::metrics_hash> {
   auto result = std::unordered_set<
       std::tuple<monsoon::group_name, monsoon::metric_name>,
-      monsoon::history::tsdata::metrics_hash>();
+      monsoon::metric_source::metrics_hash>();
 
   for (const auto& ts : tsdata_expected()) {
     for (const auto& tsv : ts.get_data())
@@ -107,10 +107,10 @@ auto expected_tagged_metrics()
 auto expected_untagged_metrics()
 -> std::unordered_set<
     std::tuple<monsoon::simple_group, monsoon::metric_name>,
-    monsoon::history::tsdata::metrics_hash> {
+    monsoon::metric_source::metrics_hash> {
   auto result = std::unordered_set<
       std::tuple<monsoon::simple_group, monsoon::metric_name>,
-      monsoon::history::tsdata::metrics_hash>();
+      monsoon::metric_source::metrics_hash>();
 
   for (const auto& entry : expected_tagged_metrics())
     result.emplace(std::get<0>(entry).get_path(), std::get<1>(entry));
