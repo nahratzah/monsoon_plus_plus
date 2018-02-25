@@ -7,6 +7,7 @@
 #include <cassert>
 
 namespace monsoon {
+namespace {
 namespace metric_value_ops {
 
 
@@ -24,7 +25,6 @@ constexpr auto unsigned_min = std::numeric_limits<unsigned_type>::min();
 constexpr auto unsigned_max = std::numeric_limits<unsigned_type>::max();
 
 struct plus {
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     auto sum = x + y;
     if (sum < y) // Overflow.
@@ -33,7 +33,6 @@ struct plus {
       return metric_value(sum);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0 && y < 0); // Enforced by metric_value constructor.
 
@@ -42,7 +41,6 @@ struct plus {
     return metric_value(x + y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
 
@@ -55,39 +53,32 @@ struct plus {
     return metric_value(static_cast<signed_type>(x) + y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     return (*this)(y, x); // Commutative
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, fp_type y) const {
     return metric_value(x + y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     return metric_value(x + y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     return metric_value(x + y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, fp_type y) const {
     return metric_value(x + y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, fp_type y) const {
     return metric_value(x + y);
   }
 };
 
 struct minus {
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     if (y > x) { // Underflow
       auto neg_sub = y - x;
@@ -97,20 +88,17 @@ struct minus {
     return metric_value(x - y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0 && y < 0); // Enforced by metric_value constructor.
     return metric_value(x - y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
     auto abs_y = static_cast<unsigned_type>(-(y + 1)) + 1u;
     return plus()(x, abs_y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
     auto abs_x = static_cast<unsigned_type>(-(x + 1)) + 1u;
@@ -123,34 +111,28 @@ struct minus {
     return metric_value(-static_cast<signed_type>(neg_sub - 1u) - 1);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, fp_type y) const {
     return metric_value(x - y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     return metric_value(x - y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     return metric_value(x - y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, fp_type y) const {
     return metric_value(x - y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, fp_type y) const {
     return metric_value(x - y);
   }
 };
 
 struct multiply {
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     if (x == 0) return metric_value(0);
     if (unsigned_max / x < y) // Overflow
@@ -158,7 +140,6 @@ struct multiply {
     return metric_value(x * y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0 && y < 0); // Enforced by metric_value constructor.
     auto abs_x = static_cast<unsigned_type>(-(x + 1)) + 1u;
@@ -166,7 +147,6 @@ struct multiply {
     return (*this)(abs_x, abs_y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
     if (x == 0) return metric_value(0);
@@ -179,40 +159,33 @@ struct multiply {
     return metric_value(-static_cast<signed_type>(neg_mul - 1u) - 1);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
     return (*this)(y, x); // Commutative
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, fp_type y) const {
     return metric_value(x * y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     return metric_value(x * y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     return metric_value(x * y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, fp_type y) const {
     return metric_value(x * y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, fp_type y) const {
     return metric_value(x - y);
   }
 };
 
 struct divide {
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     if (y == 0) return metric_value(); // Divide-by-zero
     if (x % y != 0) // Remainder
@@ -220,7 +193,6 @@ struct divide {
     return metric_value(x / y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0 && y < 0); // Enforced by metric_value constructor.
     auto abs_x = static_cast<unsigned_type>(-(x + 1)) + 1u;
@@ -228,7 +200,6 @@ struct divide {
     return (*this)(abs_x, abs_y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
     if (x == 0) return metric_value(0);
@@ -242,7 +213,6 @@ struct divide {
     return metric_value(-static_cast<signed_type>(neg_div - 1u) - 1);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
     if (y == 0) return metric_value(); // Divide by zero
@@ -256,88 +226,73 @@ struct divide {
     return metric_value(-static_cast<signed_type>(neg_div - 1u) - 1);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, fp_type y) const {
     if (y == 0.0 || y == -0.0) return metric_value(); // Divide-by-zero
     return metric_value(x / y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     return (*this)(x, static_cast<fp_type>(y));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     return (*this)(x, static_cast<fp_type>(y));
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, fp_type y) const {
     return (*this)(static_cast<fp_type>(x), y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, fp_type y) const {
     return (*this)(static_cast<fp_type>(x), y);
   }
 };
 
 struct modulo { // Worst idea ever to create this...
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     if (y == 0) return metric_value(); // Divide by zero
     return metric_value(x % y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0 && y < 0); // Enforced by metric_value constructor.
     return metric_value(x % y); // Defined behaviour since c++11
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
     if (y == 0) return metric_value(); // Divide by zero
     return metric_value(x % y); // Defined behaviour since c++11
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
     return metric_value(x % y); // Defined behaviour since c++11
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, fp_type y) const {
     if (y == 0.0 || y == -0.0) return metric_value(); // Divide-by-zero
     return metric_value(std::remainder(x, y));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     return (*this)(x, static_cast<fp_type>(y));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     return (*this)(x, static_cast<fp_type>(y));
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, fp_type y) const {
     return (*this)(static_cast<fp_type>(x), y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, fp_type y) const {
     return (*this)(static_cast<fp_type>(x), y);
   }
 };
 
 struct shift_left {
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     if (y >= std::numeric_limits<unsigned_type>::digits
         || std::numeric_limits<unsigned_type>::max() >> y < x)
@@ -345,7 +300,6 @@ struct shift_left {
     return metric_value(x << y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
 
@@ -355,7 +309,6 @@ struct shift_left {
     return metric_value(x << y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
     assert(y < 0); // Enforced by metric_value constructor.
@@ -365,7 +318,6 @@ struct shift_left {
     return metric_value(x >> -y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
 
@@ -375,12 +327,10 @@ struct shift_left {
   }
 
   template<typename X>
-  monsoon_intf_local_
   metric_value operator()(X x, fp_type y) const {
     return metric_value(static_cast<fp_type>(x * std::pow(2.0l, y)));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     long double tmp = x;
     while (y > std::numeric_limits<long>::max()) {
@@ -391,7 +341,6 @@ struct shift_left {
         static_cast<fp_type>(scalblnl(tmp, static_cast<long>(y))));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
 
@@ -406,14 +355,12 @@ struct shift_left {
 };
 
 struct shift_right {
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, unsigned_type y) const {
     if (y >= std::numeric_limits<unsigned_type>::digits)
       return metric_value(0);
     return metric_value(x >> y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, unsigned_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
 
@@ -422,7 +369,6 @@ struct shift_right {
     return metric_value(x >> y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(signed_type x, signed_type y) const {
     assert(x < 0); // Enforced by metric_value constructor.
     assert(y < 0); // Enforced by metric_value constructor.
@@ -433,7 +379,6 @@ struct shift_right {
     return metric_value(x << -y);
   }
 
-  monsoon_intf_local_
   metric_value operator()(unsigned_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
 
@@ -444,12 +389,10 @@ struct shift_right {
   }
 
   template<typename X>
-  monsoon_intf_local_
   metric_value operator()(X x, fp_type y) const {
     return metric_value(static_cast<fp_type>(x / std::pow(2.0l, y)));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, unsigned_type y) const {
     long double tmp = x;
     while (y > std::numeric_limits<long>::max()) {
@@ -460,7 +403,6 @@ struct shift_right {
         static_cast<fp_type>(scalblnl(tmp, static_cast<long>(y))));
   }
 
-  monsoon_intf_local_
   metric_value operator()(fp_type x, signed_type y) const {
     assert(y < 0); // Enforced by metric_value constructor.
 
@@ -475,7 +417,7 @@ struct shift_right {
 };
 
 
-} /* namespace monsoon::metric_value_ops */
+}} /* namespace monsoon::<unnamed>::metric_value_ops */
 
 
 metric_value::metric_value(const metric_value& other)
