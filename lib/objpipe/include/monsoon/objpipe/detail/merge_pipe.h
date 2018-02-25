@@ -62,6 +62,9 @@ class merge_queue_elem_ {
   noexcept(std::is_nothrow_destructible_v<transport_type>
       && noexcept(std::declval<Source&>().pop_front()))
   -> objpipe_errc {
+    assert(front_val_.has_value());
+    assert(front_val_->errc() == objpipe_errc::success);
+
     front_val_.reset();
     return src_.pop_front();
   }
@@ -342,7 +345,6 @@ class merge_reduce_pipe
     queue_elem* head = this->get_front_source();
     if (head == nullptr)
       return transport_type(std::in_place_index<1>, objpipe_errc::closed);
-    pending_pop = true;
 
     transport_type val = head->release();
     if (val.errc() != objpipe_errc::success) return val;
@@ -365,6 +367,7 @@ class merge_reduce_pipe
         return transport_type(std::in_place_index<1>, e);
     }
 
+    pending_pop = true;
     return val;
   }
 
@@ -373,7 +376,7 @@ class merge_reduce_pipe
     if (!pending_pop) {
       objpipe_errc e = front().errc();
       if (e != objpipe_errc::success)
-        return objpipe_errc::closed;
+        return e;
     }
 
     pending_pop = false;

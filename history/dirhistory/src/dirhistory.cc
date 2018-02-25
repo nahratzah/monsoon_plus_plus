@@ -118,8 +118,7 @@ class merge_emit_t {
 
   template<typename Callback>
   auto operator()(Callback cb) -> void {
-    // Invariant: elements in active_ are !empty()
-    while (!unstarted_.empty() && !active_.empty()) {
+    while (!unstarted_.empty() || !active_.empty()) {
       // Ensure active has at least one element,
       // and load all unstarted that start at/before active_.front.
       while (active_.empty()
