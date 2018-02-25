@@ -237,8 +237,6 @@ auto create_emit_for_tp(
     std::deque<tsdata::emit_type>& read_ahead,
     ObjPipe& src)
 -> void {
-  assert(read_ahead.empty() || std::get<0>(read_ahead.back()) <= tp + slack);
-
   // Fill in read-ahead with data up to required data.
   while (!src.empty() && std::get<0>(src.front()) <= tp + slack)
     read_ahead.push_back(src.pull());
@@ -251,7 +249,6 @@ auto create_emit_for_tp(
 
   assert(src.empty() || std::get<0>(src.front()) > tp + slack);
   assert(read_ahead.empty() || std::get<0>(read_ahead.front()) >= tp);
-  assert(std::get<0>(read_ahead.back()) <= tp + slack);
 
   // Pending.front() must contain map at given time point.
   if (std::get<0>(read_ahead.front()) != tp)
