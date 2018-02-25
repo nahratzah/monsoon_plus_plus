@@ -135,6 +135,13 @@ class merge_emit_t {
           std::push_heap(active_.begin(), active_.end(), greater());
       }
 
+      // Since empty queues are immediately popped, the loop invariant
+      // may break. Compensate here.
+      if (active_.empty()) {
+        assert(unstarted_.empty());
+        break;
+      }
+
       // Read head element of the head of active.
       std::pop_heap(active_.begin(), active_.end(), greater());
       value_type emit = active_.back().pull();
@@ -144,7 +151,8 @@ class merge_emit_t {
         std::push_heap(active_.begin(), active_.end(), greater());
 
       // Merge in all other elements with the same time stamp.
-      while (!greater()(active_.front(), emit)
+      while (!active_.empty()
+          && !greater()(active_.front(), emit)
           && !greater()(emit, active_.front())) {
         std::pop_heap(active_.begin(), active_.end(), greater());
         merge(emit, active_.back().pull());
