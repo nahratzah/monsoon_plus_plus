@@ -1,0 +1,297 @@
+#ifndef MONSOON_CACHE_ELEMENT_H
+#define MONSOON_CACHE_ELEMENT_H
+
+namespace monsoon::cache {
+
+
+/**
+ * \brief Decorator that, when used on an element, indicates the element should
+ * support asynchronous operations.
+ *
+ * \details Instructs the element to add a shared_future<pointer> as input to
+ * its constructor, as well as returning it from its \ref element::ptr "ptr()"
+ * method.
+ */
+struct async_element_decorator {};
+
+/**
+ * \brief Cache element.
+ *
+ * \details
+ * An element holds information of an object pointed to by a shared ptr.
+ *
+ * \note The pointer held in the cache element is either a shared pointer, or a weak pointer.
+ * If the pointer is a shared pointer, the element will not expire.
+ * If the pointer is a weak pointer, the element will expire once the life time
+ * of the pointee expires.
+ *
+ * \tparam Decorators Zero or more decorators to add additional information to
+ *    the element.
+ *    Decorators must have noexcept constructors.
+ * \tparam T The mapped type of the cache.
+ */
+template<typename T, typename... Decorators>
+class element
+: public Decorators...
+{
+ public:
+  using type = T;
+  using pointer = std::shared_ptr<type>;
+  using simple_pointer = std::add_pointer_t<type>;
+  using const_reference = std::add_lvalue_reference_t<std::add_const_t<T>>;
+  using weak_pointer = std::weak_ptr<type>;
+  static constexpr bool is_async =
+      std::disjunction_v<std::is_base_of<async_element_decorator, Decorators>...>;
+  using future_type = std::conditional_t<is_async,
+      std::shared_future<pointer>,
+      void>;
+  using ptr_return_type = std::conditional_t<is_async,
+      std::variant<pointer, std::shared_future<pointer>>,
+      pointer>;
+
+ private:
+  struct async_type {
+    explicit async_type(future_type fut)
+    : fut(std::move(fut))
+    {}
+
+    future_type fut;
+    bool strong = true;
+  };
+
+  using internal_ptr_type = std::conditional_t<is_async,
+      std::variant<std::monostate, weak_pointer, pointer, async_type>,
+      std::variant<std::monostate, weak_pointer, pointer>>;
+
+ public:
+  static auto is_nil(const ptr_return_type& p) const noexcept -> bool;
+
+  ///\brief Create an empty element.
+  ///\details Creates an element holding a nullptr, with a hash value of zero.
+  element(std::allocator_arg_t tag, Alloc alloc) noexcept;
+
+  /**
+   * \brief Create an element pointing at the given init pointer.
+   * \details This will be a strong reference to the pointee.
+   * \param[in] init Pointer to the element to hold.
+   * \param[in] hash The hashcode of the pointee.
+   * \param[in] decorator_ctx Context information used by decorators.
+   *    Decorators are expected to retrieve their information using
+   *    std::get<type> on the \p decorator_ctx.
+   */
+  template<typename Alloc, typename... DecoratorCtx>
+  explicit element(std::allocator_arg_t tag, Alloc alloc,
+      std::shared_ptr<type> init, std::size_t hash,
+      std::tuple<DecoratorCtx...> decorator_ctx) noexcept;
+
+  /**
+   * \brief Constructor for the async case of element.
+   * \details This will be a strong reference to the pointee.
+   * \param[in] fut Future containing pointer value.
+   * \param[in] hash The hashcode of the pointee.
+   * \param[in] decorator_ctx Context information used by decorators.
+   *    Decorators are expected to retrieve their information using
+   *    std::get<type> on the \p decorator_ctx.
+   */
+  template<typename Alloc, typename = std::enable_if_t<is_async>, typename... DecoratorCtx>
+  explicit element([[maybe_unused]] std::allocator_arg_t, Alloc alloc,
+      future_type init, std::size_t hash,
+      std::tuple<DecoratorCtx...> decorator_ctx) noexcept;
+
+  ///\brief Returns the hash code of the underlying pointer.
+  ///\details The hash code remains the same, irresepective of wether the
+  ///  pointer has expired.
+  ///\returns The hash code of the underlying pointer.
+  auto hash() const noexcept -> std::size_t;
+  ///\brief Returns a pointer to the held object.
+  ///\returns A shared pointer to the object, if the object is live.
+  ///   Otherwise, a nullptr is returned.
+  ///   If the element \ref is_async "is async", the return type is a variant
+  ///   of pointer or shared future to pointer.
+  auto ptr() const noexcept -> ptr_return_type;
+  ///\brief Check if the raw pointer stored in the object is the same.
+  auto is_ptr(simple_pointer pp) const noexcept -> bool;
+  ///\brief Check if the object pointed to is live.
+  ///\returns True if the call to ptr() would yield a nullptr.
+  auto is_expired() const noexcept -> bool;
+  ///\brief Resolves the async case.
+  ///\details Acquires the value from the shared_future and assigns it.
+  ///If this doesn't hold a shared_future, this is a noop.
+  ///\returns Pointer, as if by calling ptr() when this \ref is_async "is not async".
+  ///\throws Exception from future resolution, in which case this element is expired.
+  auto resolve() -> pointer;
+
+  /**
+   * \brief Change the strong reference to a weak reference.
+   *
+   * \details
+   * When the element holds a weak reference, the pointee is allowed to expire
+   * once its life time outside the cache ends.
+   *
+   * \returns The element, by lvalue reference.
+   */
+  auto weaken() noexcept & -> element&;
+  /**
+   * \brief Change the strong reference to a weak reference.
+   *
+   * \details
+   * When the element holds a weak reference, the pointee is allowed to expire
+   * once its life time outside the cache ends.
+   *
+   * \returns The element, by rvalue reference.
+   */
+  auto weaken() noexcept && -> element&&;
+
+ private:
+  std::size_t hash_ = 0;
+  internal_ptr_type ptr_;
+  simple_pointer plain_ptr_ = nullptr;
+};
+
+
+template<typename T, typename... D>
+auto element<T, D...>::is_nil(const ptr_return_type& p) const
+noexcept
+-> bool {
+  if constexpr(is_async) {
+    return std::holds_alternative<pointer>(p)
+        && std::get<pointer>(p) == nullptr;
+  } else {
+    return p == nullptr;
+  }
+}
+
+template<typename T, typename... D>
+template<typename Alloc, typename... DecoratorCtx>
+element<T, D...>::element(std::allocator_arg_t tag, Alloc alloc,
+    std::shared_ptr<type> init, std::size_t hash,
+    std::tuple<DecoratorCtx...> decorator_ctx) noexcept
+: Decorators(tag, alloc, decorator_ctx)...,
+  hash_(hash),
+  ptr_(std::in_place_type<pointer>, std::move(init)),
+  plain_ptr_(ptr_.get())
+{}
+
+template<typename T, typename... D>
+template<typename Alloc, typename, typename... DecoratorCtx>
+element<T, D...>::element(std::allocator_arg_t tag, Alloc alloc,
+    future_type init, std::size_t hash,
+    std::tuple<DecoratorCtx...> decorator_ctx) noexcept
+: Decorators(tag, alloc, decorator_ctx)...,
+  hash_(hash),
+  ptr_(std::in_place_type<async_type>, std::move(init)),
+  plain_ptr_(nullptr)
+{}
+
+template<typename T, typename... D>
+auto element<T, D...>::hash() const
+noexcept
+-> std::size_t {
+  return hash_;
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::ptr() const
+noexcept
+-> ptr_return_type {
+  if constexpr(is_async) {
+    if (std::holds_alternative<async_type>(ptr_))
+      return std::get<async_type>(ptr_).fut;
+  }
+
+  if (std::holds_alternative<weak_pointer>(ptr_))
+    return std::get<weak_pointer>(ptr_).lock();
+  if (std::holds_alternative<pointer>(ptr_))
+    return std::get<pointer>(ptr_);
+  return nullptr;
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::is_ptr(type* pp) const
+noexcept
+-> bool {
+  return plain_ptr_ == pp;
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::is_expired() const
+noexcept
+-> bool {
+  if (std::holds_alternative<weak_pointer>(ptr_))
+    return std::get<weak_pointer>(ptr_).expired();
+  else if (std::holds_alternative<pointer>(ptr_))
+    return std::get<pointer>(ptr_) == nullptr;
+  else
+    return true;
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::resolve()
+-> pointer {
+  if constexpr(is_async) {
+    if (std::holds_alternative<async_type>(ptr_)) {
+      // Resolve future.
+      try {
+        pointer ptr = std::get<async_type>.fut.get();
+      } catch (...) {
+        // Invalidate elmeent on exception.
+        ptr_.emplace<std::monotype>();
+        throw;
+      }
+
+      // Update plain pointer.
+      plain_ptr_ = ptr.get();
+      // Update ptr_ with resolved pointer value.
+      if (std::get<async_type>(ptr_).strong)
+        ptr_.emplace<pointer>(ptr);
+      else
+        ptr_.emplace<weak_pointer>(ptr);
+      return ptr;
+    }
+
+    return std::get<pointer>(ptr());
+  } else { // !is_async case
+    return ptr();
+  }
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::weaken() &
+noexcept
+-> element& {
+  if (std::holds_alternative<pointer>(ptr_)) {
+    auto ptr = std::get<pointer>(std::move(ptr_));
+    ptr_.emplace<weak_pointer>(std::move(wptr));
+  } else {
+    if constexpr(is_async) {
+      if (std::holds_alternative<async_type>(ptr_))
+        std::get<async_type>(ptr_).strong = false;
+    }
+  }
+  return *this;
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::weaken() &&
+noexcept
+-> element&& {
+  weaken();
+  return std::move(*this);
+}
+
+
+} /* namespace monsoon::cache */
+
+namespace std {
+
+
+///\brief Specialize uses_allocator for element to accept any allocator.
+template<typename T, typename... D, typename Alloc>
+struct uses_allocator<monsoon::cache::element<T, D...>, Alloc>
+: true_type
+{}
+
+
+} /* namespace std */
+
+#endif /* MONSOON_CACHE_ELEMENT_H */
