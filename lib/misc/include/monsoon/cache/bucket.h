@@ -20,28 +20,31 @@ namespace monsoon::cache {
  * \tparam Create Constructor function.
  *  create() -> store_type.
  */
-template<typename Predicate, typename Create>
+template<typename Predicate, typename Create, typename SizeType>
 struct bucket_ctx {
-  bucket_ctx(std::size_t hash_code, Predicate key_predicate, Create create)
+  constexpr bucket_ctx(std::size_t hash_code, Predicate key_predicate, Create create, SizeType& size)
   noexcept(std::is_nothrow_move_constructible_v<Predicate>
       && std::is_nothrow_move_constructible_v<Create>)
   : hash_code(std::move(hash_code)),
     key_predicate(std::move(key_predicate)),
-    create(std::move(create))
+    create(std::move(create)),
+    size(size)
   {}
 
   std::size_t hash_code;
   Predicate key_predicate; ///<\brief Element predicate.
   Create create; ///<\brief Constructor.
+  SizeType& size; ///<\brief Reference to cache size.
 };
 
-template<typename Predicate, typename Create>
-constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create)
+template<typename Predicate, typename Create, typename SizeType>
+constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create, SizeType& size)
 -> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>> {
-  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>>;
+  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType>;
   return type(hash_code,
       std::forward<Predicate>(predicate),
-      std::forward<Create>(create));
+      std::forward<Create>(create),
+      size);
 }
 
 template<typename T, typename... Decorators>
@@ -114,6 +117,7 @@ class bucket {
   -> pointer {
     using allocator_type = std::allocator_traits<Alloc>::rebind<store_type>;
     using alloc_traits = std::allocator_traits<allocator_type>;
+    using size_type = alloc_traits::size_type;
     allocator_type alloc = use_alloc;
 
     created = nullptr; // Initialization of output argument.
@@ -126,6 +130,7 @@ class bucket {
       // Clean up expired entries as we traverse.
       if (s->is_expired()) {
         *iter = successor_ptr(*s); // Unlink s.
+        --ctx.size;
 
         alloc_traits::destroy(alloc, s);
         alloc_traits::deallocate(alloc, s);
@@ -153,6 +158,7 @@ class bucket {
     }
     *iter = new_store; // Link.
     created = new_store; // Inform called of newly constructed store.
+    ++ctx.size;
     lookup_type new_ptr = new_store->ptr();
 
     assert(!store_type::is_nil(new_ptr)
@@ -170,8 +176,8 @@ class bucket {
    *  By returning the (potentially shared) reference, we allow the caller to
    *  delay destruction until after any locks have been released.
    */
-  template<typename Alloc>
-  auto erase(Alloc& use_alloc, typename store_type::simple_pointer sptr)
+  template<typename Alloc, typename SizeType>
+  auto erase(Alloc& use_alloc, typename store_type::simple_pointer sptr, SizeType& size)
   noexcept
   -> lookup_type {
     using allocator_type = std::allocator_traits<Alloc>::rebind<store_type>;
@@ -186,6 +192,7 @@ class bucket {
       if (s->is_ptr(ptr)) {
         *iter = successor_ptr(*s);
         lookup_type result = to_erase->ptr();
+        --size;
 
         alloc_traits.destroy(alloc, s);
         alloc_traits.deallocate(alloc, s);
@@ -197,14 +204,15 @@ class bucket {
     return lookup_type();
   }
 
-  template<typename Alloc>
-  auto erase_all(Alloc& use_alloc) {
+  template<typename Alloc, typename SizeType>
+  auto erase_all(Alloc& use_alloc, SizeType& size) {
     using allocator_type = std::allocator_traits<Alloc>::rebind<store_type>;
     using alloc_traits = std::allocator_traits<allocator_type>;
     allocator_type alloc = use_alloc;
 
     while (head_ != nullptr) {
       store_type* s = std::exchange(head_, successor_ptr(*head_));
+      --size;
 
       alloc_traits.destroy(alloc, s);
       alloc_traits.deallocate(alloc, s);

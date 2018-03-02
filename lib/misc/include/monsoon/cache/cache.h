@@ -14,13 +14,10 @@ class cache_intf {
   using key_type = T;
   using pointer = std::shared_ptr<U>;
 
-  virtual auto get_if_present(const key_type& key)
+  virtual auto get_if_present(const key_type& key) const
   -> pointer;
 
   virtual auto get(const key_type& key)
-  -> pointer;
-
-  virtual auto get(key_type&& key)
   -> pointer;
 };
 
@@ -48,8 +45,16 @@ class cache {
   {}
 
  public:
-  auto operator[](const key_type& key) const {
+  auto get_if_present(const key_type& key) const {
+    return impl_->get_if_present(key);
+  }
+
+  auto get(const key_type& key) const {
     return impl_->get(key);
+  }
+
+  auto operator()(const key_type& key) const {
+    return get(key);
   }
 
  private:

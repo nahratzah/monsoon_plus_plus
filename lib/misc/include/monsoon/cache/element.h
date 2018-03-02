@@ -2,6 +2,40 @@
 #define MONSOON_CACHE_ELEMENT_H
 
 namespace monsoon::cache {
+namespace {
+
+///\brief Invoke the is_expired() method on the decorator.
+template<typename D, typename = void>
+struct decorator_is_expired_ {
+  static auto apply(const D& v) const noexcept -> bool { return false; }
+};
+
+template<typename D>
+struct decorator_is_expired_<D, std::void_t<decltype(std::declval<const D&>().is_expired())>> {
+  static auto apply(const D& v) const noexcept -> bool { return v.is_expired(); }
+};
+
+
+///\brief Invoke the is_expired() method on each of the decorators.
+template<typename... Decorators> struct decorator_is_expired_;
+
+template<>
+struct decorators_is_expired_<> {
+  template<typename T>
+  static auto apply(const T& v) noexcept -> bool { return v; }
+};
+
+template<typename D, typename... Tail>
+struct decorators_is_expired_<D, Tail...> {
+  template<typename T>
+  static auto apply(const T& v) noexcept -> bool {
+    return decorator_is_expired_<D>::apply(v)
+        || decorators_is_expired_<Tail...>::apply(v);
+  }
+};
+
+
+} /* namespace monsoon::cache::<unnamed> */
 
 
 /**
@@ -195,15 +229,21 @@ auto element<T, D...>::ptr() const
 noexcept
 -> ptr_return_type {
   if constexpr(is_async) {
-    if (std::holds_alternative<async_type>(ptr_))
+    if (std::holds_alternative<async_type>(ptr_)
+        && !decorators_is_expired_<D...>::apply(*this))
       return std::get<async_type>(ptr_).fut;
   }
 
+  pointer p = nullptr;
   if (std::holds_alternative<weak_pointer>(ptr_))
-    return std::get<weak_pointer>(ptr_).lock();
-  if (std::holds_alternative<pointer>(ptr_))
-    return std::get<pointer>(ptr_);
-  return nullptr;
+    p = std::get<weak_pointer>(ptr_).lock();
+  else if (std::holds_alternative<pointer>(ptr_))
+    p = std::get<pointer>(ptr_);
+
+  if (p != nullptr
+      && decorators_is_expired_<D...>::apply(*this))
+    p = nullptr;
+  return p;
 }
 
 template<typename T, typename... D>
@@ -217,6 +257,14 @@ template<typename T, typename... D>
 auto element<T, D...>::is_expired() const
 noexcept
 -> bool {
+  if (decorators_is_expired_<D...>::apply(*this))
+    return true;
+
+  if constexpr(is_async) {
+    if (std::holds_alternative<async_type>(ptr_))
+      return false;
+  }
+
   if (std::holds_alternative<weak_pointer>(ptr_))
     return std::get<weak_pointer>(ptr_).expired();
   else if (std::holds_alternative<pointer>(ptr_))
@@ -231,10 +279,11 @@ auto element<T, D...>::resolve()
   if constexpr(is_async) {
     if (std::holds_alternative<async_type>(ptr_)) {
       // Resolve future.
+      pointer ptr;
       try {
-        pointer ptr = std::get<async_type>.fut.get();
+        ptr = std::get<async_type>.fut.get();
       } catch (...) {
-        // Invalidate elmeent on exception.
+        // Invalidate on exception, so that future hits will not consider this.
         ptr_.emplace<std::monotype>();
         throw;
       }
