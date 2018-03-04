@@ -60,7 +60,7 @@ constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Cre
 template<typename T, typename... Decorators>
 class bucket {
  private:
-  struct bucket_link;
+  class bucket_link;
 
  public:
   using store_type = element<T, bucket_link, Decorators...>;
