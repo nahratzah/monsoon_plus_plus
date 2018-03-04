@@ -313,6 +313,12 @@ noexcept
   return concurrency_;
 }
 
+inline auto cache_builder_vars::load_factor() const
+noexcept
+-> float {
+  return lf_;
+}
+
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 auto cache_builder<T, U, Hash, Eq, Alloc>::hash() const
 noexcept

@@ -14,11 +14,13 @@ class cache_intf {
   using key_type = T;
   using pointer = std::shared_ptr<U>;
 
+  virtual ~cache_intf() noexcept {}
+
   virtual auto get_if_present(const key_type& key) const
-  -> pointer;
+  -> pointer = 0;
 
   virtual auto get(const key_type& key)
-  -> pointer;
+  -> pointer = 0;
 };
 
 template<typename T, typename U>
