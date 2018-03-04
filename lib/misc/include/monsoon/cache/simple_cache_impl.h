@@ -312,6 +312,8 @@ template<typename T, typename A, typename... D>
 auto simple_cache_impl<T, A, D...>::load_factor() const
 noexcept
 -> float {
+  std::lock_guard<const simple_cache_impl> lck{ *this };
+
   return std::double_t(size_) / std::double_t(buckets_.size());
 }
 
@@ -319,12 +321,16 @@ template<typename T, typename A, typename... D>
 auto simple_cache_impl<T, A, D...>::max_load_factor() const
 noexcept
 -> float {
+  std::lock_guard<const simple_cache_impl> lck{ *this };
+
   return lf_;
 }
 
 template<typename T, typename A, typename... D>
 auto simple_cache_impl<T, A, D...>::max_load_factor(float lf)
 -> void {
+  std::lock_guard<const simple_cache_impl> lck{ *this };
+
   if (lf <= 0.0 || !std::isfinite(lf))
     throw std::invalid_argument("invalid load factor");
   lf_ = lf;
@@ -334,6 +340,7 @@ auto simple_cache_impl<T, A, D...>::max_load_factor(float lf)
 template<typename T, typename A, typename... D>
 auto simple_cache_impl<T, A, D...>::size() const noexcept
 -> size_type {
+  std::lock_guard<const simple_cache_impl> lck{ *this };
   return size_;
 }
 
