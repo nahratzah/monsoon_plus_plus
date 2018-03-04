@@ -26,6 +26,19 @@ struct cache_decorator_set {
   ///\tparam Alloc The allocator for the cache.
   template<typename T, typename Alloc>
   using cache_type = simple_cache_impl<T, Alloc, D...>;
+
+  ///\brief Add type T to the decorator set.
+  ///\details Does nothing if T is already part of the decorator set.
+  ///\returns A decorator set with all decorators in this, and with T.
+  ///\tparam T The decorator to add to the set.
+  template<typename T>
+  constexpr auto add() const noexcept
+  -> std::conditional_t<
+      std::disjunction_v<std::is_same<D, T>...>,
+      cache_decorator_set<D...>,
+      cache_decorator_set<D..., T>> {
+    return {};
+  }
 };
 
 
@@ -35,9 +48,9 @@ struct apply_thread_safe_ {
   auto operator()(cache_decorator_set<D...> d)
   -> decltype(auto) {
     if (b.thread_safe())
-      return next(cache_decorator_set<D..., thread_safe_decorator<true>>());
+      return next(d.template add<thread_safe_decorator<true>>());
     else
-      return next(cache_decorator_set<D..., thread_safe_decorator<false>>());
+      return next(d.template add<thread_safe_decorator<false>>());
   }
 
   const cache_builder_vars& b;
@@ -57,9 +70,9 @@ struct apply_key_type_ {
   auto operator()(cache_decorator_set<D...> d)
   -> decltype(auto) {
     if constexpr(std::is_same_v<void, KeyType>)
-      return next(cache_decorator_set<D...>());
+      return next(d);
     else
-      return next(cache_decorator_set<D..., cache_key_decorator<KeyType>>());
+      return next(d.template add<cache_key_decorator<KeyType>>());
   }
 
   NextApply next;
@@ -78,9 +91,9 @@ struct apply_access_expire_ {
   auto operator()(cache_decorator_set<D...> d)
   -> decltype(auto) {
     if (b.access_expire().has_value())
-      return next(cache_decorator_set<D..., access_expire_decorator>());
+      return next(d.template add<access_expire_decorator>());
     else
-      return next(cache_decorator_set<D..., weaken_decorator>());
+      return next(d.template add<weaken_decorator>());
   }
 
   const cache_builder_vars& b;
@@ -100,9 +113,9 @@ struct apply_max_age_ {
   auto operator()(cache_decorator_set<D...> d)
   -> decltype(auto) {
     if (b.max_age().has_value())
-      return next(cache_decorator_set<D..., max_age_decorator>());
+      return next(d.template add<max_age_decorator>());
     else
-      return next(cache_decorator_set<D...>());
+      return next(d);
   }
 
   const cache_builder_vars& b;
