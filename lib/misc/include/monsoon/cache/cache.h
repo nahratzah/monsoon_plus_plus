@@ -41,7 +41,8 @@ class cache {
   template<typename Alloc>
   static constexpr auto builder(Alloc alloc)
   -> cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc> {
-    return cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc>(std::move(alloc));
+    return cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc>(
+        std::hash<T>(), std::equal_to<T>(), std::move(alloc));
   }
 
  private:

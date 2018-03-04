@@ -39,13 +39,11 @@ struct key_decorator {
   : key(std::allocator_arg, alloc, std::get<key_type>(init))
   {}
 
-  template<typename Alloc, typename... Types,
-      typename = std::enable_if_t<
-          !std::uses_allocator_v<std::optional<key_type>, Alloc>>>
+  template<typename Alloc, typename... Types>
   key_decorator(
       [[maybe_unused]] Alloc& alloc,
       const std::tuple<Types...>& init,
-      [[maybe_unused]] alloc_tagged_ discriminant)
+      [[maybe_unused]] alloc_ignored_ discriminant)
   noexcept(std::is_nothrow_copy_constructible_v<key_type>)
   : key(std::get<key_type>(init))
   {}
@@ -56,15 +54,6 @@ struct key_decorator {
       [[maybe_unused]] std::allocator_arg_t tag,
       Alloc& alloc,
       const std::tuple<Types...>& init)
-  noexcept(noexcept(
-          key_decorator(
-              alloc,
-              init,
-              std::conditional_t<std::uses_allocator_v<key_type, Alloc>,
-                  std::conditional_t<std::is_constructible_v<key_type, const key_type&, Alloc>,
-                      alloc_last_,
-                      alloc_tagged_>,
-                  alloc_ignored_>())))
   : key_decorator(
       alloc,
       init,

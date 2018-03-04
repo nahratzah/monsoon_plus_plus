@@ -1,8 +1,10 @@
 #ifndef MONSOON_CACHE_ALLOCATOR_H
 #define MONSOON_CACHE_ALLOCATOR_H
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <scoped_allocator>
 #include <type_traits>
 
 namespace monsoon::cache {
@@ -43,7 +45,14 @@ class cache_alloc_dealloc_observer {
   }
 
   template<typename Alloc>
-  static void maybe_set_stats(...) noexcept {}
+  static void maybe_set_stats(
+      Alloc& alloc,
+      const std::weak_ptr<cache_alloc_dealloc_observer>& stats,
+      ...) noexcept
+  {
+    static_assert(!std::is_const_v<Alloc> && !std::is_volatile_v<Alloc> && !std::is_reference_v<Alloc>,
+        "Overload selected for wrong reasons: const/volatile/reference.");
+  }
 };
 
 /**
@@ -73,7 +82,7 @@ class cache_allocator {
 
  private:
   using nested_allocator = Allocator;
-  using nested_traits = allocator_traits<Allocator>;
+  using nested_traits = std::allocator_traits<Allocator>;
   using stats_type = cache_alloc_dealloc_observer;
 
  public:
@@ -98,6 +107,16 @@ class cache_allocator {
   explicit cache_allocator(std::weak_ptr<stats_type> stats, Nested&& nested = Nested())
   noexcept(std::is_nothrow_constructible_v<nested_allocator, Nested>)
   : stats_(std::move(stats)),
+    nested_(std::forward<Nested>(nested))
+  {
+    stats_type::maybe_set_stats(nested_, stats_);
+  }
+
+  template<typename Nested = nested_allocator,
+      typename = std::enable_if_t<std::is_constructible_v<nested_allocator, Nested>>>
+  explicit cache_allocator([[maybe_unused]] std::nullptr_t stats, Nested&& nested = Nested())
+  noexcept(std::is_nothrow_constructible_v<nested_allocator, Nested>)
+  : stats_(),
     nested_(std::forward<Nested>(nested))
   {
     stats_type::maybe_set_stats(nested_, stats_);
@@ -151,10 +170,9 @@ class cache_allocator {
   [[nodiscard]]
   auto allocate(size_type n)
   -> pointer {
-    pointer result = nested_traits::allocate(nested_, n);
-    if (result != nullptr && stats != nullptr)
-      stats->mem_use += n * sizeof(value_type);
-    return result;
+    pointer p = nested_traits::allocate(nested_, n);
+    if (p != nullptr) add_mem_use(n);
+    return p;
   }
 
   [[nodiscard]]
@@ -199,5 +217,13 @@ class cache_allocator {
 
 
 } /* namespace monsoon::cache */
+
+namespace monsoon {
+
+
+using cache::cache_allocator;
+
+
+} /* namespace monsoon */
 
 #endif /* MONSOON_CACHE_ALLOCATOR_H */

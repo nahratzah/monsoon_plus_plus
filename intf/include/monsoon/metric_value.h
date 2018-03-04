@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 #include <monsoon/histogram.h>
+#include <monsoon/cache/allocator.h>
 #include <iosfwd>
 #include <type_traits>
 #include <optional>
@@ -104,11 +105,17 @@ class monsoon_intf_export_ metric_value {
       std::is_move_assignable_v<histogram>,
       "histogram type assignment is borked.");
 
+  using string_type = std::basic_string<
+      char,
+      std::char_traits<char>,
+      cache_allocator<std::allocator<char>>>;
+  using string_ptr = std::shared_ptr<string_type>;
+
   /**
    * \brief Underlying variant holding any one of the permitted values.
    */
   using types = std::variant<
-      empty, bool, signed_type, unsigned_type, fp_type, std::string, histogram>;
+      empty, bool, signed_type, unsigned_type, fp_type, string_ptr, histogram>;
 
   ///@{
   /**

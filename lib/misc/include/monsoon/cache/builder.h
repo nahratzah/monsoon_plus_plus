@@ -93,15 +93,15 @@ class cache_builder
 
   template<typename NewHash>
   auto with_hash(NewHash hash) const
-  -> cache_builder<NewHash, Eq, Alloc>;
+  -> cache_builder<T, U, NewHash, Eq, Alloc>;
 
   template<typename NewEq>
   auto with_equality(NewEq eq) const
-  -> cache_builder<Hash, NewEq, Alloc>;
+  -> cache_builder<T, U, Hash, NewEq, Alloc>;
 
   template<typename NewAlloc>
   auto with_allocator(NewAlloc alloc) const
-  -> cache_builder<Hash, Eq, NewAlloc>;
+  -> cache_builder<T, U, Hash, Eq, NewAlloc>;
 
   /**
    * \brief Build the cache described by this builder.
@@ -259,22 +259,22 @@ auto cache_builder<T, U, Hash, Eq, Alloc>::load_factor(float lf)
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewHash>
 auto cache_builder<T, U, Hash, Eq, Alloc>::with_hash(NewHash hash) const
--> cache_builder<NewHash, Eq, Alloc> {
-  return cache_builder<NewHash, Eq, Alloc>(*this, hash, eq_, alloc_);
+-> cache_builder<T, U, NewHash, Eq, Alloc> {
+  return cache_builder<T, U, NewHash, Eq, Alloc>(*this, hash, eq_, alloc_);
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewEq>
 auto cache_builder<T, U, Hash, Eq, Alloc>::with_equality(NewEq eq) const
--> cache_builder<Hash, NewEq, Alloc> {
-  return cache_builder<Hash, NewEq, Alloc>(*this, hash_, eq, alloc_);
+-> cache_builder<T, U, Hash, NewEq, Alloc> {
+  return cache_builder<T, U, Hash, NewEq, Alloc>(*this, hash_, eq, alloc_);
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewAlloc>
 auto cache_builder<T, U, Hash, Eq, Alloc>::with_allocator(NewAlloc alloc) const
--> cache_builder<Hash, Eq, NewAlloc> {
-  return cache_builder<Hash, Eq, NewAlloc>(*this, hash_, eq_, alloc);
+-> cache_builder<T, U, Hash, Eq, NewAlloc> {
+  return cache_builder<T, U, Hash, Eq, NewAlloc>(*this, hash_, eq_, alloc);
 }
 
 inline auto cache_builder_vars::max_memory() const

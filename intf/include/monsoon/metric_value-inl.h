@@ -14,10 +14,6 @@ inline metric_value::metric_value(fp_type v) noexcept
 : value_(std::in_place_type<fp_type>, v)
 {}
 
-inline metric_value::metric_value(std::string_view v) noexcept
-: value_(std::in_place_type<std::string>, v)
-{}
-
 inline metric_value::metric_value(const char* v) noexcept
 : metric_value(std::string_view(v))
 {}
