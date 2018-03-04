@@ -198,6 +198,8 @@ class simple_cache_impl
     buckets_.resize(init_bucket_count); // May not be zero, or we'll get (unchecked) division by zero.
   }
 
+  ~simple_cache_impl() noexcept;
+
   auto load_factor() const noexcept -> float;
   auto max_load_factor() const noexcept -> float;
   auto max_load_factor(float fl) -> void;
@@ -216,7 +218,8 @@ class simple_cache_impl
         q.predicate,
         []() -> store_type { throw std::runtime_error("create should not be called"); },
         size_,
-        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); });
+        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); },
+        [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
     assert(buckets_.size() > 0);
@@ -243,7 +246,8 @@ class simple_cache_impl
               std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<CacheDecorators>::apply(*this)...));
         },
         size_,
-        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); });
+        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); },
+        [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
     store_type* created;
@@ -297,6 +301,12 @@ class simple_cache_impl
   size_type size_ = 0;
 };
 
+
+template<typename T, typename Alloc, typename... CacheDecorators>
+simple_cache_impl<T, Alloc, CacheDecorators...>::~simple_cache_impl() noexcept {
+  for (auto& b : buckets_)
+    b.erase_all(alloc_, size_, [this](store_type& s) { on_delete(s); });
+}
 
 template<typename T, typename A, typename... D>
 auto simple_cache_impl<T, A, D...>::load_factor() const
