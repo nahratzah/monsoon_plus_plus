@@ -142,6 +142,13 @@ class bucket {
 
       // Clean up expired entries as we traverse.
       if (s->is_expired()) {
+        // Skip deletion if the use counter indicates the element is referenced.
+        if (s->use_count.load(std::memory_order_acquire) != 0u) {
+          // We don't update the allocation hint, as this element will likely disappear next time.
+          iter = &successor_ptr(*s); // Advance iter.
+          continue;
+        }
+
         *iter = successor_ptr(*s); // Unlink s.
         --ctx.size;
 
@@ -207,6 +214,7 @@ class bucket {
       store_type*const s = *iter;
 
       if (s->is_ptr(sptr)) {
+        assert(s->use_count == 0u);
         *iter = successor_ptr(*s);
         lookup_type result = s->ptr();
         --size;
@@ -230,6 +238,7 @@ class bucket {
 
     while (head_ != nullptr) {
       store_type* s = std::exchange(head_, successor_ptr(*head_));
+      assert(s->use_count == 0u);
       --size;
 
       on_delete(*s);

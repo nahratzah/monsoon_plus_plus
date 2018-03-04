@@ -1,11 +1,12 @@
 #ifndef MONSOON_CACHE_ELEMENT_H
 #define MONSOON_CACHE_ELEMENT_H
 
-#include <memory>
+#include <atomic>
+#include <cstddef>
 #include <future>
+#include <memory>
 #include <type_traits>
 #include <utility>
-#include <cstddef>
 #include <variant>
 
 namespace monsoon::cache {
@@ -140,6 +141,23 @@ class element
       std::enable_if_t<Enable, future_type> init, std::size_t hash,
       std::tuple<DecoratorCtx...> decorator_ctx) noexcept;
 
+  ///\brief Copy constructor.
+  ///\bug I don't want element to be copy constructible, as a precautionary measure.
+  element(const element& e) noexcept
+  : Decorators(*this)...,
+    hash_(e.hash_),
+    ptr_(e.ptr_),
+    plain_ptr_(e.plain_ptr_)
+  {}
+
+  element& operator=(const element&) = delete;
+
+#ifndef NDEBUG
+  ~element() noexcept {
+    assert(use_count == 0u);
+  }
+#endif
+
   ///\brief Returns the hash code of the underlying pointer.
   ///\details The hash code remains the same, irresepective of wether the
   ///  pointer has expired.
@@ -178,6 +196,11 @@ class element
   std::size_t hash_ = 0;
   internal_ptr_type ptr_;
   simple_pointer plain_ptr_ = nullptr;
+
+ public:
+  ///\brief Counter, used to prevent element from being destroyed, when a lock is released.
+  ///\note We use an atomic, so we don't have to think about the cache lock when releasing.
+  std::atomic<unsigned int> use_count{ 0u };
 };
 
 

@@ -8,9 +8,67 @@
 #include <monsoon/cache/cache_query.h>
 #include <cmath>
 #include <stdexcept>
+#include <utility>
 
 namespace monsoon::cache {
 namespace {
+
+
+///\brief Scoped lock to prevent a store type from being deleted.
+template<typename S>
+class store_delete_lock {
+ public:
+  constexpr store_delete_lock() noexcept = default;
+
+  store_delete_lock(S* ptr) noexcept
+  : ptr_(ptr)
+  {
+    if (ptr_ != nullptr)
+      ptr_->use_count.fetch_add(1u, std::memory_order_acquire);
+  }
+
+  store_delete_lock(const store_delete_lock& other)
+  noexcept
+  : store_delete_lock(other.ptr_)
+  {}
+
+  store_delete_lock(store_delete_lock&& other)
+  noexcept
+  : ptr_(std::exchange(other.ptr_, nullptr))
+  {}
+
+  auto operator=(const store_delete_lock& other)
+  noexcept
+  -> store_delete_lock& {
+    if (&other != this) {
+      if (ptr_ != nullptr)
+        ptr_->use_count.fetch_sub(1u, std::memory_order_release);
+      ptr_ = other.ptr_;
+      if (ptr_ != nullptr)
+        ptr_->use_count.fetch_add(1u, std::memory_order_acquire);
+    }
+    return *this;
+  }
+
+  auto operator=(store_delete_lock&& other)
+  noexcept
+  -> store_delete_lock& {
+    if (&other != this) {
+      if (ptr_ != nullptr)
+        ptr_->use_count.fetch_sub(1u, std::memory_order_release);
+      ptr_ = std::exchange(other.ptr_, nullptr);
+    }
+    return *this;
+  }
+
+  ~store_delete_lock() noexcept {
+    if (ptr_ != nullptr)
+      ptr_->use_count.fetch_sub(1u, std::memory_order_release);
+  }
+
+ private:
+  S* ptr_ = nullptr;
+};
 
 
 template<typename CacheDecorator, typename = void>
@@ -255,6 +313,7 @@ class simple_cache_impl
     lookup_type lookup_result = buckets_[query.hash_code % buckets_.size()]
         .lookup_or_create(alloc_, query, created);
     assert(!store_type::is_nil(lookup_result));
+    auto slck = store_delete_lock<store_type>(created); // Prevent created entry from disappearing when we release the lock.
     pointer result = resolve_(lck, std::move(lookup_result), created);
     assert(result != nullptr);
 
