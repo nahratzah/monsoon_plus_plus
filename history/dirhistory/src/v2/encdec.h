@@ -171,9 +171,14 @@ class monsoon_dirhistory_local_ file_segment {
 
 template<typename T, typename Hasher = std::hash<T>>
 class monsoon_dirhistory_local_ dictionary {
+ private:
+  using view_type = std::conditional_t<std::is_same_v<T, std::string>,
+        std::string_view,
+        const T&>;
+
  public:
-  std::uint32_t encode(const T&);
-  const T& decode(std::uint32_t) const;
+  std::uint32_t encode(view_type);
+  view_type decode(std::uint32_t) const;
 
   template<typename SerFn>
   void decode_update(xdr::xdr_istream&, SerFn);

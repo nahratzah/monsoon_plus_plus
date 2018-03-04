@@ -111,17 +111,28 @@ void file_segment<T>::update_addr(file_segment_ptr ptr) noexcept {
 
 
 template<typename T, typename H>
-std::uint32_t dictionary<T, H>::encode(const T& v) {
-  auto ptr = encode_map_.find(v);
-  if (ptr != encode_map_.end()) return ptr->second;
+std::uint32_t dictionary<T, H>::encode(view_type v) {
+  if constexpr(std::is_same_v<std::string, T>) {
+    auto ptr = encode_map_.find(std::string(v.begin(), v.end()));
+    if (ptr != encode_map_.end()) return ptr->second;
+  } else {
+    auto ptr = encode_map_.find(v);
+    if (ptr != encode_map_.end()) return ptr->second;
+  }
 
   if (decode_map_.size() > 0xffffffffu)
     throw xdr::xdr_exception("dictionary too large");
   const std::uint32_t new_idx = decode_map_.size();
 
-  decode_map_.push_back(v);
+  if constexpr(std::is_same_v<std::string, T>)
+    decode_map_.push_back(std::string(v.begin(), v.end()));
+  else
+    decode_map_.push_back(v);
   try {
-    encode_map_.emplace(v, new_idx);
+    if constexpr(std::is_same_v<std::string, T>)
+      encode_map_.emplace(std::string(v.begin(), v.end()), new_idx);
+    else
+      encode_map_.emplace(v, new_idx);
   } catch (...) {
     decode_map_.pop_back();
     throw;
@@ -130,7 +141,7 @@ std::uint32_t dictionary<T, H>::encode(const T& v) {
 }
 
 template<typename T, typename H>
-const T& dictionary<T, H>::decode(std::uint32_t idx) const {
+auto dictionary<T, H>::decode(std::uint32_t idx) const -> view_type {
   if (idx >= decode_map_.size())
     throw xdr::xdr_exception("invalid dictionary index");
   return decode_map_[idx];
