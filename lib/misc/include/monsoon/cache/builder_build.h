@@ -149,7 +149,7 @@ class wrapper final
 
   ~wrapper() noexcept {}
 
-  auto get_if_present(const K& k) const
+  auto get_if_present(const K& k)
   -> std::shared_ptr<V> override {
     return this->lookup_if_present(
         make_cache_query(
@@ -232,7 +232,7 @@ class sharded_wrapper final
     traits::deallocate(alloc_, shards_, shards);
   }
 
-  auto get_if_present(const K& k) const
+  auto get_if_present(const K& k)
   -> std::shared_ptr<V> override {
     std::size_t hash_code = hash(k);
 

@@ -14,8 +14,6 @@ namespace monsoon::cache {
  * once the timer is up, it would be nice to use a list of elements
  * to expire that can be updated independent of the bucket.
  * Currently, elements remain allocated until the bucket cleanup happens.
- *
- * \bug Access expire is not update on cache hit.
  */
 struct access_expire_decorator {
   using clock_type = std::chrono::steady_clock;
@@ -33,6 +31,8 @@ struct access_expire_decorator {
 
   ///\brief Element decorator counterpart.
   class element_decorator_type {
+    friend struct access_expire_decorator;
+
    public:
     template<typename Alloc, typename... Types>
     element_decorator_type(
@@ -50,6 +50,10 @@ struct access_expire_decorator {
    private:
     time_point access_expire_;
   };
+
+  auto on_hit(element_decorator_type& elem) const noexcept -> void {
+    elem.access_expire_ = clock_type::now() + duration;
+  }
 
   std::chrono::seconds duration;
 };

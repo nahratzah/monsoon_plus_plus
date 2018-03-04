@@ -20,31 +20,35 @@ namespace monsoon::cache {
  * \tparam Create Constructor function.
  *  create() -> store_type.
  */
-template<typename Predicate, typename Create, typename SizeType>
+template<typename Predicate, typename Create, typename SizeType, typename OnHit>
 struct bucket_ctx {
-  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create, SizeType& size)
+  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create, SizeType& size, OnHit on_hit)
   noexcept(std::is_nothrow_move_constructible_v<Predicate>
       && std::is_nothrow_move_constructible_v<Create>)
   : hash_code(std::move(hash_code)),
     predicate(std::move(predicate)),
     create(std::move(create)),
-    size(size)
+    size(size),
+    on_hit(std::move(on_hit))
   {}
 
   std::size_t hash_code;
   Predicate predicate; ///<\brief Element predicate.
   Create create; ///<\brief Constructor.
   SizeType& size; ///<\brief Reference to cache size.
+  OnHit on_hit;
 };
 
-template<typename Predicate, typename Create, typename SizeType>
-constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create, SizeType& size)
--> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType> {
-  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType>;
-  return type(hash_code,
+template<typename Predicate, typename Create, typename SizeType, typename OnHit>
+constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create, SizeType& size, OnHit&& on_hit)
+-> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType, std::decay_t<OnHit>> {
+  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType, std::decay_t<OnHit>>;
+  return type(
+      hash_code,
       std::forward<Predicate>(predicate),
       std::forward<Create>(create),
-      size);
+      size,
+      std::forward<OnHit>(on_hit));
 }
 
 template<typename T, typename... Decorators>
@@ -83,18 +87,21 @@ class bucket {
    * \brief Look up element with given key.
    * \returns Element with the given key, or nullptr if no such element exists.
    */
-  template<typename KeyPredicate, typename Create, typename SizeType>
-  auto lookup_if_present(const bucket_ctx<KeyPredicate, Create, SizeType>& ctx) const
+  template<typename KeyPredicate, typename Create, typename SizeType, typename OnHit>
+  auto lookup_if_present(const bucket_ctx<KeyPredicate, Create, SizeType, OnHit>& ctx) const
   noexcept
   -> lookup_type {
-    const store_type* s = head_;
+    store_type* s = head_;
     while (s != nullptr) {
       if (s->hash() == ctx.hash_code
           && ctx.predicate(*s)) {
         // We don't check s.is_expired(), since the key can expire between
         // the check and pointer resolution.
         lookup_type ptr = s->ptr();
-        if (!store_type::is_nil(ptr)) return ptr;
+        if (!store_type::is_nil(ptr)) {
+          ctx.on_hit(*s);
+          return ptr;
+        }
       }
 
       s = successor_ptr(*s);
@@ -112,8 +119,8 @@ class bucket {
    *  Will be set to nullptr if the element was found.
    * \returns Element with the given key, creating one if absent.
    */
-  template<typename Alloc, typename KeyPredicate, typename Create, typename SizeType>
-  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, SizeType>& ctx, store_type*& created)
+  template<typename Alloc, typename KeyPredicate, typename Create, typename SizeType, typename OnHit>
+  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, SizeType, OnHit>& ctx, store_type*& created)
   -> pointer {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
     using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
@@ -142,7 +149,10 @@ class bucket {
         lookup_type ptr = s->ptr();
         // Must check for nullptr: could have expired
         // since s->is_expired() check above.
-        if (!store_type::is_nil(ptr)) return ptr;
+        if (!store_type::is_nil(ptr)) {
+          ctx.on_hit(*s);
+          return ptr;
+        }
       }
 
       iter = &successor_ptr(*s); // Advance iter.

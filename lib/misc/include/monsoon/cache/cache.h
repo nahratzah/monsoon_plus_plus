@@ -16,7 +16,7 @@ class cache_intf {
 
   virtual ~cache_intf() noexcept {}
 
-  virtual auto get_if_present(const key_type& key) const
+  virtual auto get_if_present(const key_type& key)
   -> pointer = 0;
 
   virtual auto get(const key_type& key)

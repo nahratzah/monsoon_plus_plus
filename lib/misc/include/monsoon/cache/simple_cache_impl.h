@@ -112,6 +112,37 @@ struct decorators_on_delete_<S, D0, D...> {
 };
 
 
+template<typename S, typename D, typename = void>
+struct decorator_on_hit_ {
+  static auto apply(S& s, D& d) -> void {}
+};
+
+template<typename S, typename D>
+struct decorator_on_hit_<S, D, std::void_t<decltype(std::declval<D&>().on_hit(std::declval<S&>()))>> {
+  static_assert(noexcept(std::declval<D&>().on_hit(std::declval<S&>())),
+      "on_hit must be a noexcept function.");
+  static auto apply(S& s, D& d) -> void { d.on_hit(s); }
+};
+
+template<typename S, typename... D>
+struct decorators_on_hit_;
+
+template<typename S>
+struct decorators_on_hit_<S> {
+  template<typename T>
+  static auto apply(S& s, T& v) noexcept {}
+};
+
+template<typename S, typename D0, typename... D>
+struct decorators_on_hit_<S, D0, D...> {
+  template<typename T>
+  static auto apply(S& s, T& v) noexcept -> void {
+    decorator_on_hit_<S, D0>::apply(s, v);
+    decorators_on_hit_<S, D...>::apply(s, v);
+  }
+};
+
+
 template<typename D, typename = void>
 struct cache_decorator_tpl_ {
   static auto apply(D& d) -> decltype(auto) {
@@ -200,7 +231,7 @@ class simple_cache_impl
   auto size() const noexcept -> size_type;
 
   template<typename Predicate, typename TplBuilder, typename Create>
-  auto lookup_if_present(const cache_query<Predicate, TplBuilder, Create>& q) const noexcept -> pointer {
+  auto lookup_if_present(const cache_query<Predicate, TplBuilder, Create>& q) noexcept -> pointer {
     // Acquire lock on the cache.
     // One of the decorators is to supply lock() and unlock() methods,
     // that can be called on a const-reference of this.
@@ -211,7 +242,8 @@ class simple_cache_impl
         q.hash_code,
         q.predicate,
         []() -> store_type { throw std::runtime_error("create should not be called"); },
-        size_);
+        size_,
+        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); });
 
     // Execute query.
     assert(buckets_.size() > 0);
@@ -237,7 +269,8 @@ class simple_cache_impl
               ch(alloc_), q.hash_code,
               std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<CacheDecorators>::apply(*this)...));
         },
-        size_);
+        size_,
+        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); });
 
     // Execute query.
     store_type* created;
