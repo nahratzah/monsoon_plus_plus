@@ -11,6 +11,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Variables used by bucket to do its work.
+ * \ingroup cache
  * \details These variables are kept outside bucket,
  * in order to reduce memory overhead.
  *
@@ -60,6 +61,11 @@ constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Cre
       std::forward<OnDelete>(on_delete));
 }
 
+/**
+ * \brief Cache bucket.
+ * \ingroup cache
+ * \details A bucket contains all objects, based on a given modulo of the hash code.
+ */
 template<typename T, typename... Decorators>
 class bucket {
  private:
@@ -292,6 +298,10 @@ class bucket {
   store_type* head_ = nullptr;
 };
 
+/**
+ * \brief Element decorator used by bucket to maintain its chain of elements.
+ * \ingroup cache
+ */
 template<typename T, typename... Decorators>
 class bucket<T, Decorators...>::bucket_link {
   template<typename, typename...> friend class bucket;

@@ -11,6 +11,8 @@
 
 namespace monsoon::cache {
 namespace {
+///\brief Various functions and data types, to adapt the result of a create function.
+///\ingroup cache
 namespace create_ops {
 
 
@@ -106,6 +108,7 @@ auto future_as_pointer_future_(Alloc alloc, std::shared_future<T> fut)
 
 /**
  * \brief Wraps create function so it emits the proper type.
+ * \ingroup cache
  *
  * \details
  * Invokes \p Fn, with an allocator and a given set of arguments.
@@ -148,6 +151,7 @@ class create_handler {
 
 /**
  * \brief Wraps create function so it emits the proper type.
+ * \ingroup cache
  *
  * \details
  * Invokes \p Fn, with an allocator and a given set of arguments.
@@ -199,6 +203,7 @@ class create_handler<Fn, true> { // Async case.
   Fn fn_;
 };
 
+///\brief Returns a create handler for the given create function.
 template<bool Async, typename Fn>
 auto make_create_handler(Fn&& fn)
 -> create_handler<std::decay_t<Fn>, Async> {

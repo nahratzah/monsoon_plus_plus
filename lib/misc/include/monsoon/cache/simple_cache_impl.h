@@ -18,6 +18,7 @@ namespace {
 
 
 ///\brief Scoped lock to prevent a store type from being deleted.
+///\ingroup cache
 template<typename S>
 class store_delete_lock {
  public:
@@ -222,11 +223,18 @@ struct cache_decorator_tpl_<D, std::void_t<decltype(std::declval<D&>().init_tupl
 
 } /* namespace monsoon::cache::<unnamed> */
 
+/**
+ * \brief Implementation of all the internal cache logic.
+ * \ingroup cache
+ * \details This class combines all decorators and performs lookups,
+ * as well as cache maintenance tasks.
+ */
 template<typename T, typename Alloc, typename... CacheDecorators>
 class simple_cache_impl
 : public CacheDecorators...
 {
  public:
+  ///\brief Size type of the cache.
   using size_type = std::uintptr_t;
 
  private:

@@ -19,6 +19,7 @@ class extended_cache;
 
 
 ///\brief Type agnostic data in \ref cache_builder "cache builder".
+///\ingroup cache
 class cache_builder_vars {
  public:
   ///\bug Not implemented.
@@ -41,6 +42,7 @@ class cache_builder_vars {
 
 /**
  * \brief Cache builder.
+ * \ingroup cache
  * \details Contains all parameters to build a cache.
  * \tparam T The key type of the cache.
  * \tparam U The mapped type of the cache.

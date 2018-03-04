@@ -9,6 +9,13 @@
 namespace monsoon::cache {
 
 
+/**
+ * \brief Decorator, that ensures newly created elements are weakened.
+ * \ingroup cache
+ * Weakened elements use a weak pointer to their data, which will enable
+ * expiring as soon as no data structures outside the cache are referencing
+ * the mapped type.
+ */
 struct weaken_decorator {
   template<typename Builder>
   constexpr weaken_decorator([[maybe_unused]] const Builder& b) noexcept

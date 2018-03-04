@@ -14,11 +14,20 @@
 namespace monsoon::cache {
 
 
-template<typename T, typename U>
+/**
+ * \brief Simple key-value interface of cache.
+ * \ingroup cache
+ * \details The simple interface omits the variable arguments interface
+ * of the \ref extended_cache_intf "extended cache".
+ * \tparam K The key type of the cache.
+ * \tparam V The mapped type of the cache.
+ * \sa \ref cache<K,V>
+ */
+template<typename K, typename V>
 class cache_intf {
  public:
-  using key_type = T;
-  using pointer = std::shared_ptr<U>;
+  using key_type = K;
+  using pointer = std::shared_ptr<V>;
 
   virtual ~cache_intf() noexcept {}
 
@@ -29,17 +38,30 @@ class cache_intf {
   -> pointer = 0;
 };
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc, typename Create>
+/**
+ * \brief Extended cache interface.
+ * \ingroup cache
+ * \details The extended interface allows for querying a cache using a set
+ * of arguments.
+ * \tparam K The key type of the cache.
+ * \tparam V The mapped type of the cache.
+ * \tparam Hash A hash function for the key.
+ * \tparam Eq An equality predicate for the key.
+ * \tparam Alloc Allocator used by the cache.
+ * \tparam Create Mapped type construction function.
+ * \sa \ref extended_cache<K,V>
+ */
+template<typename K, typename V, typename Hash, typename Eq, typename Alloc, typename Create>
 class extended_cache_intf
-: public cache_intf<T, U>
+: public cache_intf<K, V>
 {
  public:
-  using pointer = typename cache_intf<T, U>::pointer;
+  using pointer = typename cache_intf<K, V>::pointer;
   using create_result_type =
-      std::decay_t<decltype(std::declval<const Create&>()(std::declval<Alloc&>(), std::declval<const T&>()))>;
+      std::decay_t<decltype(std::declval<const Create&>()(std::declval<Alloc&>(), std::declval<const K&>()))>;
   using extended_query_type = cache_query<
-      std::function<bool(const key_decorator<T>&)>,
-      std::function<std::tuple<T>()>,
+      std::function<bool(const key_decorator<K>&)>,
+      std::function<std::tuple<K>()>,
       std::function<create_result_type(Alloc)>>;
 
   template<typename HashArg, typename EqArg, typename CreateArg>
@@ -54,8 +76,8 @@ class extended_cache_intf
 
   ~extended_cache_intf() noexcept override {}
 
-  using cache_intf<T, U>::get_if_present;
-  using cache_intf<T, U>::get;
+  using cache_intf<K, V>::get_if_present;
+  using cache_intf<K, V>::get;
 
   virtual auto get(const extended_query_type& q) -> pointer = 0;
 
@@ -64,32 +86,39 @@ class extended_cache_intf
   Create create;
 };
 
-template<typename T, typename U>
+/**
+ * \brief A key-value cache.
+ * \ingroup cache
+ * \details This cache allows looking up values, by a given key.
+ * \tparam K The key type of the cache.
+ * \tparam V The mapped type of the cache.
+ */
+template<typename K, typename V>
 class cache {
   // Extended cache calls our constructor.
-  template<typename OtherT, typename OtherU, typename Hash, typename Eq, typename Alloc, typename Create>
+  template<typename OtherK, typename OtherV, typename Hash, typename Eq, typename Alloc, typename Create>
   friend class extended_cache;
 
  public:
-  using key_type = typename cache_intf<T, U>::key_type;
-  using pointer = typename cache_intf<T, U>::pointer;
+  using key_type = typename cache_intf<K, V>::key_type;
+  using pointer = typename cache_intf<K, V>::pointer;
 
   cache() = delete; // Use builder.
 
   static constexpr auto builder()
-  -> cache_builder<T, U> {
-    return cache_builder<T, U>();
+  -> cache_builder<K, V> {
+    return cache_builder<K, V>();
   }
 
   template<typename Alloc>
   static constexpr auto builder(Alloc alloc)
-  -> cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc> {
-    return cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc>(
-        std::hash<T>(), std::equal_to<T>(), std::move(alloc));
+  -> cache_builder<K, V, std::hash<K>, std::equal_to<K>, Alloc> {
+    return cache_builder<K, V, std::hash<K>, std::equal_to<K>, Alloc>(
+        std::hash<K>(), std::equal_to<K>(), std::move(alloc));
   }
 
  private:
-  explicit cache(std::shared_ptr<cache_intf<T, U>>&& impl) noexcept
+  explicit cache(std::shared_ptr<cache_intf<K, V>>&& impl) noexcept
   : impl_(std::move(impl))
   {}
 
@@ -110,19 +139,30 @@ class cache {
   }
 
  private:
-  std::shared_ptr<cache_intf<T, U>> impl_;
+  std::shared_ptr<cache_intf<K, V>> impl_;
 };
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc, typename Create>
+/**
+ * \brief A cache that allows lookup by argument pack.
+ * \ingroup cache
+ * \details This cache allows looking up values, by a given argument pack.
+ * \tparam K The key type of the cache.
+ * \tparam V The mapped type of the cache.
+ * \tparam Hash A hash function for the key.
+ * \tparam Eq An equality predicate for the key.
+ * \tparam Alloc Allocator used by the cache.
+ * \tparam Create Mapped type construction function.
+ */
+template<typename K, typename V, typename Hash, typename Eq, typename Alloc, typename Create>
 class extended_cache {
   // Cache builder will use private constructor to instantiate cache.
-  template<typename OtherT, typename OtherU, typename OtherHash, typename OtherEq, typename OtherAlloc>
+  template<typename OtherK, typename OtherV, typename OtherHash, typename OtherEq, typename OtherAlloc>
   friend class cache_builder;
 
  private:
-  using key_type = typename cache<T, U>::key_type;
-  using pointer = typename cache<T, U>::pointer;
-  using extended_cache_type = extended_cache_intf<T, U, Hash, Eq, Alloc, Create>;
+  using key_type = typename cache<K, V>::key_type;
+  using pointer = typename cache<K, V>::pointer;
+  using extended_cache_type = extended_cache_intf<K, V, Hash, Eq, Alloc, Create>;
   using extended_query_type = typename extended_cache_type::extended_query_type;
 
   extended_cache(std::shared_ptr<extended_cache_type>&& impl) noexcept
@@ -151,17 +191,17 @@ class extended_cache {
     return impl_->lookup_or_create(
         extended_query_type(
             impl_->hash_(args...),
-            [this, &args...](const key_decorator<T>& s) { return impl_->eq_(s.key, args...); },
-            [this, &args...]() { return std::make_tuple(T(args...)); },
+            [this, &args...](const key_decorator<K>& s) { return impl_->eq_(s.key, args...); },
+            [this, &args...]() { return std::make_tuple(K(args...)); },
             [this, &args...](Alloc alloc) { return impl_->create_(alloc, args...); }));
   }
 
-  operator cache<T, U>() const & {
-    return cache<T, U>(impl_);
+  operator cache<K, V>() const & {
+    return cache<K, V>(impl_);
   }
 
-  operator cache<T, U>() && {
-    return cache<T, U>(std::move(impl_));
+  operator cache<K, V>() && {
+    return cache<K, V>(std::move(impl_));
   }
 
  private:

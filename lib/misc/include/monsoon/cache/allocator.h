@@ -18,6 +18,7 @@ class cache_allocator;
 
 /**
  * \brief Interface used by cache_allocator to record changes in memory usage.
+ * \ingroup cache
  */
 class cache_alloc_dealloc_observer {
  public:
@@ -60,6 +61,7 @@ class cache_alloc_dealloc_observer {
 
 /**
  * \brief Allocator wrapper that enables cache memory use tracking.
+ * \ingroup cache
  *
  * \details
  * Cache allocator maintains an internal weak reference to the cache.

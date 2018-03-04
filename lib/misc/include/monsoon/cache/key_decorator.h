@@ -11,6 +11,7 @@ namespace monsoon::cache {
 
 
 ///\brief Element decorator, for storing a key.
+///\ingroup cache
 template<typename T>
 struct key_decorator {
   static_assert(!std::is_const_v<T> && !std::is_volatile_v<T> && !std::is_reference_v<T>,
@@ -71,6 +72,8 @@ struct key_decorator {
 };
 
 
+///\brief Cache decorator, that informs element to have a \ref key_decorator "key decorator".
+///\ingroup cache
 template<typename T>
 struct cache_key_decorator {
   using element_decorator_type = key_decorator<T>;

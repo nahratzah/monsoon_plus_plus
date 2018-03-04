@@ -12,6 +12,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Cache decorator that handles access expire.
+ * \ingroup cache
  *
  * \bug While the access expire correctly suppresses the element
  * once the timer is up, it would be nice to use a list of elements
