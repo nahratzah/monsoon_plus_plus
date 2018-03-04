@@ -111,27 +111,36 @@ class cache {
 };
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc, typename Create>
-class extended_cache
-: public cache<T, U>
-{
+class extended_cache {
   // Cache builder will use private constructor to instantiate cache.
   template<typename OtherT, typename OtherU, typename OtherHash, typename OtherEq, typename OtherAlloc>
   friend class cache_builder;
 
  private:
+  using key_type = typename cache<T, U>::key_type;
   using pointer = typename cache<T, U>::pointer;
   using extended_cache_type = extended_cache_intf<T, U, Hash, Eq, Alloc, Create>;
   using extended_query_type = typename extended_cache_type::extended_query_type;
 
   extended_cache(std::shared_ptr<extended_cache_type>&& impl) noexcept
-  : cache<T, U>(impl),
-    impl_(std::move(impl))
+  : impl_(std::move(impl))
   {}
 
  public:
-  using cache<T, U>::get_if_present;
-  using cache<T, U>::get;
-  using cache<T, U>::operator();
+  auto get_if_present(const key_type& key) const
+  -> pointer {
+    return impl_->get_if_present(key);
+  }
+
+  auto get(const key_type& key) const
+  -> pointer {
+    return impl_->get(key);
+  }
+
+  auto operator()(const key_type& key) const
+  -> pointer {
+    return get(key);
+  }
 
   template<typename... Args>
   auto get(const Args&... args) const
@@ -142,6 +151,14 @@ class extended_cache
             [this, &args...](const key_decorator<T>& s) { return impl_->eq_(s.key, args...); },
             [this, &args...]() { return std::make_tuple(T(args...)); },
             [this, &args...](Alloc alloc) { return impl_->create_(alloc, args...); }));
+  }
+
+  operator cache<T, U>() const & {
+    return cache<T, U>(impl_);
+  }
+
+  operator cache<T, U>() && {
+    return cache<T, U>(std::move(impl_));
   }
 
  private:
