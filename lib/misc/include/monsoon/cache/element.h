@@ -1,28 +1,35 @@
 #ifndef MONSOON_CACHE_ELEMENT_H
 #define MONSOON_CACHE_ELEMENT_H
 
+#include <memory>
+#include <future>
+#include <type_traits>
+#include <utility>
+#include <cstddef>
+#include <variant>
+
 namespace monsoon::cache {
 namespace {
 
 ///\brief Invoke the is_expired() method on the decorator.
 template<typename D, typename = void>
 struct decorator_is_expired_ {
-  static auto apply(const D& v) const noexcept -> bool { return false; }
+  static auto apply(const D& v) noexcept -> bool { return false; }
 };
 
 template<typename D>
 struct decorator_is_expired_<D, std::void_t<decltype(std::declval<const D&>().is_expired())>> {
-  static auto apply(const D& v) const noexcept -> bool { return v.is_expired(); }
+  static auto apply(const D& v) noexcept -> bool { return v.is_expired(); }
 };
 
 
 ///\brief Invoke the is_expired() method on each of the decorators.
-template<typename... Decorators> struct decorator_is_expired_;
+template<typename... Decorators> struct decorators_is_expired_;
 
 template<>
 struct decorators_is_expired_<> {
   template<typename T>
-  static auto apply(const T& v) noexcept -> bool { return v; }
+  static auto apply(const T& v) noexcept -> bool { return false; }
 };
 
 template<typename D, typename... Tail>
@@ -98,10 +105,11 @@ class element
       std::variant<std::monostate, weak_pointer, pointer>>;
 
  public:
-  static auto is_nil(const ptr_return_type& p) const noexcept -> bool;
+  static auto is_nil(const ptr_return_type& p) noexcept -> bool;
 
   ///\brief Create an empty element.
   ///\details Creates an element holding a nullptr, with a hash value of zero.
+  template<typename Alloc>
   element(std::allocator_arg_t tag, Alloc alloc) noexcept;
 
   /**
@@ -127,9 +135,9 @@ class element
    *    Decorators are expected to retrieve their information using
    *    std::get<type> on the \p decorator_ctx.
    */
-  template<typename Alloc, typename = std::enable_if_t<is_async>, typename... DecoratorCtx>
+  template<typename Alloc, typename... DecoratorCtx, bool Enable = is_async>
   explicit element([[maybe_unused]] std::allocator_arg_t, Alloc alloc,
-      future_type init, std::size_t hash,
+      std::enable_if_t<Enable, future_type> init, std::size_t hash,
       std::tuple<DecoratorCtx...> decorator_ctx) noexcept;
 
   ///\brief Returns the hash code of the underlying pointer.
@@ -164,17 +172,7 @@ class element
    *
    * \returns The element, by lvalue reference.
    */
-  auto weaken() noexcept & -> element&;
-  /**
-   * \brief Change the strong reference to a weak reference.
-   *
-   * \details
-   * When the element holds a weak reference, the pointee is allowed to expire
-   * once its life time outside the cache ends.
-   *
-   * \returns The element, by rvalue reference.
-   */
-  auto weaken() noexcept && -> element&&;
+  auto weaken() noexcept -> element&;
 
  private:
   std::size_t hash_ = 0;
@@ -184,7 +182,7 @@ class element
 
 
 template<typename T, typename... D>
-auto element<T, D...>::is_nil(const ptr_return_type& p) const
+auto element<T, D...>::is_nil(const ptr_return_type& p)
 noexcept
 -> bool {
   if constexpr(is_async) {
@@ -200,18 +198,18 @@ template<typename Alloc, typename... DecoratorCtx>
 element<T, D...>::element(std::allocator_arg_t tag, Alloc alloc,
     std::shared_ptr<type> init, std::size_t hash,
     std::tuple<DecoratorCtx...> decorator_ctx) noexcept
-: Decorators(tag, alloc, decorator_ctx)...,
+: D(tag, alloc, decorator_ctx)...,
   hash_(hash),
   ptr_(std::in_place_type<pointer>, std::move(init)),
-  plain_ptr_(ptr_.get())
+  plain_ptr_(std::get<pointer>(ptr_).get())
 {}
 
 template<typename T, typename... D>
-template<typename Alloc, typename, typename... DecoratorCtx>
+template<typename Alloc, typename... DecoratorCtx, bool Enable>
 element<T, D...>::element(std::allocator_arg_t tag, Alloc alloc,
-    future_type init, std::size_t hash,
+    std::enable_if_t<Enable, future_type> init, std::size_t hash,
     std::tuple<DecoratorCtx...> decorator_ctx) noexcept
-: Decorators(tag, alloc, decorator_ctx)...,
+: D(tag, alloc, decorator_ctx)...,
   hash_(hash),
   ptr_(std::in_place_type<async_type>, std::move(init)),
   plain_ptr_(nullptr)
@@ -247,7 +245,7 @@ noexcept
 }
 
 template<typename T, typename... D>
-auto element<T, D...>::is_ptr(type* pp) const
+auto element<T, D...>::is_ptr(simple_pointer pp) const
 noexcept
 -> bool {
   return plain_ptr_ == pp;
@@ -284,7 +282,7 @@ auto element<T, D...>::resolve()
         ptr = std::get<async_type>.fut.get();
       } catch (...) {
         // Invalidate on exception, so that future hits will not consider this.
-        ptr_.emplace<std::monotype>();
+        ptr_.template emplace<std::monostate>();
         throw;
       }
 
@@ -292,9 +290,9 @@ auto element<T, D...>::resolve()
       plain_ptr_ = ptr.get();
       // Update ptr_ with resolved pointer value.
       if (std::get<async_type>(ptr_).strong)
-        ptr_.emplace<pointer>(ptr);
+        ptr_.template emplace<pointer>(ptr);
       else
-        ptr_.emplace<weak_pointer>(ptr);
+        ptr_.template emplace<weak_pointer>(ptr);
       return ptr;
     }
 
@@ -305,12 +303,12 @@ auto element<T, D...>::resolve()
 }
 
 template<typename T, typename... D>
-auto element<T, D...>::weaken() &
+auto element<T, D...>::weaken()
 noexcept
 -> element& {
   if (std::holds_alternative<pointer>(ptr_)) {
     auto ptr = std::get<pointer>(std::move(ptr_));
-    ptr_.emplace<weak_pointer>(std::move(wptr));
+    ptr_.template emplace<weak_pointer>(std::move(ptr));
   } else {
     if constexpr(is_async) {
       if (std::holds_alternative<async_type>(ptr_))
@@ -318,14 +316,6 @@ noexcept
     }
   }
   return *this;
-}
-
-template<typename T, typename... D>
-auto element<T, D...>::weaken() &&
-noexcept
--> element&& {
-  weaken();
-  return std::move(*this);
 }
 
 
@@ -338,7 +328,7 @@ namespace std {
 template<typename T, typename... D, typename Alloc>
 struct uses_allocator<monsoon::cache::element<T, D...>, Alloc>
 : true_type
-{}
+{};
 
 
 } /* namespace std */

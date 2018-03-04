@@ -2,12 +2,24 @@
 #include <monsoon/config_support.h>
 #include <monsoon/grammar/intf/rules.h>
 #include <monsoon/overload.h>
+#include <monsoon/cache/cache.h>
+#include <monsoon/cache/builder_build.h>
 #include <cmath>
 #include <ostream>
 #include <cassert>
 
 namespace monsoon {
 namespace {
+
+
+thread_local cache::cache<std::string, std::string> string_cache = cache::cache<std::string, std::string>::builder()
+    .not_thread_safe()
+    .no_concurrency()
+    .load_factor(4)
+    .no_expire()
+    .build([](std::string_view sv) -> std::string { return std::string(sv.begin(), sv.end()); });
+
+
 namespace metric_value_ops {
 
 

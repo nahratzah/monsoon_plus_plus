@@ -11,38 +11,84 @@
 namespace monsoon::cache {
 
 
+template<typename T, typename U>
+class cache;
+
+
+///\brief Type agnostic data in \ref cache_builder "cache builder".
+class cache_builder_vars {
+ public:
+  auto max_memory() const noexcept -> std::optional<std::uintptr_t>;
+  auto max_size() const noexcept -> std::optional<std::uintptr_t>;
+  auto max_age() const noexcept -> std::optional<std::chrono::seconds>;
+  auto access_expire() const noexcept -> std::optional<std::chrono::seconds>;
+  auto thread_safe() const noexcept -> bool;
+  auto concurrency() const noexcept -> unsigned int;
+  auto load_factor() const noexcept -> float;
+
+ protected:
+  std::optional<std::uintptr_t> max_memory_, max_size_;
+  std::optional<std::chrono::seconds> max_age_, access_expire_;
+  bool thread_safe_ = true;
+  unsigned int concurrency_ = 0; // zero signifies to use std::hardware_concurrency
+  float lf_ = 1.0;
+};
+
+/**
+ * \brief Cache builder.
+ * \details Contains all parameters to build a cache.
+ * \tparam T The key type of the cache.
+ * \tparam U The mapped type of the cache.
+ * \tparam Hash Hash function on the key type.
+ * \tparam Eq Equality predicate on the key type.
+ * \tparam Alloc Allocator to use for cache elements.
+ */
 template<typename T, typename U,
     typename Hash = std::hash<T>,
     typename Eq = std::equal_to<T>,
     typename Alloc = std::allocator<U>>
-class cache_builder {
+class cache_builder
+: public cache_builder_vars
+{
  public:
+  using key_type = T;
+  using mapped_type = U;
+
   constexpr explicit cache_builder(
-      Hash hash = Hash(), Eq eq = Eq(), Alloc alloc = Alloc());
-  constexpr explicit cache_builder(
-      const cache_builder<OtherT, OtherU, OtherHash, OtherEq, OtherAlloc>& other,
       Hash hash = Hash(), Eq eq = Eq(), Alloc alloc = Alloc());
 
+  template<typename OtherT, typename OtherU, typename OtherHash, typename OtherEq, typename OtherAlloc>
+  constexpr explicit cache_builder(
+      const cache_builder_vars& other,
+      Hash hash = Hash(), Eq eq = Eq(), Alloc alloc = Alloc());
+
+  using cache_builder_vars::max_memory;
   constexpr auto max_memory(std::uintptr_t v) noexcept -> cache_builder&;
   constexpr auto no_max_memory() noexcept -> cache_builder&;
 
+  using cache_builder_vars::max_size;
   constexpr auto max_size(std::uintptr_t v) noexcept -> cache_builder&;
   constexpr auto no_max_size() noexcept -> cache_builder&;
 
+  using cache_builder_vars::max_age;
   constexpr auto max_age(std::chrono::seconds d) -> cache_builder&;
   constexpr auto no_max_age() noexcept -> cache_builder&;
 
+  using cache_builder_vars::access_expire;
   constexpr auto access_expire(std::chrono::seconds d) -> cache_builder&;
   constexpr auto no_access_expire() noexcept -> cache_builder&;
 
   constexpr auto no_expire() noexcept -> cache_builder&;
 
+  using cache_builder_vars::thread_safe;
   constexpr auto thread_safe() noexcept -> cache_builder&;
   constexpr auto not_thread_safe() noexcept -> cache_builder&;
 
+  using cache_builder_vars::concurrency;
   constexpr auto with_concurrency(unsigned int n = 0) noexcept -> cache_builder&;
   constexpr auto no_concurrency() noexcept -> cache_builder&;
 
+  using cache_builder_vars::load_factor;
   auto load_factor(float lf) -> cache_builder&;
 
   template<typename NewHash>
@@ -59,30 +105,18 @@ class cache_builder {
 
   /**
    * \brief Build the cache described by this builder.
-   * \note You should include <monsoon/cache_impl.h> if you call this function.
+   * \note You should include <monsoon/builder_build.h> if you call this function.
    * \returns A new cache described by the specification in this.
    */
   template<typename Fn>
   auto build(Fn&& fn) const
   -> cache<T, U>;
 
-  auto max_memory() const noexcept -> std::optional<std::uintptr_t>;
-  auto max_size() const noexcept -> std::optional<std::uintptr_t>;
-  auto max_age() const noexcept -> std::optional<std::chrono::second>;
-  auto access_expire() const noexcept -> std::optional<std::chrono::second>;
-  auto alloc() const noexcept -> const Alloc&;
-  auto thread_safe() const noexcept -> bool;
-  auto concurrency() const noexcept -> unsigned int;
-  auto load_factor() const noexcept -> float;
   auto hash() const noexcept -> Hash;
   auto equality() const noexcept -> Eq;
   auto allocator() const noexcept -> Alloc;
 
  private:
-  std::optional<std::uintptr_t> max_memory_, max_size_;
-  std::optional<std::chrono::seconds> max_age_, access_expire_;
-  bool thread_safe_ = true;
-  unsigned int concurrency_ = 0; // zero signifies to use std::hardware_concurrency
   Hash hash_;
   Eq eq_;
   Alloc alloc_;
@@ -90,22 +124,17 @@ class cache_builder {
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 constexpr cache_builder<T, U, Hash, Eq, Alloc>::cache_builder(Hash hash, Eq eq, Alloc alloc)
-: hash_(std::move(hash_)),
-  eq_(std::move(eq_)),
+: hash_(std::move(hash)),
+  eq_(std::move(eq)),
   alloc_(std::move(alloc))
 {}
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename OtherT, typename OtherU, typename OtherHash, typename OtherEq, typename OtherAlloc>
-constexpr cache_builder<T, U, Hash, Eq, Alloc>::explicit cache_builder(
-    const cache_builder<OtherT, OtherU, OtherHash, OtherEq, OtherAlloc>& other,
-    Hash hash = Hash(), Eq eq = Eq(), Alloc alloc = Alloc())
-: max_memory_(other.max_memory_),
-  max_size_(other.max_size_),
-  max_age_(other.max_age_),
-  access_expire_(other.access_expire_),
-  thread_safe_(other.thread_safe_),
-  concurrency_(other.concurrency_),
+constexpr cache_builder<T, U, Hash, Eq, Alloc>::cache_builder(
+    const cache_builder_vars& other,
+    Hash hash, Eq eq, Alloc alloc)
+: cache_builder_vars(other),
   hash_(std::move(hash_)),
   eq_(std::move(eq_)),
   alloc_(std::move(alloc))
@@ -146,7 +175,7 @@ noexcept
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::max_age(std::chrono::seconds d)
 -> cache_builder& {
-  if (d <= std::chrono::seconds::zero)
+  if (d <= std::chrono::seconds::zero())
     throw std::invalid_argument("negative/zero expiry");
   max_age_ = d;
   return *this;
@@ -163,7 +192,7 @@ noexcept
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::access_expire(std::chrono::seconds d)
 -> cache_builder& {
-  if (d <= std::chrono::seconds::zero)
+  if (d <= std::chrono::seconds::zero())
     throw std::invalid_argument("negative/zero expiry");
   access_expire_ = d;
   return *this;
@@ -203,7 +232,7 @@ noexcept
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::with_concurrency(unsigned int n = 0)
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::with_concurrency(unsigned int n)
 noexcept
 -> cache_builder& {
   concurrency_ = n;
@@ -238,7 +267,7 @@ template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewEq>
 auto cache_builder<T, U, Hash, Eq, Alloc>::with_equality(NewEq eq) const
 -> cache_builder<Hash, NewEq, Alloc> {
-  return cache_builder<Hash, NewEq, NewAlloc>(*this, hash_, eq, alloc_);
+  return cache_builder<Hash, NewEq, Alloc>(*this, hash_, eq, alloc_);
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
@@ -248,50 +277,37 @@ auto cache_builder<T, U, Hash, Eq, Alloc>::with_allocator(NewAlloc alloc) const
   return cache_builder<Hash, Eq, NewAlloc>(*this, hash_, eq_, alloc);
 }
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::max_memory() const
+inline auto cache_builder_vars::max_memory() const
 noexcept
 -> std::optional<std::uintptr_t> {
   return max_memory_;
 }
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::max_size() const
+inline auto cache_builder_vars::max_size() const
 noexcept
 -> std::optional<std::uintptr_t> {
   return max_size_;
 }
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::max_age() const
+inline auto cache_builder_vars::max_age() const
 noexcept
--> std::optional<std::chrono::second> {
+-> std::optional<std::chrono::seconds> {
   return max_age_;
 }
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::access_expire() const
+inline auto cache_builder_vars::access_expire() const
 noexcept
--> std::optional<std::chrono::second> {
+-> std::optional<std::chrono::seconds> {
   return access_expire_;
 }
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::alloc() const
-noexcept
--> const Alloc& {
-  return alloc;
-}
-
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::thread_safe() const
+inline auto cache_builder_vars::thread_safe() const
 noexcept
 -> bool {
   return thread_safe_;
 }
 
-template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::concurrency() const
+inline auto cache_builder_vars::concurrency() const
 noexcept
 -> unsigned int {
   return concurrency_;

@@ -23,20 +23,25 @@ class cache_intf {
 
 template<typename T, typename U>
 class cache {
+  // Cache builder will use private constructor to instantiate cache.
+  template<typename K, typename V, typename Hash, typename Eq, typename Alloc>
+  friend class cache_builder;
+
  public:
-  using key_type = typename cache_impl<T, U>::key_type;
-  using pointer = typename cache_impl<T, U>::pointer;
+  using key_type = typename cache_intf<T, U>::key_type;
+  using pointer = typename cache_intf<T, U>::pointer;
 
   cache() = delete; // Use builder.
 
   static constexpr auto builder()
-  -> cache_builder {
-    return cache_builder();
+  -> cache_builder<T, U> {
+    return cache_builder<T, U>();
   }
 
+  template<typename Alloc>
   static constexpr auto builder(Alloc alloc)
-  -> cache_builder {
-    return cache_builder(std::move(alloc));
+  -> cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc> {
+    return cache_builder<T, U, std::hash<T>, std::equal_to<T>, Alloc>(std::move(alloc));
   }
 
  private:
@@ -58,18 +63,10 @@ class cache {
   }
 
  private:
-  std::shared_ptr<cache_intf<T>> impl_;
+  std::shared_ptr<cache_intf<T, U>> impl_;
 };
 
 
 } /* namespace monsoon::cache */
-
-namespace monsoon {
-
-
-using monsoon::cache;
-
-
-} /* namespace monsoon */
 
 #endif /* MONSOOON_CACHE_H */

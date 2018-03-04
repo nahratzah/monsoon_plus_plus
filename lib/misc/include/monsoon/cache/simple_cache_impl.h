@@ -5,7 +5,7 @@
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/key_decorator.h>
 #include <cmath>
-#include <scoped_allocator>
+#include <stdexcept>
 
 namespace monsoon::cache {
 namespace {
@@ -40,12 +40,13 @@ struct bucket_add_nonvoid_types_<bucket<ElemArgs...>> {
 };
 
 
-template<typename Bucket, typename... CacheDecorators> struct decorate_bucket_;
-
-template<typename Bucket, typename CacheDecorators>
-struct decorate_bucket_<Bucket, CacheDecorators> {
-  using type = typename bucket_add_nonvoid_types_<Bucket, decorate_for_<CacheDecorators>...>::type;
+template<typename Bucket, typename... CacheDecorators>
+struct decorate_bucket_ {
+  using type = typename bucket_add_nonvoid_types_<Bucket, typename decorator_for_<CacheDecorators>::type...>::type;
 };
+
+template<typename Elem, typename... CacheDecorators>
+using decorate_bucket_t = typename decorate_bucket_<Elem, CacheDecorators...>::type;
 
 
 template<typename S, typename D, typename = void>
@@ -64,13 +65,13 @@ template<typename S, typename... D>
 struct decorators_on_create_;
 
 template<typename S>
-struct decorators_on_create_ {
+struct decorators_on_create_<S> {
   template<typename T>
   static auto apply(S& s, T& v) {}
 };
 
 template<typename S, typename D0, typename... D>
-struct decorators_on_create_ {
+struct decorators_on_create_<S, D0, D...> {
   template<typename T>
   static auto apply(S& s, T& v) {
     decorator_on_create_<S, D0>::apply(s, v);
@@ -95,13 +96,13 @@ template<typename S, typename... D>
 struct decorators_on_delete_;
 
 template<typename S>
-struct decorators_on_delete_ {
+struct decorators_on_delete_<S> {
   template<typename T>
   static auto apply(S& s, T& v) {}
 };
 
 template<typename S, typename D0, typename... D>
-struct decorators_on_delete_ {
+struct decorators_on_delete_<S, D0, D...> {
   template<typename T>
   static auto apply(S& s, T& v) {
     decorator_on_delete_<S, D0>::apply(s, v);
@@ -110,19 +111,31 @@ struct decorators_on_delete_ {
 };
 
 
+template<typename D, typename = void>
+struct cache_decorator_tpl_ {
+  static auto apply(D& d) -> decltype(auto) {
+    return std::tuple<>();
+  }
+};
+
+template<typename D>
+struct cache_decorator_tpl_<D, std::void_t<decltype(std::declval<D&>().init_tuple())>> {
+  static auto apply(D& d) -> decltype(auto) {
+    return d.init_tuple();
+  }
+};
+
+
 } /* namespace monsoon::cache::<unnamed> */
 
-template<typename Elem, typename... CacheDecorators>
-using decorate_bucket_t = typename decorate_bucket_<Elem, CacheDecorators...>::type;
-
 template<typename Predicate, typename TplBuilder, typename Create>
-class cache_query {
+struct cache_query {
   cache_query(std::size_t hash_code, Predicate predicate, TplBuilder tpl_builder, Create create)
-  noexcept(std::is_nothrow_move_constructible_v<Predicate>()
-      && std::is_nothrow_move_constructible_v<TplBuilder>()
-      && std::is_nothrow_move_constructible_v<Create>())
+  noexcept(std::is_nothrow_move_constructible_v<Predicate>
+      && std::is_nothrow_move_constructible_v<TplBuilder>
+      && std::is_nothrow_move_constructible_v<Create>)
   : hash_code(hash_code),
-    eq(std::move(eq)),
+    predicate(std::move(predicate)),
     tpl_builder(std::move(tpl_builder)),
     create(std::move(create))
   {}
@@ -135,7 +148,7 @@ class cache_query {
 
 template<typename Predicate, typename TplBuilder, typename Create>
 auto make_cache_query(std::size_t hash_code, Predicate&& predicate, TplBuilder&& tpl_builder, Create&& create)
--> cache_query<Predicate, TplBuilder, Create> {
+-> cache_query<std::decay_t<Predicate>, std::decay_t<TplBuilder>, std::decay_t<Create>> {
   return {
     hash_code,
     std::forward<Predicate>(predicate),
@@ -149,17 +162,16 @@ class simple_cache_impl
 : public CacheDecorators...
 {
  public:
-  using key_type = Key;
-  using bucket_type = decorate_bucket_t<bucket<T, Alloc>, CacheDecorators...>;
   using size_type = std::uintptr_t;
 
  private:
-  using bucket_vector = std::vector<bucket_type, typename std::allocator_traits<Alloc>::template rebind<bucket_type>>;
+  using bucket_type = decorate_bucket_t<bucket<T>, CacheDecorators...>;
+  using bucket_vector = std::vector<bucket_type, typename std::allocator_traits<Alloc>::template rebind_alloc<bucket_type>>;
+  using lookup_type = typename bucket_type::lookup_type;
 
  public:
   using store_type = typename bucket_type::store_type;
   using pointer = typename store_type::pointer;
-  using lookup_type = typename bucket_type::lookup_type;
 
  private:
   ///\brief Initial number of buckets.
@@ -171,39 +183,48 @@ class simple_cache_impl
   static constexpr unsigned int growth_mul = 9;
 
  public:
-  simple_cache_impl(cache_builder<Key, Val, Hash, Eq, Alloc> b, Create create)
+  template<typename Key, typename Hash, typename Eq>
+  simple_cache_impl(const cache_builder<Key, T, Hash, Eq, Alloc>& b)
   : CacheDecorators(b)...,
-    buckets_(b.get_allocator()),
-    hash_(b.hash()),
-    eq_(b.equality()),
-    create_(std::move(create)),
-    alloc_(b.get_allocator()),
+    buckets_(b.allocator()),
+    alloc_(b.allocator()),
     lf_(b.load_factor())
   {
-    buckets_.resize(init_bucket_count);
+    buckets_.resize(init_bucket_count); // May not be zero, or we'll get (unchecked) division by zero.
   }
 
   auto load_factor() const noexcept -> float;
   auto max_load_factor() const noexcept -> float;
   auto max_load_factor(float fl) -> void;
-  auto size() const noexcept;
+  auto size() const noexcept -> size_type;
 
-  template<typename Predicate, typename TplBuilder>
-  auto lookup_if_present(const cache_query<Predicate, TplBuilder>& q) const noexcept -> lookup_type {
+  template<typename Predicate, typename TplBuilder, typename Create>
+  auto lookup_if_present(const cache_query<Predicate, TplBuilder, Create>& q) const noexcept -> pointer {
+    // Acquire lock on the cache.
+    // One of the decorators is to supply lock() and unlock() methods,
+    // that can be called on a const-reference of this.
+    std::unique_lock<const simple_cache_impl> lck{ *this };
+
     // Prepare query.
     const auto query = make_bucket_ctx(
         q.hash_code,
         q.predicate,
-        []() -> store_type { throw std::runtime_exception("create should not be called"); },
+        []() -> store_type { throw std::runtime_error("create should not be called"); },
         size_);
 
     // Execute query.
-    return buckets_[query.hash_code % buckets_.size()]
-        .lookup_if_present(query);
+    assert(buckets_.size() > 0);
+    return resolve_(lck, buckets_[query.hash_code % buckets_.size()]
+        .lookup_if_present(query));
   }
 
-  template<typename Predicate, typename TplBuilder>
-  auto lookup_or_create(const cache_query<Predicate, TplBuilder>& q) const noexcept -> lookup_type {
+  template<typename Predicate, typename TplBuilder, typename Create>
+  auto lookup_or_create(const cache_query<Predicate, TplBuilder, Create>& q) noexcept -> pointer {
+    // Acquire lock on the cache.
+    // One of the decorators is to supply lock() and unlock() methods,
+    // that can be called on a const-reference of this.
+    std::unique_lock<const simple_cache_impl> lck{ *this };
+
     // Prepare query.
     const auto query = make_bucket_ctx(
         q.hash_code,
@@ -212,18 +233,22 @@ class simple_cache_impl
           return store_type(
               std::allocator_arg, alloc_,
               q.create(alloc_), q.hash_code,
-              std::forward_as_tuple(q.tpl_builder()));
+              std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<CacheDecorators>::apply(*this)...));
         },
         size_);
 
     // Execute query.
     store_type* created;
-    auto result = buckets_[hash_code % buckets_.size()]
-        .lookup_or_create(query, created);
+    assert(buckets_.size() > 0);
+    lookup_type lookup_result = buckets_[query.hash_code % buckets_.size()]
+        .lookup_or_create(alloc_, query, created);
+    assert(!store_type::is_nil(lookup_result));
+    pointer result = resolve_(lck, std::move(lookup_result), created);
     assert(result != nullptr);
 
     // If newly created, call post processing hooks.
     if (created != nullptr) {
+      if (!lck.owns_lock()) lck.lock(); // Relock.
       maybe_rehash_();
       on_create(*created);
     }
@@ -232,62 +257,111 @@ class simple_cache_impl
   }
 
  private:
+  /**
+   * \brief Handle resolution of shared future component of lookup type.
+   * \details This function is a noop if the lookup_type doesn't have a shared future component.
+   *
+   * If the lookup type was based on a shared future,
+   * \ref element::resolve() "created->resolve()" will be called to ensure
+   * the \ref element "store type" is updated properly.
+   * \note After this call, it is undefined wether lck may will be in a locked state, or unlocked state.
+   * \param[in] lck The unique lock locking this.
+   * \param[in] l The result of a lookup operation.
+   * \param[created] A pointer to the created store_type. Nullptr if no store type was created.
+   * \returns Pointer from the lookup type.
+   */
+  static auto resolve_(std::unique_lock<const simple_cache_impl>& lck,
+      lookup_type&& l,
+      store_type* created = nullptr)
+  -> pointer;
+
   ///\brief Perform rehashing, if load factor constraint requires it.
   void maybe_rehash_() noexcept;
 
   ///\brief Invoke on_create method for each cache decorator that implements it.
-  void on_create(store_type& s) noexcept {
-    decorators_on_create_<store_type, CacheDecorators...>::apply(s, *this);
-  }
-
+  void on_create(store_type& s) noexcept;
   ///\brief Invoke on_delete method for each cache decorator that implements it.
-  void on_create(store_type& s) noexcept {
-    decorators_on_delete_<store_type, CacheDecorators...>::apply(s, *this);
-  }
+  void on_delete(store_type& s) noexcept;
 
   bucket_vector buckets_;
-  float lf_ = 1.0; ///<\brief Target load factor.
   Alloc alloc_;
+  float lf_ = 1.0; ///<\brief Target load factor.
   size_type size_ = 0;
 };
 
 
-template<typename Key, typename Val, typename Hash, typename Eq, typename Create, typename Alloc>
-auto simple_cache_impl<Key, Val, Hash, Eq, Create, Alloc>::load_factor() const
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::load_factor() const
 noexcept
 -> float {
   return std::double_t(size_) / std::double_t(buckets_.size());
 }
 
-template<typename Key, typename Val, typename Hash, typename Eq, typename Create, typename Alloc>
-auto simple_cache_impl<Key, Val, Hash, Eq, Create, Alloc>::load_factor() const
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::max_load_factor() const
 noexcept
 -> float {
   return lf_;
 }
 
-template<typename Key, typename Val, typename Hash, typename Eq, typename Create, typename Alloc>
-auto simple_cache_impl<Key, Val, Hash, Eq, Create, Alloc>::load_factor(float lf)
--> float {
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::max_load_factor(float lf)
+-> void {
   if (lf <= 0.0 || !std::isfinite(lf))
     throw std::invalid_argument("invalid load factor");
   lf_ = lf;
   maybe_rehash_();
 }
 
-template<typename Key, typename Val, typename Hash, typename Eq, typename Create, typename Alloc>
-auto simple_cache_impl<Key, Val, Hash, Eq, Create, Alloc>::size() const
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::size() const noexcept
 -> size_type {
   return size_;
 }
 
-template<typename Key, typename Val, typename Hash, typename Eq, typename Create, typename Alloc>
-auto simple_cache_impl<Key, Val, Hash, Eq, Create, Alloc>::maybe_rehash_()
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::resolve_(
+    std::unique_lock<const simple_cache_impl>& lck,
+    lookup_type&& l,
+    store_type* created)
+-> pointer {
+  if constexpr(std::is_same_v<pointer, lookup_type>) {
+    return std::move(l);
+  } else {
+    return std::visit(
+        overload(
+            [](pointer p) -> pointer { return std::move(p); },
+            [&lck, created](std::shared_future<pointer>&& fut) -> pointer {
+              lck.unlock(); // Don't hold the lock during future resolution!
+              if (created == nullptr)
+                return fut.get();
+
+              // Resolve future with the cache unlocked.
+              // This allows:
+              // - other threads to access the cache without blocking on
+              //   our create function,
+              // - the create function to recurse into the cache,
+              // - the allocators involved in the create function,
+              //   to perform cache maintenance routines.
+              fut.wait();
+
+              // Relock before calling resolve,
+              // because element mutation is not thread safe.
+              lck.lock();
+
+              return created->resolve(); // Installs result of future.
+            }),
+        std::move(l));
+  }
+}
+
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::maybe_rehash_()
 noexcept // Allocation exception is swallowed.
 -> void {
   // Check if we require rehashing.
   const std::double_t target_buckets_dbl = std::ceil(std::double_t(size_) / lf_);
-  bucket_vector::size_type target_buckets = buckets_.max_size();
+  typename bucket_vector::size_type target_buckets = buckets_.max_size();
   if (target_buckets_dbl < target_buckets)
     target_buckets = target_buckets_dbl;
   if (buckets_.size() >= target_buckets) return; // No rehash required.
@@ -299,14 +373,14 @@ noexcept // Allocation exception is swallowed.
     if (b_mul / growth_mul != b_div) { // Overflow.
       target_buckets = buckets_.max_size();
     } else {
-      target_buckets = std::min(b_mul, buckets_max.size());
+      target_buckets = std::min(b_mul, buckets_.max_size());
     }
     if (buckets_.size() >= target_buckets)
       return; // No rehash required.
   }
 
   // Perform rehashing operation.
-  orig_size = buckets_.size();
+  const typename bucket_vector::size_type orig_size = buckets_.size();
   try {
     buckets_.resize(target_buckets);
   } catch (...) {
@@ -315,8 +389,8 @@ noexcept // Allocation exception is swallowed.
   }
 
   {
-    b_idx = 0;
-    for (i = buckets_.begin(), i_end = buckets_.begin() + orig_size;
+    typename bucket_vector::size_type b_idx = 0;
+    for (auto i = buckets_.begin(), i_end = buckets_.begin() + orig_size;
         i != i_end;
         ++i, ++b_idx) {
       i->rehash(
@@ -325,6 +399,16 @@ noexcept // Allocation exception is swallowed.
           });
     }
   }
+}
+
+template<typename T, typename A, typename... D>
+void simple_cache_impl<T, A, D...>::on_create(store_type& s) noexcept {
+  decorators_on_create_<store_type, D...>::apply(s, *this);
+}
+
+template<typename T, typename A, typename... D>
+void simple_cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
+  decorators_on_delete_<store_type, D...>::apply(s, *this);
 }
 
 

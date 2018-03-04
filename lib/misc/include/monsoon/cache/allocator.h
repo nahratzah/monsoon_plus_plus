@@ -200,12 +200,4 @@ class cache_allocator {
 
 } /* namespace monsoon::cache */
 
-namespace monsoon {
-
-
-using monsoon::cache::cache_allocator;
-
-
-} /* namespace monsoon */
-
 #endif /* MONSOON_CACHE_ALLOCATOR_H */
