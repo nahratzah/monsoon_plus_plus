@@ -18,8 +18,8 @@ thread_local cache::cache<std::string, metric_value::string_type> string_cache =
     .load_factor(4)
     .no_expire()
     .build(
-        [](auto alloc, std::string_view sv) -> std::string {
-          return std::string(sv.begin(), sv.end(), alloc);
+        [](auto alloc, std::string_view sv) -> metric_value::string_type {
+          return metric_value::string_type(sv.begin(), sv.end(), alloc);
         });
 
 
@@ -1020,7 +1020,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
           [](bool x_val, fp_type y_val) {
             return metric_value(x_val == y_val);
           },
-          [](bool x_val, const string_ptr& y_val) {
+          [](bool x_val, const std::string_view& y_val) {
             return metric_value();
           },
           [](bool x_val, const histogram& y_val) {
@@ -1040,7 +1040,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
           [](signed_type x_val, fp_type y_val) {
             return metric_value(x_val == y_val);
           },
-          [](signed_type x_val, const string_ptr& y_val) {
+          [](signed_type x_val, const std::string_view& y_val) {
             return metric_value();
           },
           [](signed_type x_val, const histogram& y_val) {
@@ -1060,7 +1060,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
           [](unsigned_type x_val, fp_type y_val) {
             return metric_value(x_val == y_val);
           },
-          [](unsigned_type x_val, const string_ptr& y_val) {
+          [](unsigned_type x_val, const std::string_view& y_val) {
             return metric_value();
           },
           [](unsigned_type x_val, const histogram& y_val) {
@@ -1079,29 +1079,29 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
           [](fp_type x_val, fp_type y_val) {
             return metric_value(x_val == y_val);
           },
-          [](fp_type x_val, const string_ptr& y_val) {
+          [](fp_type x_val, const std::string_view& y_val) {
             return metric_value();
           },
           [](fp_type x_val, const histogram& y_val) {
             return metric_value();
           },
           // std::string == ???
-          [](const string_ptr& x_val, bool y_val) {
+          [](const std::string_view& x_val, bool y_val) {
             return metric_value();
           },
-          [](const string_ptr& x_val, signed_type y_val) {
+          [](const std::string_view& x_val, signed_type y_val) {
             return metric_value();
           },
-          [](const string_ptr& x_val, unsigned_type y_val) {
+          [](const std::string_view& x_val, unsigned_type y_val) {
             return metric_value();
           },
-          [](const string_ptr& x_val, fp_type y_val) {
+          [](const std::string_view& x_val, fp_type y_val) {
             return metric_value();
           },
-          [](const string_ptr& x_val, const string_ptr& y_val) {
-            return metric_value(*x_val == *y_val);
+          [](const std::string_view& x_val, const std::string_view& y_val) {
+            return metric_value(x_val == y_val);
           },
-          [](const string_ptr& x_val, const histogram& y_val) {
+          [](const std::string_view& x_val, const histogram& y_val) {
             return metric_value();
           },
           // histogram == ???
@@ -1117,7 +1117,7 @@ auto equal(const metric_value& x, const metric_value& y) noexcept
           [](const histogram& x_val, fp_type y_val) {
             return metric_value();
           },
-          [](const histogram& x_val, const string_ptr& y_val) {
+          [](const histogram& x_val, const std::string_view& y_val) {
             return metric_value();
           },
           [](const histogram& x_val, const histogram& y_val) {
@@ -1199,8 +1199,8 @@ auto to_string(const monsoon::metric_value& v) -> std::string {
           return "(none)";
         else if constexpr(std::is_same_v<bool, v_type>)
           return (v ? "true" : "false");
-        else if constexpr(std::is_same_v<metric_value::string_ptr, v_type>)
-          return quoted_string(*v);
+        else if constexpr(std::is_same_v<std::string_view, v_type>)
+          return quoted_string(v);
         else
           return to_string(v); // ADL
       },
@@ -1240,8 +1240,8 @@ auto std::hash<monsoon::metric_value>::operator()(
           [](const unsigned_type& v) {
             return std::hash<fp_type>()(v);
           },
-          [](const monsoon::metric_value::string_ptr& v) {
-            return std::hash<monsoon::metric_value::string_type>()(*v);
+          [](const std::string_view& v) {
+            return std::hash<std::string_view>()(v);
           },
           [](const monsoon::histogram& v) {
             return std::hash<monsoon::histogram>()(v);

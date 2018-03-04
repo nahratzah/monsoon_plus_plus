@@ -30,13 +30,13 @@ auto squash_future_(std::future<T> fut)
 }
 
 template<typename Alloc, typename T>
-auto make_shared_ptr_(Alloc&& alloc, T v)
+auto make_shared_ptr_(Alloc alloc, T v)
 -> std::shared_ptr<T> {
-  return std::allocate_shared<T>(std::forward<Alloc>(), std::move(v));
+  return std::allocate_shared<T>(alloc, std::move(v));
 }
 
 template<typename Alloc, typename T>
-auto make_shared_ptr_(Alloc&& alloc, std::shared_ptr<T> v)
+auto make_shared_ptr_(Alloc alloc, std::shared_ptr<T> v)
 -> std::shared_ptr<T> {
   return std::move(v);
 }
@@ -64,34 +64,34 @@ constexpr bool is_future_v = is_future<T>::value;
 
 struct async_invoke_wrapper_ {
   template<typename Alloc, typename Fn, typename... Args>
-  auto operator()(Alloc&& alloc, Fn&& fn, Args&&... args)
+  auto operator()(Alloc alloc, Fn&& fn, Args&&... args)
   -> decltype(auto) {
     return make_shared_ptr_(
         alloc,
         squash_future_(
-            fn_(std::forward<Alloc>(alloc), std::forward<Args>(args)...)));
+            fn_(alloc, std::forward<Args>(args)...)));
   }
 };
 
 template<typename Alloc, typename T>
-auto future_as_pointer_future_(Alloc&& alloc, std::future<T> fut)
+auto future_as_pointer_future_(Alloc alloc, std::future<T> fut)
 -> decltype(auto) {
   return std::async(
       std::launch::deferred,
-      [](Alloc&& alloc, std::future<T> fut) {
-        return make_shared_ptr_(std::forward<Alloc>(alloc), fut.get());
+      [](Alloc alloc, std::future<T> fut) {
+        return make_shared_ptr_(alloc, fut.get());
       },
       std::forward<Alloc>(),
       std::move(fut));
 }
 
 template<typename Alloc, typename T>
-auto future_as_pointer_future_(Alloc&& alloc, std::shared_future<T> fut)
+auto future_as_pointer_future_(Alloc alloc, std::shared_future<T> fut)
 -> decltype(auto) {
   return std::async(
       std::launch::deferred,
-      [](Alloc&& alloc, std::future<T> fut) {
-        return make_shared_ptr_(std::forward<Alloc>(alloc), fut.get());
+      [](Alloc alloc, std::future<T> fut) {
+        return make_shared_ptr_(alloc, fut.get());
       },
       std::forward<Alloc>(),
       std::move(fut));
@@ -129,14 +129,14 @@ class create_handler {
   {}
 
   template<typename Alloc, typename... Args>
-  auto operator()(Alloc&& alloc, Args&&... args) const
+  auto operator()(Alloc alloc, Args&&... args) const
   -> decltype(auto) {
     using namespace create_ops;
 
     return make_shared_ptr_(
         alloc,
         squash_future_(
-            fn_(std::forward<Alloc>(alloc), std::forward<Args>(args)...)));
+            fn_(alloc, std::forward<Args>(args)...)));
   }
 
  private:
@@ -173,11 +173,11 @@ class create_handler<Fn, true> { // Async case.
   {}
 
   template<typename Alloc, typename... Args>
-  auto operator()(Alloc&& alloc, Args&&... args) const
+  auto operator()(Alloc alloc, Args&&... args) const
   -> decltype(auto) {
     using namespace create_ops;
 
-    using raw_result_type = decltype(fn_(std::forward<Alloc>(alloc), std::forward<Args>(args)...));
+    using raw_result_type = decltype(fn_(alloc, std::forward<Args>(args)...));
     if constexpr(is_future_v<raw_result_type>) {
       return future_as_pointer_future_(
           alloc,
@@ -186,7 +186,7 @@ class create_handler<Fn, true> { // Async case.
       return std::async(
           std::launch::deferred,
           async_invoke_wrapper_(),
-          std::forward<Alloc>(alloc),
+          alloc,
           fn_,
           std::forward<Args>(args)...).share();
     }

@@ -115,8 +115,13 @@ class monsoon_intf_export_ metric_value {
    * \brief Underlying variant holding any one of the permitted values.
    */
   using types = std::variant<
+      empty, bool, signed_type, unsigned_type, fp_type, std::string_view, histogram>;
+
+ private:
+  using internal_types = std::variant<
       empty, bool, signed_type, unsigned_type, fp_type, string_ptr, histogram>;
 
+ public:
   ///@{
   /**
    * \brief Default constructor creates an \ref empty metric value.
@@ -182,7 +187,7 @@ class monsoon_intf_export_ metric_value {
   static metric_value parse(std::string_view s);
 
   ///\brief Retrieve underlying variant.
-  const types& get() const noexcept;
+  types get() const noexcept;
 
   ///@{
   /**
@@ -248,7 +253,7 @@ class monsoon_intf_export_ metric_value {
   static bool before(const metric_value&, const metric_value&) noexcept;
 
  private:
-  types value_;
+  internal_types value_;
 };
 
 ///\brief Logical \em not operation.
