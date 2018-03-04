@@ -979,8 +979,8 @@ auto operator<<(std::ostream& out, const metric_value& v) -> std::ostream& {
           return out << "(none)";
         else if constexpr(std::is_same_v<bool, v_type>)
           return out << (v ? "true" : "false");
-        else if constexpr(std::is_same_v<metric_value::string_ptr, v_type>)
-          return out << quoted_string(*v);
+        else if constexpr(std::is_same_v<std::string_view, v_type>)
+          return out << quoted_string(v);
         else
           return out << v;
       },
