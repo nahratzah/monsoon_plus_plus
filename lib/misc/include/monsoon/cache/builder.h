@@ -107,7 +107,8 @@ class cache_builder
 
   /**
    * \brief Build the cache described by this builder.
-   * \note You should include <monsoon/builder_build.h> if you call this function.
+   * \note You must include <monsoon/cache/impl.h> if you call this function,
+   * since that header contains the implementation.
    * \returns A new cache described by the specification in this.
    */
   template<typename Fn>

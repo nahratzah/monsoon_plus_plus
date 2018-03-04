@@ -1,5 +1,5 @@
-#ifndef MONSOON_CACHE_BUILDER_BUILD_H
-#define MONSOON_CACHE_BUILDER_BUILD_H
+#ifndef MONSOON_CACHE_IMPL_H
+#define MONSOON_CACHE_IMPL_H
 
 #include <memory>
 #include <thread>
@@ -343,4 +343,4 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
 
 } /* namespace monsoon::cache */
 
-#endif /* MONSOON_CACHE_BUILDER_BUILD_H */
+#endif /* MONSOON_CACHE_IMPL_H */
