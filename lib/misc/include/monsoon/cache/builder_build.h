@@ -14,17 +14,6 @@
 
 namespace monsoon::cache {
 namespace builder_detail {
-
-
-template<typename T>
-struct cache_key_decorator {
-  using element_decorator_type = key_decorator<T>;
-
-  template<typename Builder>
-  constexpr cache_key_decorator([[maybe_unused]] const Builder& b) {}
-};
-
-
 namespace {
 
 
