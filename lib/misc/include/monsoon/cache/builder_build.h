@@ -17,6 +17,21 @@ namespace builder_detail {
 namespace {
 
 
+template<typename CDS, typename T, typename... D>
+struct add_all_except_;
+
+template<typename CDS, typename T>
+struct add_all_except_<CDS, T> {
+  using type = CDS;
+};
+
+template<typename CDS, typename T, typename D0, typename... D>
+struct add_all_except_<CDS, T, D0, D...> {
+  using type = typename std::conditional_t<std::is_same_v<T, D0>,
+        add_all_except_<CDS, D...>,
+        add_all_except_<decltype(std::declval<CDS>().template add<D0>()), D...>>::type;
+};
+
 ///\brief Keep track of all decorators that are to be applied to the cache.
 ///\tparam D All decorators that are to be passed to the cache.
 template<typename... D>
@@ -37,6 +52,16 @@ struct cache_decorator_set {
       std::disjunction_v<std::is_same<D, T>...>,
       cache_decorator_set<D...>,
       cache_decorator_set<D..., T>> {
+    return {};
+  }
+
+  ///\brief Remove type T from the decorator set.
+  ///\details Does nothing if T is not part of the decorator set.
+  ///\returns A decorator set with all decorators in this, except T.
+  ///\tparam T The decorator to remove from the set.
+  template<typename T>
+  constexpr auto remove() const noexcept
+  -> typename add_all_except_<cache_decorator_set<>, T, D...>::type {
     return {};
   }
 };
