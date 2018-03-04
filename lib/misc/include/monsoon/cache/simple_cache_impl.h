@@ -3,6 +3,7 @@
 
 #include <monsoon/cache/bucket.h>
 #include <monsoon/cache/cache.h>
+#include <monsoon/cache/create_handler.h>
 #include <monsoon/cache/key_decorator.h>
 #include <cmath>
 #include <stdexcept>
@@ -224,15 +225,16 @@ class simple_cache_impl
     // One of the decorators is to supply lock() and unlock() methods,
     // that can be called on a const-reference of this.
     std::unique_lock<const simple_cache_impl> lck{ *this };
+    auto ch = make_create_handler<store_type::is_async>(q.create);
 
     // Prepare query.
     const auto query = make_bucket_ctx(
         q.hash_code,
         q.predicate,
-        [this, &q]() -> store_type {
+        [this, &q, &ch]() -> store_type {
           return store_type(
               std::allocator_arg, alloc_,
-              q.create(alloc_), q.hash_code,
+              ch(alloc_), q.hash_code,
               std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<CacheDecorators>::apply(*this)...));
         },
         size_);
