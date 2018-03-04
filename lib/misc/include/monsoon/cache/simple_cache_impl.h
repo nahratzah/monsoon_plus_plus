@@ -5,6 +5,7 @@
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/create_handler.h>
 #include <monsoon/cache/key_decorator.h>
+#include <monsoon/cache/cache_query.h>
 #include <cmath>
 #include <stdexcept>
 
@@ -160,35 +161,6 @@ struct cache_decorator_tpl_<D, std::void_t<decltype(std::declval<D&>().init_tupl
 
 } /* namespace monsoon::cache::<unnamed> */
 
-template<typename Predicate, typename TplBuilder, typename Create>
-struct cache_query {
-  cache_query(std::size_t hash_code, Predicate predicate, TplBuilder tpl_builder, Create create)
-  noexcept(std::is_nothrow_move_constructible_v<Predicate>
-      && std::is_nothrow_move_constructible_v<TplBuilder>
-      && std::is_nothrow_move_constructible_v<Create>)
-  : hash_code(hash_code),
-    predicate(std::move(predicate)),
-    tpl_builder(std::move(tpl_builder)),
-    create(std::move(create))
-  {}
-
-  std::size_t hash_code;
-  Predicate predicate;
-  TplBuilder tpl_builder;
-  Create create;
-};
-
-template<typename Predicate, typename TplBuilder, typename Create>
-auto make_cache_query(std::size_t hash_code, Predicate&& predicate, TplBuilder&& tpl_builder, Create&& create)
--> cache_query<std::decay_t<Predicate>, std::decay_t<TplBuilder>, std::decay_t<Create>> {
-  return {
-    hash_code,
-    std::forward<Predicate>(predicate),
-    std::forward<TplBuilder>(tpl_builder),
-    std::forward<Create>(create)
-  };
-}
-
 template<typename T, typename Alloc, typename... CacheDecorators>
 class simple_cache_impl
 : public CacheDecorators...
@@ -202,6 +174,7 @@ class simple_cache_impl
   using lookup_type = typename bucket_type::lookup_type;
 
  public:
+  using alloc_t = Alloc; // Not allocator_type, to prevent accidents with std::uses_allocator.
   using store_type = typename bucket_type::store_type;
   using pointer = typename store_type::pointer;
 

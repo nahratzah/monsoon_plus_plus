@@ -132,54 +132,59 @@ auto apply_max_age(const cache_builder_vars& b, NextApply&& next)
 
 template<typename K, typename V, typename Impl, typename Hash, typename Eq, typename Create>
 class wrapper final
-: public cache_intf<K, V>,
+: public extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>,
   private Impl
 {
  public:
   using store_type = typename Impl::store_type;
 
-  template<typename Alloc, typename CreateArg>
-  wrapper(const cache_builder<K, V, Hash, Eq, Alloc>& b,
+  template<typename CreateArg>
+  wrapper(const cache_builder<K, V, Hash, Eq, typename Impl::alloc_t>& b,
       CreateArg&& create)
-  : Impl(b),
-    hash(b.hash()),
-    eq(b.equality()),
-    create(std::forward<CreateArg>(create))
+  : extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>(
+      b.hash(),
+      b.equality(),
+      std::forward<CreateArg>(create)),
+    Impl(b)
   {}
 
   ~wrapper() noexcept {}
 
   auto get_if_present(const K& k)
-  -> std::shared_ptr<V> override {
+  -> std::shared_ptr<V>
+  override {
     return this->lookup_if_present(
         make_cache_query(
-            hash(k),
-            [this, &k](const store_type& s) { return eq(s.key, k); },
+            this->hash(k),
+            [this, &k](const store_type& s) { return this->eq(s.key, k); },
             []() { assert(false); },
             []() { assert(false); }));
   }
 
   auto get(const K& k)
-  -> std::shared_ptr<V> override {
+  -> std::shared_ptr<V>
+  override {
     return this->lookup_or_create(
         make_cache_query(
-            hash(k),
-            [this, &k](const store_type& s) { return eq(s.key, k); },
+            this->hash(k),
+            [this, &k](const store_type& s) { return this->eq(s.key, k); },
             [this, &k]() { return std::make_tuple(k); },
             [this, &k](auto alloc) {
-              return create(alloc, k);
+              return this->create(alloc, k);
             }));
   }
 
-  Hash hash;
-  Eq eq;
-  Create create;
+  auto get(const typename wrapper::extended_query_type& q)
+  -> std::shared_ptr<V>
+  override {
+    return this->lookup_or_create(q);
+  }
 };
 
 
 template<typename K, typename V, typename Impl, typename Hash, typename Eq, typename Alloc, typename Create>
 class sharded_wrapper final
-: public cache_intf<K, V>
+: public extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>
 {
  public:
   using store_type = typename Impl::store_type;
@@ -197,9 +202,10 @@ class sharded_wrapper final
   sharded_wrapper(const cache_builder<K, V, Hash, Eq, Alloc>& b,
       unsigned int shards,
       CreateArg&& create)
-  : hash(b.hash()),
-    eq(b.equality()),
-    create(std::forward<CreateArg>(create)),
+  : extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>(
+      b.hash(),
+      b.equality(),
+      std::forward<CreateArg>(create)),
     alloc_(b.allocator())
   {
     assert(shards > 1);
@@ -234,32 +240,34 @@ class sharded_wrapper final
 
   auto get_if_present(const K& k)
   -> std::shared_ptr<V> override {
-    std::size_t hash_code = hash(k);
+    std::size_t hash_code = this->hash(k);
 
     return shards_[hash_multiplier * hash_code % num_shards_].lookup_if_present(
         make_cache_query(
             hash_code,
-            [this, &k](const store_type& s) { return eq(s.key, k); },
+            [this, &k](const store_type& s) { return this->eq(s.key, k); },
             []() { assert(false); },
             []() { assert(false); }));
   }
 
   auto get(const K& k)
   -> std::shared_ptr<V> override {
-    std::size_t hash_code = hash(k);
+    std::size_t hash_code = this->hash(k);
     return shards_[hash_multiplier * hash_code % num_shards_].lookup_or_create(
         make_cache_query(
             hash_code,
-            [this, &k](const store_type& s) { return eq(s.key, k); },
+            [this, &k](const store_type& s) { return this->eq(s.key, k); },
             [this, &k]() { return std::make_tuple(k); },
             [this, &k](auto alloc) {
-              return create(alloc, k);
+              return this->create(alloc, k);
             }));
   }
 
-  Hash hash;
-  Eq eq;
-  Create create;
+  auto get(const typename sharded_wrapper::extended_query_type& q)
+  -> std::shared_ptr<V>
+  override {
+    return shards_[hash_multiplier * q.hash_code % num_shards_].lookup_or_create(q);
+  }
 
  private:
   typename std::allocator_traits<Alloc>::template rebind_alloc<Impl> alloc_;
@@ -274,7 +282,7 @@ class sharded_wrapper final
 template<typename K, typename V, typename Hash, typename Eq, typename Alloc>
 template<typename Fn>
 auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
--> cache<K, V> {
+-> extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>> {
   using namespace builder_detail;
 
   const unsigned int shards = (!thread_safe()
@@ -286,10 +294,10 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
           apply_access_expire(*this,
               apply_key_type(*this,
                   apply_thread_safe(*this,
-                      [this, &fn, shards](auto decorators) -> std::shared_ptr<cache_intf<K, V>> {
+                      [this, &fn, shards](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
                         using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
-                        using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, Fn>;
-                        using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, Fn>;
+                        using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
+                        using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
                         if (shards != 1u) {
                           return std::allocate_shared<sharded_wrapper_type>(
@@ -302,7 +310,7 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
                         }
                       }))));
 
-  return cache<K, V>(builder_impl(cache_decorator_set<>()));
+  return extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>(builder_impl(cache_decorator_set<>()));
 }
 
 

@@ -11,8 +11,8 @@
 namespace monsoon::cache {
 
 
-template<typename T, typename U>
-class cache;
+template<typename T, typename U, typename Hash, typename Eq, typename Alloc, typename Create>
+class extended_cache;
 
 
 ///\brief Type agnostic data in \ref cache_builder "cache builder".
@@ -112,7 +112,7 @@ class cache_builder
    */
   template<typename Fn>
   auto build(Fn&& fn) const
-  -> cache<T, U>;
+  -> extended_cache<T, U, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
   auto hash() const noexcept -> Hash;
   auto equality() const noexcept -> Eq;
