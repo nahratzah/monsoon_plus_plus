@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_ELEMENT_H
 #define MONSOON_CACHE_ELEMENT_H
 
+///\file
+///\ingroup cache
+
 #include <atomic>
 #include <cstddef>
 #include <future>

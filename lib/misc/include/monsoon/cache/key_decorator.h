@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_KEY_DECORATOR_H
 #define MONSOON_CACHE_KEY_DECORATOR_H
 
+///\file
+///\ingroup cache
+
 #include <memory>
 #include <type_traits>
 

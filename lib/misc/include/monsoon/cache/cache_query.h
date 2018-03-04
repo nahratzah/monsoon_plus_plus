@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_CACHE_QUERY_H
 #define MONSOON_CACHE_CACHE_QUERY_H
 
+///\file
+///\ingroup cache
+
 #include <cstddef>
 #include <type_traits>
 #include <utility>

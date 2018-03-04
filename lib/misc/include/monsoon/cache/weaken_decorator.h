@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_WEAKEN_DECORATOR_H
 #define MONSOON_CACHE_WEAKEN_DECORATOR_H
 
+///\file
+///\ingroup cache
+
 #include <monsoon/cache/element.h>
 
 namespace monsoon::cache {

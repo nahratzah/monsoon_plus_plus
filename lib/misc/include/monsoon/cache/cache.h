@@ -1,6 +1,9 @@
 #ifndef MONSOOON_CACHE_H
 #define MONSOOON_CACHE_H
 
+///\file
+///\ingroup cache
+
 #include <functional>
 #include <memory>
 #include <type_traits>

@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_BUILDER_H
 #define MONSOON_CACHE_BUILDER_H
 
+///\file
+///\ingroup cache
+
 #include <chrono>
 #include <cmath>
 #include <cstdint>

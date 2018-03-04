@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_CREATE_HANDLER_H
 #define MONSOON_CACHE_CREATE_HANDLER_H
 
+///\file
+///\ingroup cache
+
 #include <future>
 #include <memory>
 #include <type_traits>

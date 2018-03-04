@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_THREAD_SAFE_DECORATOR_H
 #define MONSOON_CACHE_THREAD_SAFE_DECORATOR_H
 
+///\file
+///\ingroup cache
+
 #include <mutex>
 
 namespace monsoon::cache {

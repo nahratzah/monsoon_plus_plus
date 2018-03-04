@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_IMPL_H
 #define MONSOON_CACHE_IMPL_H
 
+///\file
+///\ingroup cache
+
 #include <memory>
 #include <thread>
 #include <type_traits>

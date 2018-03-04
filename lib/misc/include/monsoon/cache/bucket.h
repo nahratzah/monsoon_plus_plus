@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_BUCKET_H
 #define MONSOON_CACHE_BUCKET_H
 
+///\file
+///\ingroup cache
+
 #include <monsoon/cache/element.h>
 
 namespace monsoon::cache {

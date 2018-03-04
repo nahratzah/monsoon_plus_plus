@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_ALLOCATOR_H
 #define MONSOON_CACHE_ALLOCATOR_H
 
+///\file
+///\ingroup cache
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>

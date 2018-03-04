@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_MAX_AGE_DECORATOR_H
 #define MONSOON_CACHE_MAX_AGE_DECORATOR_H
 
+///\file
+///\ingroup cache
+
 #include <chrono>
 #include <memory>
 

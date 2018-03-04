@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_SIMPLE_CACHE_IMPL_H
 #define MONSOON_CACHE_SIMPLE_CACHE_IMPL_H
 
+///\file
+///\ingroup cache
+
 #include <monsoon/cache/bucket.h>
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/create_handler.h>
