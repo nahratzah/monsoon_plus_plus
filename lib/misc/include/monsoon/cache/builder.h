@@ -18,7 +18,9 @@ class cache;
 ///\brief Type agnostic data in \ref cache_builder "cache builder".
 class cache_builder_vars {
  public:
+  ///\bug Not implemented.
   auto max_memory() const noexcept -> std::optional<std::uintptr_t>;
+  ///\bug Not implemented.
   auto max_size() const noexcept -> std::optional<std::uintptr_t>;
   auto max_age() const noexcept -> std::optional<std::chrono::seconds>;
   auto access_expire() const noexcept -> std::optional<std::chrono::seconds>;
