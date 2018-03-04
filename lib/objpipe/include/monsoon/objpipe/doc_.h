@@ -17,6 +17,7 @@ namespace monsooon {
 /**
  * \brief Namespace for object pipes.
  *
+ * \details
  * Object pipes are queues that move objects from one context to another.
  * In addition, they allow filtering and transformations.
  * \ingroup objpipe
