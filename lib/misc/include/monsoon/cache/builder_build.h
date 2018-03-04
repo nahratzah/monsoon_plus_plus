@@ -120,7 +120,7 @@ class wrapper final
             [this, &k](const store_type& s) { return eq(s.key, k); },
             [this, &k]() { return std::make_tuple(k); },
             [this, &k](auto alloc) {
-              return std::allocate_shared<V>(alloc, create(k));
+              return create(alloc, k);
             }));
   }
 
@@ -206,7 +206,7 @@ class sharded_wrapper final
             [this, &k](const store_type& s) { return eq(s.key, k); },
             [this, &k]() { return std::make_tuple(k); },
             [this, &k](auto alloc) {
-              return std::allocate_shared<V>(alloc, create(k));
+              return create(alloc, k);
             }));
   }
 

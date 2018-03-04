@@ -17,7 +17,10 @@ thread_local cache::cache<std::string, metric_value::string_type> string_cache =
     .no_concurrency()
     .load_factor(4)
     .no_expire()
-    .build([](std::string_view sv) -> std::string { return std::string(sv.begin(), sv.end()); });
+    .build(
+        [](auto alloc, std::string_view sv) -> std::string {
+          return std::string(sv.begin(), sv.end(), alloc);
+        });
 
 
 namespace metric_value_ops {
