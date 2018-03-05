@@ -23,15 +23,15 @@ class extended_cache;
 class cache_builder_vars {
  public:
   ///\bug Not implemented.
-  auto max_memory() const noexcept -> std::optional<std::uintptr_t>;
+  constexpr auto max_memory() const noexcept -> std::optional<std::uintptr_t>;
   ///\bug Not implemented.
-  auto max_size() const noexcept -> std::optional<std::uintptr_t>;
-  auto max_age() const noexcept -> std::optional<std::chrono::seconds>;
-  auto access_expire() const noexcept -> std::optional<std::chrono::seconds>;
-  auto thread_safe() const noexcept -> bool;
-  auto concurrency() const noexcept -> unsigned int;
-  auto load_factor() const noexcept -> float;
-  auto async() const noexcept -> bool;
+  constexpr auto max_size() const noexcept -> std::optional<std::uintptr_t>;
+  constexpr auto max_age() const noexcept -> std::optional<std::chrono::seconds>;
+  constexpr auto access_expire() const noexcept -> std::optional<std::chrono::seconds>;
+  constexpr auto thread_safe() const noexcept -> bool;
+  constexpr auto concurrency() const noexcept -> unsigned int;
+  constexpr auto load_factor() const noexcept -> float;
+  constexpr auto async() const noexcept -> bool;
 
  protected:
   std::optional<std::uintptr_t> max_memory_, max_size_;
@@ -98,21 +98,21 @@ class cache_builder
   constexpr auto no_concurrency() noexcept -> cache_builder&;
 
   using cache_builder_vars::load_factor;
-  auto load_factor(float lf) -> cache_builder&;
+  constexpr auto load_factor(float lf) -> cache_builder&;
 
   using cache_builder_vars::async;
-  auto async(bool async) noexcept -> cache_builder&;
+  constexpr auto async(bool async) noexcept -> cache_builder&;
 
   template<typename NewHash>
-  auto with_hash(NewHash hash) const
+  constexpr auto with_hash(NewHash hash) const
   -> cache_builder<T, U, NewHash, Eq, Alloc>;
 
   template<typename NewEq>
-  auto with_equality(NewEq eq) const
+  constexpr auto with_equality(NewEq eq) const
   -> cache_builder<T, U, Hash, NewEq, Alloc>;
 
   template<typename NewAlloc>
-  auto with_allocator(NewAlloc alloc) const
+  constexpr auto with_allocator(NewAlloc alloc) const
   -> cache_builder<T, U, Hash, Eq, NewAlloc>;
 
   /**
@@ -125,9 +125,9 @@ class cache_builder
   auto build(Fn&& fn) const
   -> extended_cache<T, U, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
-  auto hash() const noexcept -> Hash;
-  auto equality() const noexcept -> Eq;
-  auto allocator() const noexcept -> Alloc;
+  constexpr auto hash() const noexcept -> Hash;
+  constexpr auto equality() const noexcept -> Eq;
+  constexpr auto allocator() const noexcept -> Alloc;
 
  private:
   Hash hash_;
@@ -261,7 +261,7 @@ noexcept
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::load_factor(float lf)
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::load_factor(float lf)
 -> cache_builder& {
   if (lf <= 0.0 || !std::isfinite(lf))
     throw std::invalid_argument("invalid load factor");
@@ -270,7 +270,7 @@ auto cache_builder<T, U, Hash, Eq, Alloc>::load_factor(float lf)
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::async(bool async)
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::async(bool async)
 noexcept
 -> cache_builder& {
   this->async_ = async;
@@ -279,89 +279,89 @@ noexcept
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewHash>
-auto cache_builder<T, U, Hash, Eq, Alloc>::with_hash(NewHash hash) const
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::with_hash(NewHash hash) const
 -> cache_builder<T, U, NewHash, Eq, Alloc> {
   return cache_builder<T, U, NewHash, Eq, Alloc>(*this, hash, eq_, alloc_);
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewEq>
-auto cache_builder<T, U, Hash, Eq, Alloc>::with_equality(NewEq eq) const
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::with_equality(NewEq eq) const
 -> cache_builder<T, U, Hash, NewEq, Alloc> {
   return cache_builder<T, U, Hash, NewEq, Alloc>(*this, hash_, eq, alloc_);
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewAlloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::with_allocator(NewAlloc alloc) const
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::with_allocator(NewAlloc alloc) const
 -> cache_builder<T, U, Hash, Eq, NewAlloc> {
   return cache_builder<T, U, Hash, Eq, NewAlloc>(*this, hash_, eq_, alloc);
 }
 
-inline auto cache_builder_vars::max_memory() const
+constexpr auto cache_builder_vars::max_memory() const
 noexcept
 -> std::optional<std::uintptr_t> {
   return max_memory_;
 }
 
-inline auto cache_builder_vars::max_size() const
+constexpr auto cache_builder_vars::max_size() const
 noexcept
 -> std::optional<std::uintptr_t> {
   return max_size_;
 }
 
-inline auto cache_builder_vars::max_age() const
+constexpr auto cache_builder_vars::max_age() const
 noexcept
 -> std::optional<std::chrono::seconds> {
   return max_age_;
 }
 
-inline auto cache_builder_vars::access_expire() const
+constexpr auto cache_builder_vars::access_expire() const
 noexcept
 -> std::optional<std::chrono::seconds> {
   return access_expire_;
 }
 
-inline auto cache_builder_vars::thread_safe() const
+constexpr auto cache_builder_vars::thread_safe() const
 noexcept
 -> bool {
   return thread_safe_;
 }
 
-inline auto cache_builder_vars::concurrency() const
+constexpr auto cache_builder_vars::concurrency() const
 noexcept
 -> unsigned int {
   return concurrency_;
 }
 
-inline auto cache_builder_vars::load_factor() const
+constexpr auto cache_builder_vars::load_factor() const
 noexcept
 -> float {
   return lf_;
 }
 
-inline auto cache_builder_vars::async() const
+constexpr auto cache_builder_vars::async() const
 noexcept
 -> bool {
   return async_;
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::hash() const
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::hash() const
 noexcept
 -> Hash {
   return hash_;
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::equality() const
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::equality() const
 noexcept
 -> Eq {
   return eq_;
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
-auto cache_builder<T, U, Hash, Eq, Alloc>::allocator() const
+constexpr auto cache_builder<T, U, Hash, Eq, Alloc>::allocator() const
 noexcept
 -> Alloc {
   return alloc_;
