@@ -36,6 +36,9 @@ class cache_intf {
 
   virtual auto get(const key_type& key)
   -> pointer = 0;
+
+  virtual auto get(key_type&& key)
+  -> pointer = 0;
 };
 
 /**
@@ -196,9 +199,19 @@ class extended_cache {
     return impl_->get(key);
   }
 
+  auto get(key_type&& key) const
+  -> pointer {
+    return impl_->get(std::move(key));
+  }
+
   auto operator()(const key_type& key) const
   -> pointer {
     return get(key);
+  }
+
+  auto operator()(key_type&& key) const
+  -> pointer {
+    return get(std::move(key));
   }
 
   template<typename... Args>

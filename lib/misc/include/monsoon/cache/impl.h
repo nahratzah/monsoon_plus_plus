@@ -271,6 +271,19 @@ class wrapper final
             }));
   }
 
+  auto get(K&& k)
+  -> std::shared_ptr<V>
+  override {
+    return this->lookup_or_create(
+        make_cache_query(
+            this->hash(std::as_const(k)),
+            [this, &k](const store_type& s) { return this->eq(s.key, std::as_const(k)); },
+            [this, &k]() { return std::make_tuple(std::as_const(k)); },
+            [this, &k](auto alloc) {
+              return this->create(alloc, std::move(k));
+            }));
+  }
+
   auto get(const typename wrapper::extended_query_type& q)
   -> std::shared_ptr<V>
   override {
@@ -357,6 +370,19 @@ class sharded_wrapper final
             [this, &k]() { return std::make_tuple(k); },
             [this, &k](auto alloc) {
               return this->create(alloc, k);
+            }));
+  }
+
+  auto get(K&& k)
+  -> std::shared_ptr<V> override {
+    std::size_t hash_code = this->hash(std::as_const(k));
+    return shards_[hash_multiplier * hash_code % num_shards_].lookup_or_create(
+        make_cache_query(
+            hash_code,
+            [this, &k](const store_type& s) { return this->eq(s.key, std::as_const(k)); },
+            [this, &k]() { return std::make_tuple(std::as_const(k)); },
+            [this, &k](auto alloc) {
+              return this->create(alloc, std::move(k));
             }));
   }
 
