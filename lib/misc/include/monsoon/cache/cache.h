@@ -202,14 +202,14 @@ class extended_cache {
   }
 
   template<typename... Args>
-  auto get(const Args&... args) const
+  auto get(Args&&... args) const
   -> pointer {
     return impl_->lookup_or_create(
         extended_query_type(
-            impl_->hash_(args...),
-            [this, &args...](const key_decorator<K>& s) { return impl_->eq_(s.key, args...); },
-            [this, &args...]() { return std::make_tuple(K(args...)); },
-            [this, &args...](Alloc alloc) { return impl_->create_(alloc, args...); }));
+            impl_->hash_(std::as_const(args)...),
+            [this, &args...](const key_decorator<K>& s) { return impl_->eq_(s.key, std::as_const(args)...); },
+            [this, &args...]() { return std::make_tuple(K(std::as_const(args)...)); },
+            [this, &args...](Alloc alloc) { return impl_->create_(alloc, std::forward<Args>(args)...); }));
   }
 
   operator cache<K, V>() const & {
