@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_EXPIRE_QUEUE_H
 #define MONSOON_CACHE_EXPIRE_QUEUE_H
 
+///\file
+///\ingroup cache_detail
+
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -14,11 +17,23 @@ class base_expire_queue;
 
 /**
  * \brief Element decorator counterpart for base_expire_queue.
+ * \ingroup cache_detail
  * \details Maintains pointers for the doubly linked list in base_expire_queue,
  * as well as an indicator of which queue is used.
  */
 class expire_link {
   friend class base_expire_queue;
+
+ private:
+  ///\brief Flag mask.
+  ///\details Both link_succ_ and link_pred_ members will have the flag and will be kept in sync.
+  static constexpr std::uintptr_t Q_MASK = 0x1u;
+  ///\brief Queue identifier.
+  enum class queue_id : std::uintptr_t {
+    cold = 0x0u, ///<\brief Indicate that the element is linked on the cold queue.
+    hot = 0x1u, ///<\brief Indicate that the element is linked on the hot queue.
+    none = std::numeric_limits<std::uintptr_t>::max() ///<\brief Indicate that the element is not linked.
+  };
 
  public:
   ///\brief Element constructor. Ensures this becomes an unlinked element.
@@ -64,24 +79,14 @@ class expire_link {
   explicit expire_link(queue_id qid) noexcept
   : link_pred_(qid == queue_id::none
       ? 0u
-      : reinterpret_cast<std::uintptr_t>(this) | static_cast<std::uintptr_t>(queue_id))
+      : reinterpret_cast<std::uintptr_t>(this) | static_cast<std::uintptr_t>(qid)),
     link_succ_(qid == queue_id::none
       ? 0u
-      : reinterpret_cast<std::uintptr_t>(this) | static_cast<std::uintptr_t>(queue_id))
+      : reinterpret_cast<std::uintptr_t>(this) | static_cast<std::uintptr_t>(qid))
   {
     // Assert alignment constraint.
     assert((reinterpret_cast<std::uintptr_t>(this) & Q_MASK) == 0u);
   }
-
-  ///\brief Flag mask.
-  ///\details Both link_succ_ and link_pred_ members will have the flag and will be kept in sync.
-  static constexpr std::uintptr_t Q_MASK = 0x1u;
-  ///\brief Queue identifier.
-  enum class queue_id : std::uintptr_t {
-    cold = 0x0u, ///<\brief Indicate that the element is linked on the cold queue.
-    hot = 0x1u, ///<\brief Indicate that the element is linked on the hot queue.
-    none = std::numeric_limits<std::uintptr_t>::max() ///<\brief Indicate that the element is not linked.
-  };
 
   ///\brief Retrieve successor pointer.
   ///\tparam StoreType The type of the successor.
@@ -121,8 +126,8 @@ class expire_link {
     assert(after != this); // Cannot link after self.
     assert(link_pred_ == 0 && link_succ_ == 0); // Only allow linking when we're unlinked.
 
-    expire_link* after = pos->succ();
-    const std::uintptr_t self_ptr = reinterpret_cast<std::uintptr_t>(this) | (pos->link_succ_ & Q_MASK);
+    expire_link* after = before->succ();
+    const std::uintptr_t self_ptr = reinterpret_cast<std::uintptr_t>(this) | (before->link_succ_ & Q_MASK);
     link_succ_ = std::exchange(before->link_succ_, self_ptr);
     link_pred_ = std::exchange(after->link_pred_, self_ptr);
   }
@@ -137,7 +142,7 @@ class expire_link {
     assert(link_pred_ == 0 && link_succ_ == 0); // Only allow linking when we're unlinked.
 
     expire_link* before = after->pred();
-    const std::uintptr_t self_ptr = reinterpret_cast<std::uintptr_t>(this) | (pos->link_succ_ & Q_MASK);
+    const std::uintptr_t self_ptr = reinterpret_cast<std::uintptr_t>(this) | (after->link_succ_ & Q_MASK);
     link_succ_ = std::exchange(before->link_succ_, self_ptr);
     link_pred_ = std::exchange(after->link_pred_, self_ptr);
   }
@@ -183,7 +188,7 @@ class base_expire_queue {
   base_expire_queue& operator=(base_expire_queue&&) = delete;
 
   template<typename Builder>
-  constexpr expire_queue([[maybe_unused]] const Builder& b) noexcept {}
+  constexpr base_expire_queue([[maybe_unused]] const Builder& b) noexcept {}
 
  protected:
   ///\brief Import queue_id, for convenience.
@@ -208,7 +213,7 @@ class base_expire_queue {
   noexcept
   -> void {
     s.link_after(&cold_q);
-    ++cold_qlen_;
+    ++cold_qlen;
 
     rebalance_();
   }
@@ -226,11 +231,11 @@ class base_expire_queue {
         return;
       case queue_id::hot:
         s.unlink();
-        --hot_qlen_;
+        --hot_qlen;
         break;
       case queue_id::cold:
         s.unlink();
-        --cold_qlen_;
+        --cold_qlen;
         break;
     }
 
@@ -264,7 +269,7 @@ class base_expire_queue {
       case queue_id::none:
         if (!s_arg.strengthen()) return;
         s.link_after(&cold_q);
-        ++old_qlen_;
+        ++cold_qlen;
         break;
       case queue_id::hot:
         s.unlink();
@@ -273,8 +278,8 @@ class base_expire_queue {
       case queue_id::cold:
         s.unlink();
         s.link_after(&hot_q);
-        --cold_qlen_;
-        ++hot_qlen_;
+        --cold_qlen;
+        ++hot_qlen;
         break;
     }
 
@@ -293,28 +298,28 @@ class base_expire_queue {
    * \param new_size The new size of the queue.
    */
   template<typename StoreType>
-  shrink_to_size_(std::uintptr_t new_size)
+  auto shrink_to_size_(std::uintptr_t new_size)
   noexcept
   -> void {
-    while (cold_qlen_ > 0 && cold_qlen_ + hot_qlen_ > new_size) {
+    while (cold_qlen > 0 && cold_qlen + hot_qlen > new_size) {
       StoreType* r = cold_q.pred<StoreType>();
       expire_link* r_link = r;
 
       assert(r_link->get_queue_id() == queue_id::cold);
       r->weaken();
       r_link->unlink();
-      --cold_qlen_;
+      --cold_qlen;
     }
 
-    if (cold_qlen_ == 0) {
-      while (hot_qlen_ > new_size) {
+    if (cold_qlen == 0) {
+      while (hot_qlen > new_size) {
         StoreType* r = hot_q.pred<StoreType>();
         expire_link* r_link = r;
 
         assert(r_link->get_queue_id() == queue_id::hot);
         r->weaken();
         r_link->unlink();
-        --hot_qlen_;
+        --hot_qlen;
       }
     }
 
@@ -333,32 +338,33 @@ class base_expire_queue {
   auto rebalance_()
   noexcept
   -> void {
-    while (cold_qlen_ + 1u < hot_qlen_) { // Transfer from hot to cold.
+    while (cold_qlen + 1u < hot_qlen) { // Transfer from hot to cold.
       expire_link* s = hot_q.pred(); // From back of queue.
       assert(s != &hot_q);
       s->unlink();
       s->link_after(&cold_q); // To front of queue.
-      --hot_qlen_;
-      ++cold_qlen_;
+      --hot_qlen;
+      ++cold_qlen;
     }
 
-    while (hot_qlen_ + 1u < cold_qlen_) { // Transfer from cold to hot.
+    while (hot_qlen + 1u < cold_qlen) { // Transfer from cold to hot.
       expire_link* s = cold_q.succ(); // From front of queue.
       assert(s != &cold_q);
       s->unlink();
       s->link_before(&hot_q); // To back of queue.
-      --cold_qlen_;
-      ++hot_qlen_;
+      --cold_qlen;
+      ++hot_qlen;
     }
   }
 
-  std::uintptr_t cold_qlen_ = 0, hot_qlen = 0;
+  std::uintptr_t cold_qlen = 0, hot_qlen = 0;
   expire_link cold_q{ queue_id::hot }, hot_q{ queue_id::cold };
 };
 
 ///\brief Decorator that maintains a queue of \ref monsoon::cache::element "elements".
+///\ingroup cache_detail
 ///\tparam StoreType The \ref monsoon::cache::element "element" type of the cache.
-template<typename StoreType>
+template<typename ImplType>
 class expire_queue
 : public base_expire_queue
 {
@@ -371,14 +377,15 @@ class expire_queue
   auto shrink_to_size(std::uintptr_t new_size)
   noexcept
   -> void {
-    shrink_to_size_<StoreType>(new_size);
+    shrink_to_size_<typename ImplType::store_type>(new_size);
   }
 };
 
 ///\brief Decorator that installs an expire queue on the cache.
+///\ingroup cache_detail
 struct cache_expire_queue_decorator {
   template<typename SimpleCacheImpl>
-  using for_impl_type = expire_queue<typename SimpleCacheImpl::store_type>;
+  using for_impl_type = expire_queue<SimpleCacheImpl>;
 };
 
 

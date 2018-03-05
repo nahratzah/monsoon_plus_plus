@@ -512,12 +512,12 @@ noexcept // Allocation exception is swallowed.
 
 template<typename T, typename A, typename... D>
 void simple_cache_impl<T, A, D...>::on_create(store_type& s) noexcept {
-  decorators_on_create_<store_type, D...>::apply(s, *this);
+  decorators_on_create_<store_type, select_decorator_type<D, simple_cache_impl>...>::apply(s, *this);
 }
 
 template<typename T, typename A, typename... D>
 void simple_cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
-  decorators_on_delete_<store_type, D...>::apply(s, *this);
+  decorators_on_delete_<store_type, select_decorator_type<D, simple_cache_impl>...>::apply(s, *this);
 }
 
 

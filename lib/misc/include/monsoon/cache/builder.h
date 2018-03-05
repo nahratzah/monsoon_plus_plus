@@ -24,7 +24,6 @@ class cache_builder_vars {
  public:
   ///\bug Not implemented.
   constexpr auto max_memory() const noexcept -> std::optional<std::uintptr_t>;
-  ///\bug Not implemented.
   constexpr auto max_size() const noexcept -> std::optional<std::uintptr_t>;
   constexpr auto max_age() const noexcept -> std::optional<std::chrono::seconds>;
   constexpr auto access_expire() const noexcept -> std::optional<std::chrono::seconds>;

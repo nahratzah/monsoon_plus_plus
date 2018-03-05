@@ -14,6 +14,8 @@
 #include <monsoon/cache/weaken_decorator.h>
 #include <monsoon/cache/access_expire_decorator.h>
 #include <monsoon/cache/max_age_decorator.h>
+#include <monsoon/cache/expire_queue.h>
+#include <monsoon/cache/max_size_decorator.h>
 #include <monsoon/cache/element.h>
 
 namespace monsoon::cache {
@@ -44,8 +46,8 @@ struct add_all_except_<CDS, T> {
 template<typename CDS, typename T, typename D0, typename... D>
 struct add_all_except_<CDS, T, D0, D...> {
   using type = typename std::conditional_t<std::is_same_v<T, D0>,
-        add_all_except_<CDS, D...>,
-        add_all_except_<decltype(std::declval<CDS>().template add<D0>()), D...>>::type;
+        add_all_except_<CDS, T, D...>,
+        add_all_except_<decltype(std::declval<CDS>().template add<D0>()), T, D...>>::type;
 };
 
 ///\brief Keep track of all decorators that are to be applied to the cache.
@@ -170,6 +172,7 @@ constexpr auto apply_max_age(const cache_builder_vars& b, NextApply&& next)
   return { b, std::forward<NextApply>(next) };
 }
 
+
 template<typename NextApply>
 struct apply_async_ {
   template<typename... D>
@@ -193,6 +196,31 @@ constexpr auto apply_async(const Builder& b, NextApply&& next)
   } else {
     return { b, std::forward<NextApply>(next) };
   }
+}
+
+
+template<typename NextApply>
+struct apply_max_size_ {
+  template<typename... D>
+  auto operator()(cache_decorator_set<D...> d)
+  -> decltype(auto) {
+    if (b.max_size().has_value())
+      return next(d
+          .template remove<weaken_decorator>()
+          .template add<cache_expire_queue_decorator>()
+          .template add<max_size_decorator>());
+    else
+      return next(d);
+  }
+
+  const cache_builder_vars& b;
+  NextApply next;
+};
+
+template<typename NextApply>
+constexpr auto apply_max_size(const cache_builder_vars& b, NextApply&& next)
+-> apply_max_size_<std::decay_t<NextApply>> {
+  return { b, std::forward<NextApply>(next) };
 }
 
 
@@ -364,21 +392,23 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
               apply_access_expire(*this,
                   apply_key_type(*this,
                       apply_thread_safe(*this,
-                          [this, &fn, shards](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
-                            using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
-                            using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
-                            using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
+                          // No weaken decorators past this point.
+                          apply_max_size(*this,
+                              [this, &fn, shards](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
+                                using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
+                                using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
+                                using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
-                            if (shards != 1u) {
-                              return std::allocate_shared<sharded_wrapper_type>(
-                                  allocator(),
-                                  *this, shards, std::forward<Fn>(fn));
-                            } else {
-                              return std::allocate_shared<wrapper_type>(
-                                  allocator(),
-                                  *this, std::forward<Fn>(fn));
-                            }
-                          })))));
+                                if (shards != 1u) {
+                                  return std::allocate_shared<sharded_wrapper_type>(
+                                      allocator(),
+                                      *this, shards, std::forward<Fn>(fn));
+                                } else {
+                                  return std::allocate_shared<wrapper_type>(
+                                      allocator(),
+                                      *this, std::forward<Fn>(fn));
+                                }
+                              }))))));
 
   return extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>(builder_impl(cache_decorator_set<>()));
 }
