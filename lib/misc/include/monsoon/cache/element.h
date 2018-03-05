@@ -155,16 +155,11 @@ class element
       std::enable_if_t<Enable, future_type> init, std::size_t hash,
       std::tuple<DecoratorCtx...> decorator_ctx) noexcept;
 
-  ///\brief Copy constructor.
-  ///\bug I don't want element to be copy constructible, as a precautionary measure.
-  element(const element& e) noexcept
-  : Decorators(*this)...,
-    hash_(e.hash_),
-    ptr_(e.ptr_),
-    plain_ptr_(e.plain_ptr_)
-  {}
-
+  element() = delete;
+  element(const element& e) = delete;
+  element(element&& e) = delete;
   element& operator=(const element&) = delete;
+  element& operator=(element&&) = delete;
 
 #ifndef NDEBUG
   ~element() noexcept {

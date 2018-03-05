@@ -322,11 +322,23 @@ class simple_cache_impl
     const auto query = make_bucket_ctx(
         q.hash_code,
         q.predicate,
-        [this, &q, &ch]() -> store_type {
-          return store_type(
-              std::allocator_arg, alloc_,
-              ch(alloc_), q.hash_code,
-              std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, simple_cache_impl>>::apply(*this)...));
+        [this, &q, &ch](void* hint) -> store_type* {
+          // Rebind allocator to store_type.
+          using alloc_traits = typename std::allocator_traits<alloc_t>::template rebind_traits<store_type>;
+          typename std::allocator_traits<alloc_t>::template rebind_alloc<store_type> alloc = alloc_;
+
+          // Create init tuple in advance, so that create function is free to
+          // move its arguments.
+          auto init = std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, simple_cache_impl>>::apply(*this)...);
+
+          store_type* new_store = alloc_traits::allocate(alloc, 1, hint);
+          try {
+            alloc_traits::construct(alloc, new_store, std::allocator_arg, alloc_, ch(alloc_), q.hash_code, std::move(init));
+          } catch (...) {
+            alloc_traits::deallocate(alloc, new_store, 1);
+            throw;
+          }
+          return new_store;
         },
         size_,
         [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, simple_cache_impl>...>::apply(s, *this); },

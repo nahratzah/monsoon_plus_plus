@@ -56,18 +56,10 @@ class expire_link {
   }
 #endif
 
- protected:
-  ///\brief Copy constructor, because element has need-copy-constructor bug.
-  ///\bug Constructor should be deleted, but bug in element usage prevents this.
-  expire_link(const expire_link& x) noexcept
-  : expire_link(queue_id::none)
-  {}
-
-  ///\brief Copy assignment, because element has need-copy-constructor bug.
-  ///\bug Assignment should be deleted, but bug in element usage prevents this.
-  expire_link& operator=(const expire_link& x) noexcept {
-    return *this;
-  }
+  expire_link(const expire_link&) = delete;
+  expire_link(expire_link&&) = delete;
+  expire_link& operator=(const expire_link&) = delete;
+  expire_link& operator=(expire_link&&) = delete;
 
  private:
   /**

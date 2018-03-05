@@ -182,13 +182,7 @@ class bucket {
     }
 
     // Create new store_type.
-    store_type* new_store = alloc_traits::allocate(alloc, 1, alloc_hint);
-    try {
-      alloc_traits::construct(alloc, new_store, ctx.create()); // ctx.create may destructively access ctx.
-    } catch (...) {
-      alloc_traits::deallocate(alloc, new_store, 1);
-      throw;
-    }
+    store_type* new_store = ctx.create(alloc_hint);
     *iter = new_store; // Link.
     created = new_store; // Inform called of newly constructed store.
     ++ctx.size;
