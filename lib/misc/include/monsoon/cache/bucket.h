@@ -136,7 +136,7 @@ class bucket {
    */
   template<typename Alloc, typename KeyPredicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
   auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, SizeType, OnHit, OnDelete>& ctx, store_type*& created)
-  -> pointer {
+  -> lookup_type {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
     using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
     using size_type = typename alloc_traits::size_type;

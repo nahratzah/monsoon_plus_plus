@@ -31,6 +31,7 @@ class cache_builder_vars {
   auto thread_safe() const noexcept -> bool;
   auto concurrency() const noexcept -> unsigned int;
   auto load_factor() const noexcept -> float;
+  auto async() const noexcept -> bool;
 
  protected:
   std::optional<std::uintptr_t> max_memory_, max_size_;
@@ -38,6 +39,7 @@ class cache_builder_vars {
   bool thread_safe_ = true;
   unsigned int concurrency_ = 0; // zero signifies to use std::hardware_concurrency
   float lf_ = 1.0;
+  bool async_ = false;
 };
 
 /**
@@ -97,6 +99,9 @@ class cache_builder
 
   using cache_builder_vars::load_factor;
   auto load_factor(float lf) -> cache_builder&;
+
+  using cache_builder_vars::async;
+  auto async(bool async) noexcept -> cache_builder&;
 
   template<typename NewHash>
   auto with_hash(NewHash hash) const
@@ -265,6 +270,14 @@ auto cache_builder<T, U, Hash, Eq, Alloc>::load_factor(float lf)
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
+auto cache_builder<T, U, Hash, Eq, Alloc>::async(bool async)
+noexcept
+-> cache_builder& {
+  this->async_ = async;
+  return *this;
+}
+
+template<typename T, typename U, typename Hash, typename Eq, typename Alloc>
 template<typename NewHash>
 auto cache_builder<T, U, Hash, Eq, Alloc>::with_hash(NewHash hash) const
 -> cache_builder<T, U, NewHash, Eq, Alloc> {
@@ -325,6 +338,12 @@ inline auto cache_builder_vars::load_factor() const
 noexcept
 -> float {
   return lf_;
+}
+
+inline auto cache_builder_vars::async() const
+noexcept
+-> bool {
+  return async_;
 }
 
 template<typename T, typename U, typename Hash, typename Eq, typename Alloc>

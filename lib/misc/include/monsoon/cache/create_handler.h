@@ -74,7 +74,7 @@ struct async_invoke_wrapper_ {
     return make_shared_ptr_(
         alloc,
         squash_future_(
-            fn_(alloc, std::forward<Args>(args)...)));
+            fn(alloc, std::forward<Args>(args)...)));
   }
 };
 

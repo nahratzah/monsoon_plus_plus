@@ -60,7 +60,15 @@ struct decorators_is_expired_<D, Tail...> {
  * its constructor, as well as returning it from its \ref element::ptr "ptr()"
  * method.
  */
-struct async_element_decorator {};
+struct async_element_decorator {
+  template<typename Alloc, typename... Types>
+  constexpr async_element_decorator(
+      [[maybe_unused]] std::allocator_arg_t aa,
+      [[maybe_unused]] const Alloc& a,
+      [[maybe_unused]] const std::tuple<Types...>& init)
+  noexcept
+  {}
+};
 
 /**
  * \brief Cache element.
@@ -308,7 +316,7 @@ auto element<T, D...>::resolve()
       // Resolve future.
       pointer ptr;
       try {
-        ptr = std::get<async_type>.fut.get();
+        ptr = std::get<async_type>(ptr_).fut.get();
       } catch (...) {
         // Invalidate on exception, so that future hits will not consider this.
         ptr_.template emplace<std::monostate>();
