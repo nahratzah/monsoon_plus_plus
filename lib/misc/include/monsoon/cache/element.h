@@ -206,6 +206,17 @@ class element
    */
   auto weaken() noexcept -> element&;
 
+  /**
+   * \brief Change the weak reference to a strong reference.
+   *
+   * \details
+   * When the element holds a weak reference, the pointee is allowed to expire
+   * once its life time outside the cache ends.
+   *
+   * \returns The true if the value was strengthened, false otherwise.
+   */
+  auto strengthen() noexcept -> bool;
+
  private:
   std::size_t hash_ = 0;
   internal_ptr_type ptr_;
@@ -353,6 +364,23 @@ noexcept
     }
   }
   return *this;
+}
+
+template<typename T, typename... D>
+auto element<T, D...>::strengthen()
+noexcept
+-> bool {
+  if (std::holds_alternative<weak_pointer>(ptr_)) {
+    auto ptr = std::get<weak_pointer>(ptr_).lock();
+    if (ptr != nullptr)
+      ptr_.template emplace<pointer>(std::move(ptr));
+  } else {
+    if constexpr(is_async) {
+      if (std::holds_alternative<async_type>(ptr_))
+        std::get<async_type>(ptr_).strong = true;
+    }
+  }
+  return !std::holds_alternative<weak_pointer>(ptr_);
 }
 
 
