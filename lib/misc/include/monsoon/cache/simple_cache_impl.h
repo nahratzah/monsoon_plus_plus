@@ -325,7 +325,7 @@ class simple_cache_impl
         .lookup_or_create(alloc_, query, created);
     assert(!store_type::is_nil(lookup_result));
     auto slck = store_delete_lock<store_type>(created); // Prevent created entry from disappearing when we release the lock.
-    pointer result = resolve_(lck, std::move(lookup_result), created);
+    pointer result = resolve_(lck, std::move(lookup_result), created); // lck may be unlocked
     assert(result != nullptr);
 
     // If newly created, call post processing hooks.
