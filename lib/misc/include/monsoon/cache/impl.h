@@ -135,9 +135,14 @@ struct apply_access_expire_ {
   auto operator()(cache_decorator_set<D...> d)
   -> decltype(auto) {
     if (b.access_expire().has_value())
-      return next(d.template add<access_expire_decorator>());
+      return next(d
+          .template remove<weaken_decorator>()
+#if 0 // Not yet, haven't figured out if we will use this queue.
+          .template add<cache_expire_queue_decorator>()
+#endif
+          .template add<access_expire_decorator>());
     else
-      return next(d.template add<weaken_decorator>());
+      return next(d);
   }
 
   const cache_builder_vars& b;
@@ -418,7 +423,6 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
               apply_access_expire(*this,
                   apply_key_type(*this,
                       apply_thread_safe(*this,
-                          // No weaken decorators past this point.
                           apply_max_size(*this,
                               [this, &fn, shards](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
                                 using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
@@ -436,7 +440,8 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
                                 }
                               }))))));
 
-  return extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>(builder_impl(cache_decorator_set<>()));
+  return extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>(
+      builder_impl(cache_decorator_set<>().template add<weaken_decorator>()));
 }
 
 

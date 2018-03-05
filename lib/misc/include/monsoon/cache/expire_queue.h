@@ -287,7 +287,7 @@ class base_expire_queue {
    *
    * Elements discarded from the queue are weakened, so that they will be
    * automatically released when they expire.
-   * \param new_size The new size of the queue.
+   * \param[in] new_size The new size of the queue.
    */
   template<typename StoreType>
   auto shrink_to_size_(std::uintptr_t new_size)
@@ -308,6 +308,50 @@ class base_expire_queue {
         StoreType* r = hot_q.pred<StoreType>();
         expire_link* r_link = r;
 
+        assert(r_link->get_queue_id() == queue_id::hot);
+        r->weaken();
+        r_link->unlink();
+        --hot_qlen;
+      }
+    }
+
+    rebalance_();
+  }
+
+  /**
+   * \brief Drop the coldest entries for which \p predicate holds.
+   * \details
+   * The coldest entries are checked against \p predicate. If the predicate
+   * returns true, the entry is removed.
+   *
+   * The function loops until either the queue is empty or \p predicate
+   * returns false.
+   * \param[in] predicate The predicate to test.
+   */
+  template<typename StoreType, typename P>
+  auto shrink_while_(P predicate)
+  noexcept
+  -> void {
+    bool stop = false;
+    while (!stop && cold_qlen > 0) {
+      StoreType* r = cold_q.pred<StoreType>();
+      expire_link* r_link = r;
+
+      stop = !predicate(std::as_const(*r));
+      if (!stop) {
+        assert(r_link->get_queue_id() == queue_id::cold);
+        r->weaken();
+        r_link->unlink();
+        --cold_qlen;
+      }
+    }
+
+    while (!stop && hot_qlen > 0) {
+      StoreType* r = hot_q.pred<StoreType>();
+      expire_link* r_link = r;
+
+      stop = !predicate(std::as_const(*r));
+      if (!stop) {
         assert(r_link->get_queue_id() == queue_id::hot);
         r->weaken();
         r_link->unlink();
@@ -370,6 +414,14 @@ class expire_queue
   noexcept
   -> void {
     shrink_to_size_<typename ImplType::store_type>(new_size);
+  }
+
+  ///\copydoc base_expire_queue::shrink_while_
+  template<typename P>
+  auto shrink_while(P predicate)
+  noexcept
+  -> void {
+    shrink_while_<typename ImplType::store_type>(std::move(predicate));
   }
 };
 

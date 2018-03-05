@@ -23,15 +23,9 @@ struct access_expire_decorator {
   using clock_type = std::chrono::steady_clock;
   using time_point = std::chrono::time_point<clock_type>;
 
-  access_expire_decorator(const cache_builder_vars& b)
-  : duration(b.access_expire().value())
-  {}
-
-  auto init_tuple() const
-  noexcept
-  -> std::tuple<access_expire_decorator> {
-    return std::make_tuple(*this);
-  }
+  struct access_init {
+    time_point expire;
+  };
 
   ///\brief Element decorator counterpart.
   class element_decorator_type {
@@ -43,8 +37,7 @@ struct access_expire_decorator {
         [[maybe_unused]] std::allocator_arg_t aa,
         [[maybe_unused]] Alloc a,
         const std::tuple<Types...>& init)
-    : access_expire_(clock_type::now()
-        + std::get<access_expire_decorator>(init).duration)
+    : access_expire_(std::get<access_init>(init).expire)
     {}
 
     bool is_expired() const noexcept {
@@ -55,11 +48,27 @@ struct access_expire_decorator {
     time_point access_expire_;
   };
 
-  auto on_hit(element_decorator_type& elem) const noexcept -> void {
-    elem.access_expire_ = clock_type::now() + duration;
-  }
+  ///\brief Implementation of access_expire_decorator for a given cache.
+  template<typename ImplType>
+  struct for_impl_type {
+    using element_decorator_type = access_expire_decorator::element_decorator_type;
 
-  std::chrono::seconds duration;
+    for_impl_type(const cache_builder_vars& b)
+    : duration(b.access_expire().value())
+    {}
+
+    auto init_tuple() const
+    noexcept
+    -> std::tuple<access_init> {
+      return std::make_tuple(access_init{ clock_type::now() + duration });
+    }
+
+    auto on_hit(element_decorator_type& elem) const noexcept -> void {
+      elem.access_expire_ = clock_type::now() + duration;
+    }
+
+    std::chrono::seconds duration;
+  };
 };
 
 
