@@ -160,11 +160,27 @@ class extended_cache {
   friend class cache_builder;
 
  private:
-  using key_type = typename cache<K, V>::key_type;
-  using pointer = typename cache<K, V>::pointer;
   using extended_cache_type = extended_cache_intf<K, V, Hash, Eq, Alloc, Create>;
   using extended_query_type = typename extended_cache_type::extended_query_type;
 
+ public:
+  using key_type = typename cache<K, V>::key_type;
+  using pointer = typename cache<K, V>::pointer;
+
+  extended_cache() = delete; // Use builder.
+
+  static constexpr auto builder()
+  -> cache_builder<K, V, Hash, Eq, Alloc> {
+    return cache_builder<K, V, Hash, Eq, Alloc>();
+  }
+
+  static constexpr auto builder(Alloc alloc)
+  -> cache_builder<K, V, Hash, Eq, Alloc> {
+    return cache_builder<K, V, Hash, Eq, Alloc>(
+        Hash(), Eq(), std::move(alloc));
+  }
+
+ private:
   extended_cache(std::shared_ptr<extended_cache_type>&& impl) noexcept
   : impl_(std::move(impl))
   {}
