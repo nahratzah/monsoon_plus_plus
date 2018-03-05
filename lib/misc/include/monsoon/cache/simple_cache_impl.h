@@ -221,6 +221,20 @@ struct cache_decorator_tpl_<D, std::void_t<decltype(std::declval<D&>().init_tupl
 };
 
 
+template<typename D, typename ImplType, typename = void>
+struct select_decorator_type_ {
+  using type = D;
+};
+
+template<typename D, typename ImplType>
+struct select_decorator_type_<D, ImplType, std::void_t<typename D::template for_impl_type<ImplType>>> {
+  using type = typename D::template for_impl_type<ImplType>;
+};
+
+template<typename D, typename ImplType>
+using select_decorator_type = typename select_decorator_type_<D, ImplType>::type;
+
+
 } /* namespace monsoon::cache::<unnamed> */
 
 /**
@@ -231,14 +245,14 @@ struct cache_decorator_tpl_<D, std::void_t<decltype(std::declval<D&>().init_tupl
  */
 template<typename T, typename Alloc, typename... CacheDecorators>
 class simple_cache_impl
-: public CacheDecorators...
+: public select_decorator_type<CacheDecorators, simple_cache_impl<T, Alloc, CacheDecorators...>>...
 {
  public:
   ///\brief Size type of the cache.
   using size_type = std::uintptr_t;
 
  private:
-  using bucket_type = decorate_bucket_t<bucket<T>, CacheDecorators...>;
+  using bucket_type = decorate_bucket_t<bucket<T>, select_decorator_type<CacheDecorators, simple_cache_impl>...>;
   using bucket_vector = std::vector<bucket_type, typename std::allocator_traits<Alloc>::template rebind_alloc<bucket_type>>;
   using lookup_type = typename bucket_type::lookup_type;
 
@@ -259,7 +273,7 @@ class simple_cache_impl
  public:
   template<typename Key, typename Hash, typename Eq>
   simple_cache_impl(const cache_builder<Key, T, Hash, Eq, Alloc>& b)
-  : CacheDecorators(b)...,
+  : select_decorator_type<CacheDecorators, simple_cache_impl>(b)...,
     buckets_(b.allocator()),
     alloc_(b.allocator()),
     lf_(b.load_factor())
@@ -287,7 +301,7 @@ class simple_cache_impl
         q.predicate,
         []() -> store_type { throw std::runtime_error("create should not be called"); },
         size_,
-        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); },
+        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, simple_cache_impl>...>::apply(s, *this); },
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
@@ -312,10 +326,10 @@ class simple_cache_impl
           return store_type(
               std::allocator_arg, alloc_,
               ch(alloc_), q.hash_code,
-              std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<CacheDecorators>::apply(*this)...));
+              std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, simple_cache_impl>>::apply(*this)...));
         },
         size_,
-        [this](store_type& s) { decorators_on_hit_<store_type, CacheDecorators...>::apply(s, *this); },
+        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, simple_cache_impl>...>::apply(s, *this); },
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
