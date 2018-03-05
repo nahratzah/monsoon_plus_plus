@@ -100,7 +100,7 @@ struct apply_thread_safe_ {
 };
 
 template<typename NextApply>
-auto apply_thread_safe(const cache_builder_vars& b, NextApply&& next)
+constexpr auto apply_thread_safe(const cache_builder_vars& b, NextApply&& next)
 -> apply_thread_safe_<std::decay_t<NextApply>> {
   return { b, std::forward<NextApply>(next) };
 }
@@ -121,7 +121,7 @@ struct apply_key_type_ {
 };
 
 template<typename Builder, typename NextApply>
-auto apply_key_type(const Builder& b, NextApply&& next)
+constexpr auto apply_key_type(const Builder& b, NextApply&& next)
 -> apply_key_type_<typename Builder::key_type, std::decay_t<NextApply>> {
   return { std::forward<NextApply>(next) };
 }
@@ -143,7 +143,7 @@ struct apply_access_expire_ {
 };
 
 template<typename NextApply>
-auto apply_access_expire(const cache_builder_vars& b, NextApply&& next)
+constexpr auto apply_access_expire(const cache_builder_vars& b, NextApply&& next)
 -> apply_access_expire_<std::decay_t<NextApply>> {
   return { b, std::forward<NextApply>(next) };
 }
@@ -165,7 +165,7 @@ struct apply_max_age_ {
 };
 
 template<typename NextApply>
-auto apply_max_age(const cache_builder_vars& b, NextApply&& next)
+constexpr auto apply_max_age(const cache_builder_vars& b, NextApply&& next)
 -> apply_max_age_<std::decay_t<NextApply>> {
   return { b, std::forward<NextApply>(next) };
 }
@@ -185,10 +185,14 @@ struct apply_async_ {
   NextApply next;
 };
 
-template<typename NextApply>
-auto apply_async(const cache_builder_vars& b, NextApply&& next)
+template<typename Builder, typename NextApply>
+constexpr auto apply_async(const Builder& b, NextApply&& next)
 -> apply_async_<std::decay_t<NextApply>> {
-  return { b, std::forward<NextApply>(next) };
+  if constexpr(std::is_same_v<void, typename Builder::key_type>) {
+    return next;
+  } else {
+    return { b, std::forward<NextApply>(next) };
+  }
 }
 
 
