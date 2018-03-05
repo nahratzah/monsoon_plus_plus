@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_WEAKEN_DECORATOR_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <monsoon/cache/element.h>
 
@@ -11,7 +11,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Decorator, that ensures newly created elements are weakened.
- * \ingroup cache
+ * \ingroup cache_detail
  * Weakened elements use a weak pointer to their data, which will enable
  * expiring as soon as no data structures outside the cache are referencing
  * the mapped type.

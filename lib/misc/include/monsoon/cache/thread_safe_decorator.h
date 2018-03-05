@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_THREAD_SAFE_DECORATOR_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <mutex>
 
@@ -11,7 +11,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Cache decorator, implementing the basic lockable concept.
- * \ingroup cache
+ * \ingroup cache_detail
  * \details This decorator only provides a thread safe implementation,
  * if \p Enabled is true.
  * \tparam Enabled If true, the implementation will use a mutex to provide

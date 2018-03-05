@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_MAX_AGE_DECORATOR_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <chrono>
 #include <memory>
@@ -12,7 +12,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Decorator that enforces the max_age property.
- * \ingroup cache
+ * \ingroup cache_detail
  */
 struct max_age_decorator {
   using clock_type = std::chrono::steady_clock;

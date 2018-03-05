@@ -18,7 +18,7 @@ class cache_allocator;
 
 /**
  * \brief Interface used by cache_allocator to record changes in memory usage.
- * \ingroup cache
+ * \ingroup cache_detail
  */
 class cache_alloc_dealloc_observer {
  public:

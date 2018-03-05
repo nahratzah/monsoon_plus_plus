@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_CREATE_HANDLER_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <future>
 #include <memory>
@@ -12,7 +12,7 @@
 namespace monsoon::cache {
 namespace {
 ///\brief Various functions and data types, to adapt the result of a create function.
-///\ingroup cache
+///\ingroup cache_detail
 namespace create_ops {
 
 
@@ -108,7 +108,7 @@ auto future_as_pointer_future_(Alloc alloc, std::shared_future<T> fut)
 
 /**
  * \brief Wraps create function so it emits the proper type.
- * \ingroup cache
+ * \ingroup cache_detail
  *
  * \details
  * Invokes \p Fn, with an allocator and a given set of arguments.
@@ -151,7 +151,7 @@ class create_handler {
 
 /**
  * \brief Wraps create function so it emits the proper type.
- * \ingroup cache
+ * \ingroup cache_detail
  *
  * \details
  * Invokes \p Fn, with an allocator and a given set of arguments.

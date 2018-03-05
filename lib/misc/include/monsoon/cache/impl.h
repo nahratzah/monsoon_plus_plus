@@ -17,7 +17,7 @@
 
 namespace monsoon::cache {
 ///\brief Helpers for the builder::build() method.
-///\ingroup cache
+///\ingroup cache_detail
 namespace builder_detail {
 namespace {
 
@@ -38,7 +38,7 @@ struct add_all_except_<CDS, T, D0, D...> {
 };
 
 ///\brief Keep track of all decorators that are to be applied to the cache.
-///\ingroup cache
+///\ingroup cache_detail
 ///\tparam D All decorators that are to be passed to the cache.
 template<typename... D>
 struct cache_decorator_set {

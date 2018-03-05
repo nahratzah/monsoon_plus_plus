@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_ACCESS_EXPIRE_DECORATOR_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <chrono>
 #include <memory>
@@ -12,7 +12,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Cache decorator that handles access expire.
- * \ingroup cache
+ * \ingroup cache_detail
  *
  * \bug While the access expire correctly suppresses the element
  * once the timer is up, it would be nice to use a list of elements

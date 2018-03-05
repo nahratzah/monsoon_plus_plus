@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_SIMPLE_CACHE_IMPL_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <monsoon/cache/bucket.h>
 #include <monsoon/cache/cache.h>
@@ -18,7 +18,7 @@ namespace {
 
 
 ///\brief Scoped lock to prevent a store type from being deleted.
-///\ingroup cache
+///\ingroup cache_detail
 template<typename S>
 class store_delete_lock {
  public:
@@ -225,7 +225,7 @@ struct cache_decorator_tpl_<D, std::void_t<decltype(std::declval<D&>().init_tupl
 
 /**
  * \brief Implementation of all the internal cache logic.
- * \ingroup cache
+ * \ingroup cache_detail
  * \details This class combines all decorators and performs lookups,
  * as well as cache maintenance tasks.
  */

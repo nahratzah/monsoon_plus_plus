@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_ELEMENT_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <atomic>
 #include <cstddef>
@@ -16,7 +16,7 @@ namespace monsoon::cache {
 namespace {
 
 ///\brief Invoke the is_expired() method on the decorator.
-///\ingroup cache
+///\ingroup cache_detail
 template<typename D, typename = void>
 struct decorator_is_expired_ {
   static auto apply(const D& v) noexcept -> bool { return false; }
@@ -29,7 +29,7 @@ struct decorator_is_expired_<D, std::void_t<decltype(std::declval<const D&>().is
 
 
 ///\brief Invoke the is_expired() method on each of the decorators.
-///\ingroup cache
+///\ingroup cache_detail
 template<typename... Decorators> struct decorators_is_expired_;
 
 template<>
@@ -54,7 +54,7 @@ struct decorators_is_expired_<D, Tail...> {
 /**
  * \brief Decorator that, when used on an element, indicates the element should
  * support asynchronous operations.
- * \ingroup cache
+ * \ingroup cache_detail
  *
  * \details Instructs the element to add a shared_future<pointer> as input to
  * its constructor, as well as returning it from its \ref element::ptr "ptr()"
@@ -64,7 +64,7 @@ struct async_element_decorator {};
 
 /**
  * \brief Cache element.
- * \ingroup cache
+ * \ingroup cache_detail
  *
  * \details
  * An element holds information of an object pointed to by a shared ptr.

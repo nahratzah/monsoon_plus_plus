@@ -16,7 +16,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Simple key-value interface of cache.
- * \ingroup cache
+ * \ingroup cache_detail
  * \details The simple interface omits the variable arguments interface
  * of the \ref extended_cache_intf "extended cache".
  * \tparam K The key type of the cache.
@@ -40,7 +40,7 @@ class cache_intf {
 
 /**
  * \brief Extended cache interface.
- * \ingroup cache
+ * \ingroup cache_detail
  * \details The extended interface allows for querying a cache using a set
  * of arguments.
  * \tparam K The key type of the cache.

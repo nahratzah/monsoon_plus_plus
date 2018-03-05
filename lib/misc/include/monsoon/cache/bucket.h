@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_BUCKET_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <monsoon/cache/element.h>
 
@@ -11,7 +11,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Variables used by bucket to do its work.
- * \ingroup cache
+ * \ingroup cache_detail
  * \details These variables are kept outside bucket,
  * in order to reduce memory overhead.
  *
@@ -63,7 +63,7 @@ constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Cre
 
 /**
  * \brief Cache bucket.
- * \ingroup cache
+ * \ingroup cache_detail
  * \details A bucket contains all objects, based on a given modulo of the hash code.
  */
 template<typename T, typename... Decorators>
@@ -300,7 +300,7 @@ class bucket {
 
 /**
  * \brief Element decorator used by bucket to maintain its chain of elements.
- * \ingroup cache
+ * \ingroup cache_detail
  */
 template<typename T, typename... Decorators>
 class bucket<T, Decorators...>::bucket_link {

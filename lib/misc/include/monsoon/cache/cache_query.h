@@ -2,7 +2,7 @@
 #define MONSOON_CACHE_CACHE_QUERY_H
 
 ///\file
-///\ingroup cache
+///\ingroup cache_detail
 
 #include <cstddef>
 #include <type_traits>
@@ -13,7 +13,7 @@ namespace monsoon::cache {
 
 /**
  * \brief Internal query description for the cache.
- * \ingroup cache
+ * \ingroup cache_detail
  */
 template<typename Predicate, typename TplBuilder, typename Create>
 struct cache_query {
@@ -35,7 +35,7 @@ struct cache_query {
 
 /**
  * \brief Create a cache_query from the given arguments.
- * \ingroup cache
+ * \ingroup cache_detail
  * \param[in] hash_code The hash code of the cache key.
  * \param[in] predicate An equality predicate for the cache key.
  * \param[in] tpl_builder Functor that retrieves the initialization tuple for the key.
