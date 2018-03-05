@@ -122,8 +122,8 @@ class expire_link {
   auto link_after(expire_link* before)
   noexcept
   -> void {
-    assert(after != nullptr); // Cannot link after nullptr.
-    assert(after != this); // Cannot link after self.
+    assert(before != nullptr); // Cannot link before nullptr.
+    assert(before != this); // Cannot link before self.
     assert(link_pred_ == 0 && link_succ_ == 0); // Only allow linking when we're unlinked.
 
     expire_link* after = before->succ();
@@ -137,8 +137,8 @@ class expire_link {
   auto link_before(expire_link* after)
   noexcept
   -> void {
-    assert(before != nullptr); // Cannot link after nullptr.
-    assert(before != this); // Cannot link after self.
+    assert(after != nullptr); // Cannot link after nullptr.
+    assert(after != this); // Cannot link after self.
     assert(link_pred_ == 0 && link_succ_ == 0); // Only allow linking when we're unlinked.
 
     expire_link* before = after->pred();
