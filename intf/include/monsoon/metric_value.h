@@ -109,7 +109,7 @@ class monsoon_intf_export_ metric_value {
       char,
       std::char_traits<char>,
       cache_allocator<std::allocator<char>>>;
-  using string_ptr = std::shared_ptr<string_type>;
+  using string_ptr = std::shared_ptr<const string_type>;
 
   /**
    * \brief Underlying variant holding any one of the permitted values.
