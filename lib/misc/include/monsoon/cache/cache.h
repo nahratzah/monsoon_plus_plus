@@ -42,6 +42,32 @@ class cache_intf {
 };
 
 /**
+ * \brief Simple identity interface of cache.
+ * \ingroup cache_detail
+ * \details The simple interface omits the variable arguments interface
+ * of the \ref extended_cache_intf "extended cache".
+ * \tparam V The mapped type of the cache.
+ * \sa \ref cache<K,V>
+ */
+template<typename V>
+class cache_intf<void, V> {
+ public:
+  using key_type = std::decay_t<V>;
+  using pointer = std::shared_ptr<V>;
+
+  virtual ~cache_intf() noexcept {}
+
+  virtual auto get_if_present(const key_type& key)
+  -> pointer = 0;
+
+  virtual auto get(const key_type& key)
+  -> pointer = 0;
+
+  virtual auto get(key_type&& key)
+  -> pointer = 0;
+};
+
+/**
  * \brief Extended cache interface.
  * \ingroup cache_detail
  * \details The extended interface allows for querying a cache using a set
@@ -59,13 +85,20 @@ class extended_cache_intf
 : public cache_intf<K, V>
 {
  public:
+  using key_type = typename cache_intf<K, V>::key_type;
   using pointer = typename cache_intf<K, V>::pointer;
   using create_result_type =
-      std::decay_t<decltype(std::declval<const Create&>()(std::declval<Alloc&>(), std::declval<const K&>()))>;
-  using extended_query_type = cache_query<
-      std::function<bool(const key_decorator<K>&)>,
-      std::function<std::tuple<K>()>,
-      std::function<create_result_type(Alloc)>>;
+      std::decay_t<decltype(std::declval<const Create&>()(std::declval<Alloc&>(), std::declval<const key_type&>()))>;
+  using extended_query_type =
+      std::conditional_t<std::is_same_v<void, K>,
+          cache_query< // Identity case.
+              std::function<bool(const key_type&)>,
+              std::function<std::tuple<>()>,
+              std::function<create_result_type(Alloc)>>,
+          cache_query< // Key case.
+              std::function<bool(const key_type&)>,
+              std::function<std::tuple<key_type>()>,
+              std::function<create_result_type(Alloc)>>>;
 
   template<typename HashArg, typename EqArg, typename CreateArg>
   extended_cache_intf(
@@ -84,6 +117,72 @@ class extended_cache_intf
 
   virtual auto get(const extended_query_type& q) -> pointer = 0;
 
+  template<typename StoreType, typename... Args>
+  auto bind_eq_(const Args&... k) const
+  -> decltype(auto) {
+    static_assert(!std::is_same_v<void, K>
+        || std::is_same_v<pointer, typename StoreType::ptr_return_type>,
+        "Identity cache may not be async!");
+
+    if constexpr(!std::is_same_v<void, K>) {
+      return [&](const StoreType& s) {
+        return eq(s.key, k...);
+      };
+    } else {
+      return [&](const StoreType& s) {
+        pointer s_ptr = s.ptr();
+        return s_ptr != nullptr && eq(std::as_const(*s_ptr), k...);
+      };
+    }
+  }
+
+  template<typename StoreType>
+  auto wrap_ext_predicate_(const std::function<bool(const key_type&)>& predicate) const
+  -> decltype(auto) {
+    static_assert(!std::is_same_v<void, K>
+        || std::is_same_v<pointer, typename StoreType::ptr_return_type>,
+        "Identity cache may not be async!");
+
+    if constexpr(!std::is_same_v<void, K>) {
+      return [&](const StoreType& s) {
+        return predicate(s.key);
+      };
+    } else {
+      return [&](const StoreType& s) {
+        pointer s_ptr = s.ptr();
+        return s_ptr != nullptr && predicate(std::as_const(*s_ptr));
+      };
+    }
+  }
+
+  ///\bug Should use allocator type, to enable move construction of key.
+  template<typename... Args>
+  auto bind_tpl_(const Args&... k) const
+  -> decltype(auto) {
+    if constexpr(std::is_same_v<void, K>) {
+      // No key storage, so no key initializers needed.
+      return []() {
+        return std::tuple<>();
+      };
+    } else {
+      // Make a copy, since the returned tuple won't be used until /after/ the
+      // create function has been invoked.
+      return [&]() {
+        return std::make_tuple(key_type(k...));
+      };
+    }
+  }
+
+  template<typename... Args>
+  auto bind_create_(Args&&... args) const
+  -> decltype(auto) {
+    // Forwarding arguments, since create_ is always the last of the bind_*
+    // functions to be called (and because we made sure to copy in bind_tpl_).
+    return [&](Alloc alloc) {
+      return create(alloc, std::forward<Args>(args)...);
+    };
+  }
+
   Hash hash;
   Eq eq;
   Create create;
@@ -94,6 +193,7 @@ class extended_cache_intf
  * \ingroup cache
  * \details This cache allows looking up values, by a given key.
  * \tparam K The key type of the cache.
+ *    If \p K is void, the cache is an identity cache.
  * \tparam V The mapped type of the cache.
  */
 template<typename K, typename V>
@@ -136,9 +236,19 @@ class cache {
     return impl_->get(key);
   }
 
+  auto get(key_type&& key) const
+  -> pointer {
+    return impl_->get(std::move(key));
+  }
+
   auto operator()(const key_type& key) const
   -> pointer {
     return get(key);
+  }
+
+  auto operator()(key_type&& key) const
+  -> pointer {
+    return get(std::move(key));
   }
 
  private:
@@ -150,6 +260,7 @@ class cache {
  * \ingroup cache
  * \details This cache allows looking up values, by a given argument pack.
  * \tparam K The key type of the cache.
+ *    If \p K is void, the cache is an identity cache.
  * \tparam V The mapped type of the cache.
  * \tparam Hash A hash function for the key.
  * \tparam Eq An equality predicate for the key.
@@ -217,12 +328,19 @@ class extended_cache {
   template<typename... Args>
   auto get(Args&&... args) const
   -> pointer {
-    return impl_->lookup_or_create(
+    Eq& eq = impl_->eq; // Move pointer resolution outside of lambda below.
+    return impl_->get(
         extended_query_type(
-            impl_->hash_(std::as_const(args)...),
-            [this, &args...](const key_decorator<K>& s) { return impl_->eq_(s.key, std::as_const(args)...); },
-            [this, &args...]() { return std::make_tuple(K(std::as_const(args)...)); },
-            [this, &args...](Alloc alloc) { return impl_->create_(alloc, std::forward<Args>(args)...); }));
+            impl_->hash(std::as_const(args)...),
+            [&eq, &args...](const key_type& k) { return eq(k, args...); },
+            impl_->bind_tpl_(args...),
+            impl_->bind_create_(std::forward<Args>(args)...)));
+  }
+
+  template<typename... Args>
+  auto operator()(Args&&... args) const
+  -> pointer {
+    return get(std::forward<Args>(args)...);
   }
 
   operator cache<K, V>() const & {

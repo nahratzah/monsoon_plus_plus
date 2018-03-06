@@ -178,7 +178,7 @@ constexpr auto apply_max_age(const cache_builder_vars& b, NextApply&& next)
 }
 
 
-template<typename NextApply>
+template<typename KeyType, typename NextApply>
 struct apply_async_ {
   template<typename... D>
   auto operator()(cache_decorator_set<D...> d)
@@ -193,14 +193,22 @@ struct apply_async_ {
   NextApply next;
 };
 
+template<typename NextApply>
+struct apply_async_<void, NextApply> {
+  template<typename... D>
+  auto operator()(cache_decorator_set<D...> d)
+  -> decltype(auto) {
+    return next(d);
+  }
+
+  const cache_builder_vars& b;
+  NextApply next;
+};
+
 template<typename Builder, typename NextApply>
 constexpr auto apply_async(const Builder& b, NextApply&& next)
--> apply_async_<std::decay_t<NextApply>> {
-  if constexpr(std::is_same_v<void, typename Builder::key_type>) {
-    return next;
-  } else {
-    return { b, std::forward<NextApply>(next) };
-  }
+-> apply_async_<typename Builder::key_type, std::decay_t<NextApply>> {
+  return { b, std::forward<NextApply>(next) };
 }
 
 
@@ -238,6 +246,8 @@ class wrapper final
   private Impl
 {
  public:
+  using key_type = typename extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>::key_type;
+  using pointer = typename extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>::pointer;
   using store_type = typename Impl::store_type;
 
   template<typename CreateArg>
@@ -252,47 +262,48 @@ class wrapper final
 
   ~wrapper() noexcept {}
 
-  auto get_if_present(const K& k)
-  -> std::shared_ptr<V>
+  auto get_if_present(const key_type& k)
+  -> pointer
   override {
     return this->lookup_if_present(
         make_cache_query(
             this->hash(k),
-            [this, &k](const store_type& s) { return this->eq(s.key, k); },
+            this->template bind_eq_<store_type>(k),
             []() { assert(false); },
             []() { assert(false); }));
   }
 
-  auto get(const K& k)
-  -> std::shared_ptr<V>
+  auto get(const key_type& k)
+  -> pointer
   override {
     return this->lookup_or_create(
         make_cache_query(
             this->hash(k),
-            [this, &k](const store_type& s) { return this->eq(s.key, k); },
-            [this, &k]() { return std::make_tuple(k); },
-            [this, &k](auto alloc) {
-              return this->create(alloc, k);
-            }));
+            this->template bind_eq_<store_type>(k),
+            this->bind_tpl_(k),
+            this->bind_create_(k)));
   }
 
-  auto get(K&& k)
-  -> std::shared_ptr<V>
+  auto get(key_type&& k)
+  -> pointer
   override {
     return this->lookup_or_create(
         make_cache_query(
             this->hash(std::as_const(k)),
-            [this, &k](const store_type& s) { return this->eq(s.key, std::as_const(k)); },
-            [this, &k]() { return std::make_tuple(std::as_const(k)); },
-            [this, &k](auto alloc) {
-              return this->create(alloc, std::move(k));
-            }));
+            this->template bind_eq_<store_type>(k),
+            this->bind_tpl_(k),
+            this->bind_create_(std::move(k))));
   }
 
   auto get(const typename wrapper::extended_query_type& q)
-  -> std::shared_ptr<V>
+  -> pointer
   override {
-    return this->lookup_or_create(q);
+    return this->lookup_or_create(
+        make_cache_query(
+            q.hash_code,
+            this->template wrap_ext_predicate_<store_type>(q.predicate),
+            q.tpl_builder,
+            q.create));
   }
 };
 
@@ -302,6 +313,8 @@ class sharded_wrapper final
 : public extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>
 {
  public:
+  using key_type = typename extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>::key_type;
+  using pointer = typename extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>::pointer;
   using store_type = typename Impl::store_type;
   static constexpr std::size_t hash_multiplier =
       (sizeof(std::size_t) <= 4
@@ -353,48 +366,52 @@ class sharded_wrapper final
     traits::deallocate(alloc_, shards_, shards);
   }
 
-  auto get_if_present(const K& k)
-  -> std::shared_ptr<V> override {
+  auto get_if_present(const key_type& k)
+  -> pointer
+  override {
     std::size_t hash_code = this->hash(k);
 
     return shards_[hash_multiplier * hash_code % num_shards_].lookup_if_present(
         make_cache_query(
             hash_code,
-            [this, &k](const store_type& s) { return this->eq(s.key, k); },
+            this->template bind_eq_<store_type>(k),
             []() { assert(false); },
             []() { assert(false); }));
   }
 
-  auto get(const K& k)
-  -> std::shared_ptr<V> override {
+  auto get(const key_type& k)
+  -> pointer
+  override {
     std::size_t hash_code = this->hash(k);
     return shards_[hash_multiplier * hash_code % num_shards_].lookup_or_create(
         make_cache_query(
             hash_code,
-            [this, &k](const store_type& s) { return this->eq(s.key, k); },
-            [this, &k]() { return std::make_tuple(k); },
-            [this, &k](auto alloc) {
-              return this->create(alloc, k);
-            }));
+            this->template bind_eq_<store_type>(k),
+            this->bind_tpl_(k),
+            this->bind_create_(k)));
   }
 
-  auto get(K&& k)
-  -> std::shared_ptr<V> override {
+  auto get(key_type&& k)
+  -> pointer
+  override {
     std::size_t hash_code = this->hash(std::as_const(k));
     return shards_[hash_multiplier * hash_code % num_shards_].lookup_or_create(
         make_cache_query(
             hash_code,
-            [this, &k](const store_type& s) { return this->eq(s.key, std::as_const(k)); },
-            [this, &k]() { return std::make_tuple(std::as_const(k)); },
-            [this, &k](auto alloc) {
-              return this->create(alloc, std::move(k));
-            }));
+            this->template bind_eq_<store_type>(k),
+            this->bind_tpl_(k),
+            this->bind_create_(std::move(k))));
   }
 
   auto get(const typename sharded_wrapper::extended_query_type& q)
-  -> std::shared_ptr<V>
+  -> pointer
   override {
-    return shards_[hash_multiplier * q.hash_code % num_shards_].lookup_or_create(q);
+    return shards_[hash_multiplier * q.hash_code % num_shards_].lookup_or_create(
+        make_cache_query(
+            q.hash_code,
+            this->template wrap_ext_predicate_<store_type>(q.predicate),
+            q.tpl_builder,
+            q.create));
   }
 
  private:

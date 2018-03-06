@@ -12,15 +12,28 @@ namespace monsoon {
 namespace {
 
 
-thread_local cache::cache<std::string, metric_value::string_type> string_cache = cache::cache<std::string, metric_value::string_type>::builder(cache_allocator<std::allocator<metric_value::string_type>>(nullptr, std::allocator<metric_value::string_type>()))
+struct string_cache_create {
+  auto operator()(
+      metric_value::string_type::allocator_type alloc,
+      std::string_view sv) const
+  -> metric_value::string_type {
+    return metric_value::string_type(sv.begin(), sv.end(), std::move(alloc));
+  }
+};
+
+using string_cache_type = cache::extended_cache<
+    void,
+    metric_value::string_type,
+    std::hash<std::string_view>,
+    std::equal_to<std::string_view>,
+    cache_allocator<std::allocator<metric_value::string_type>>,
+    string_cache_create>;
+thread_local string_cache_type string_cache = string_cache_type::builder(cache_allocator<std::allocator<metric_value::string_type>>(nullptr, std::allocator<metric_value::string_type>()))
     .not_thread_safe()
     .no_concurrency()
     .load_factor(4)
     .no_expire()
-    .build(
-        [](auto alloc, std::string_view sv) -> metric_value::string_type {
-          return metric_value::string_type(sv.begin(), sv.end(), alloc);
-        });
+    .build(string_cache_create());
 
 
 namespace metric_value_ops {
@@ -436,7 +449,7 @@ struct shift_right {
 
 
 metric_value::metric_value(std::string_view v) noexcept
-: value_(std::in_place_type<string_ptr>, string_cache(std::string(v.begin(), v.end())))
+: value_(std::in_place_type<string_ptr>, string_cache(v))
 {}
 
 metric_value::metric_value(const metric_value& other)
