@@ -7,6 +7,7 @@
 #include <cmath>
 #include <ostream>
 #include <cassert>
+#include <chrono>
 
 namespace monsoon {
 namespace {
@@ -32,7 +33,7 @@ thread_local string_cache_type string_cache = string_cache_type::builder(cache_a
     .not_thread_safe()
     .no_concurrency()
     .load_factor(4)
-    .no_expire()
+    .access_expire(std::chrono::minutes(5))
     .build(string_cache_create());
 
 
