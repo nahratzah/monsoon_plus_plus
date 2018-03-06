@@ -308,18 +308,10 @@ class cache_impl
     // that can be called on a const-reference of this.
     std::unique_lock<const cache_impl> lck{ *this };
 
-    // Prepare query.
-    const auto query = make_bucket_ctx(
-        hash_code,
-        std::move(predicate),
-        []() -> store_type { throw std::runtime_error("create should not be called"); },
-        [this](store_type& s) { this->on_hit(s); },
-        [this](store_type& s) { this->on_delete(s); });
-
     // Execute query.
     assert(buckets_.size() > 0);
     return resolve_(lck, buckets_[hash_code % buckets_.size()]
-        .lookup_if_present(query));
+        .lookup_if_present(hash_code, std::move(predicate)));
   }
 
   /**

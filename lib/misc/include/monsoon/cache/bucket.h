@@ -98,23 +98,22 @@ class bucket {
 
   /**
    * \brief Look up element with given key.
+   * \param[in] hash_code The hash code of the object to search.
+   * \param[in] predicate Predicate matching the object to search.
    * \returns Element with the given key, or nullptr if no such element exists.
    */
-  template<typename KeyPredicate, typename Create, typename OnHit, typename OnDelete>
-  auto lookup_if_present(const bucket_ctx<KeyPredicate, Create, OnHit, OnDelete>& ctx) const
+  template<typename Predicate>
+  auto lookup_if_present(std::size_t hash_code, Predicate predicate) const
   noexcept
   -> lookup_type {
     store_type* s = head_;
     while (s != nullptr) {
-      if (s->hash() == ctx.hash_code
-          && ctx.predicate(*s)) {
+      if (s->hash() == hash_code && predicate(*s)) {
         // We don't check s.is_expired(), since the key can expire between
         // the check and pointer resolution.
         lookup_type ptr = s->ptr();
-        if (!store_type::is_nil(ptr)) {
-          ctx.on_hit(*s);
+        if (!store_type::is_nil(ptr))
           return ptr;
-        }
       }
 
       s = successor_ptr(*s);
