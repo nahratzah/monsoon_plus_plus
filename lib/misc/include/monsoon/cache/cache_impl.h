@@ -298,12 +298,11 @@ class cache_impl
    * Even a cache hit will not update on_hit callbacks (and thus not count as
    * a hit).
    *
-   * \param[in] q
-   * A query describing the search.
-   * The TplBuilder and Create components of the query are unused.
+   * \param[in] hash_code Hash code for the object to find.
+   * \param[in] predicate Predicate matcher for the object to find.
    */
-  template<typename Predicate, typename TplBuilder, typename Create>
-  auto lookup_if_present(const cache_query<Predicate, TplBuilder, Create>& q) noexcept -> pointer {
+  template<typename Predicate>
+  auto lookup_if_present(std::size_t hash_code, Predicate predicate) noexcept -> pointer {
     // Acquire lock on the cache.
     // One of the decorators is to supply lock() and unlock() methods,
     // that can be called on a const-reference of this.
@@ -311,15 +310,15 @@ class cache_impl
 
     // Prepare query.
     const auto query = make_bucket_ctx(
-        q.hash_code,
-        q.predicate,
+        hash_code,
+        std::move(predicate),
         []() -> store_type { throw std::runtime_error("create should not be called"); },
         [this](store_type& s) { this->on_hit(s); },
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
     assert(buckets_.size() > 0);
-    return resolve_(lck, buckets_[query.hash_code % buckets_.size()]
+    return resolve_(lck, buckets_[hash_code % buckets_.size()]
         .lookup_if_present(query));
   }
 

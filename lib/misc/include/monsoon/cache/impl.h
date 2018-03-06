@@ -324,11 +324,8 @@ class wrapper final
   -> pointer
   override {
     return this->lookup_if_present(
-        make_cache_query(
-            this->hash(k),
-            this->template bind_eq_<store_type>(k),
-            []() { assert(false); },
-            []() { assert(false); }));
+        this->hash(k),
+        this->template bind_eq_<store_type>(k));
   }
 
   auto get(const key_type& k)
@@ -453,11 +450,8 @@ class sharded_wrapper final
     std::size_t hash_code = this->hash(k);
 
     return shards_[hash_multiplier * hash_code % num_shards_].lookup_if_present(
-        make_cache_query(
-            hash_code,
-            this->template bind_eq_<store_type>(k),
-            []() { assert(false); },
-            []() { assert(false); }));
+        hash_code,
+        this->template bind_eq_<store_type>(k));
   }
 
   auto get(const key_type& k)
