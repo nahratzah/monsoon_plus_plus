@@ -214,11 +214,14 @@ class simple_cache_impl
   static constexpr unsigned int growth_mul = 9;
 
  public:
+  ///\brief Constructor for the cache algorithms.
+  ///\note \p alloc is passed in separately, so that the builder can decorate
+  ///the allocator.
   template<typename Key, typename Hash, typename Eq>
-  simple_cache_impl(const cache_builder<Key, T, Hash, Eq, Alloc>& b)
+  simple_cache_impl(const cache_builder<Key, T, Hash, Eq, Alloc>& b, Alloc alloc)
   : select_decorator_type<CacheDecorators, simple_cache_impl>(b)...,
     buckets_(b.allocator()),
-    alloc_(b.allocator()),
+    alloc_(alloc),
     lf_(b.load_factor())
   {
     buckets_.resize(init_bucket_count); // May not be zero, or we'll get (unchecked) division by zero.

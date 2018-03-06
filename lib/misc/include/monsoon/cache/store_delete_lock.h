@@ -1,6 +1,9 @@
 #ifndef MONSOON_CACHE_STORE_DELETE_LOCK_H
 #define MONSOON_CACHE_STORE_DELETE_LOCK_H
 
+///\file
+///\ingroup cache_detail
+
 #include <atomic>
 #include <utility>
 

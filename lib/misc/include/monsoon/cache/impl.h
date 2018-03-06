@@ -17,6 +17,7 @@
 #include <monsoon/cache/expire_queue.h>
 #include <monsoon/cache/max_size_decorator.h>
 #include <monsoon/cache/element.h>
+#include <monsoon/cache/mem_use.h>
 
 namespace monsoon::cache {
 ///\brief Helpers for the builder::build() method.
@@ -252,12 +253,13 @@ class wrapper final
 
   template<typename CreateArg>
   wrapper(const cache_builder<K, V, Hash, Eq, typename Impl::alloc_t>& b,
-      CreateArg&& create)
+      CreateArg&& create,
+      typename Impl::alloc_t alloc)
   : extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>(
       b.hash(),
       b.equality(),
       std::forward<CreateArg>(create)),
-    Impl(b)
+    Impl(b, alloc)
   {}
 
   ~wrapper() noexcept {}
@@ -329,12 +331,13 @@ class sharded_wrapper final
   template<typename CreateArg>
   sharded_wrapper(const cache_builder<K, V, Hash, Eq, Alloc>& b,
       unsigned int shards,
-      CreateArg&& create)
+      CreateArg&& create,
+      Alloc alloc)
   : extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>(
       b.hash(),
       b.equality(),
       std::forward<CreateArg>(create)),
-    alloc_(b.allocator())
+    alloc_(alloc)
   {
     assert(shards > 1);
     using traits = typename std::allocator_traits<Alloc>::template rebind_traits<Impl>;
@@ -342,7 +345,7 @@ class sharded_wrapper final
     traits::allocate(alloc_, shards);
     try {
       while (num_shards_ < shards) {
-        traits::construct(alloc_, shards_ + num_shards_, b);
+        traits::construct(alloc_, shards_ + num_shards_, b, alloc);
         ++num_shards_;
       }
     } catch (...) {
@@ -430,6 +433,22 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
 -> extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>> {
   using namespace builder_detail;
 
+  std::shared_ptr<mem_use> mem_tracking;
+  auto alloc = allocator();
+  if (max_memory().has_value()) {
+    // We use a temporary mem_use to track how much memory we allocate for mem_use.
+    auto tmp_mem_use = std::make_shared<mem_use>();
+    cache_alloc_dealloc_observer::maybe_set_stats(alloc, tmp_mem_use);
+
+    // Create memory usage tracker.
+    mem_tracking = std::allocate_shared<mem_use>(alloc);
+    // Install memory usage tracker.
+    cache_alloc_dealloc_observer::maybe_set_stats(alloc, mem_tracking);
+    // Move memory usage as measured by temporary allocator,
+    // to account for overhead from mem_tracking initialization.
+    mem_tracking->add_mem_use(1, tmp_mem_use->get());
+  }
+
   const unsigned int shards = (!thread_safe()
       ? 1u
       : (concurrency() == 0u ? std::max(1u, std::thread::hardware_concurrency()) : concurrency()));
@@ -441,19 +460,21 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
                   apply_key_type(*this,
                       apply_thread_safe(*this,
                           apply_max_size(*this,
-                              [this, &fn, shards](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
+                              [this, &fn, shards, &alloc](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
                                 using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
                                 using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
                                 using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
                                 if (shards != 1u) {
-                                  return std::allocate_shared<sharded_wrapper_type>(
-                                      allocator(),
-                                      *this, shards, std::forward<Fn>(fn));
+                                  auto impl = std::allocate_shared<sharded_wrapper_type>(
+                                      alloc,
+                                      *this, shards, std::forward<Fn>(fn), alloc);
+                                  return impl;
                                 } else {
-                                  return std::allocate_shared<wrapper_type>(
-                                      allocator(),
-                                      *this, std::forward<Fn>(fn));
+                                  auto impl = std::allocate_shared<wrapper_type>(
+                                      alloc,
+                                      *this, std::forward<Fn>(fn), alloc);
+                                  return impl;
                                 }
                               }))))));
 

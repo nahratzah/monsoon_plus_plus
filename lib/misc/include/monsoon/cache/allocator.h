@@ -32,20 +32,20 @@ class cache_alloc_dealloc_observer {
   virtual void subtract_mem_use(std::uintptr_t n, std::uintptr_t sz) noexcept = 0;
 
   template<typename Allocator>
-  static void maybe_set_stats_(
+  static void maybe_set_stats(
       cache_allocator<Allocator>& ca,
       std::weak_ptr<cache_alloc_dealloc_observer> stats) noexcept {
     ca.stats_ = stats;
-    maybe_set_stats_(ca.nested_);
+    maybe_set_stats(ca.nested_, stats);
   }
 
   template<typename Outer, typename... Inner>
   static void maybe_set_stats(
       std::scoped_allocator_adaptor<Outer, Inner...>& sa,
       std::weak_ptr<cache_alloc_dealloc_observer> stats) noexcept {
-    maybe_set_stats_(sa.outer_allocator(), stats);
+    maybe_set_stats(sa.outer_allocator(), stats);
     if constexpr(sizeof...(Inner) > 0)
-      maybe_set_stats_(sa.inner_allocator(), stats);
+      maybe_set_stats(sa.inner_allocator(), stats);
   }
 
   template<typename Alloc>
@@ -84,6 +84,7 @@ class cache_alloc_dealloc_observer {
 template<typename Allocator>
 class cache_allocator {
   template<typename OtherAllocator> friend class cache_allocator;
+  friend class cache_alloc_dealloc_observer;
 
  private:
   using nested_allocator = Allocator;
