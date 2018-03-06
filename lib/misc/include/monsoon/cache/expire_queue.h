@@ -119,9 +119,16 @@ class expire_link {
     assert(link_pred_ == 0 && link_succ_ == 0); // Only allow linking when we're unlinked.
 
     expire_link* after = before->succ();
+    assert(before->get_queue_id() == after->get_queue_id());
     const std::uintptr_t self_ptr = reinterpret_cast<std::uintptr_t>(this) | (before->link_succ_ & Q_MASK);
     link_succ_ = std::exchange(before->link_succ_, self_ptr);
     link_pred_ = std::exchange(after->link_pred_, self_ptr);
+
+    assert(pred() == before && succ() == after);
+    assert(before->succ() == this);
+    assert(after->pred() == this);
+    assert(before->get_queue_id() == get_queue_id());
+    assert(after->get_queue_id() == get_queue_id());
   }
 
   ///\brief Link this before the given element.
@@ -134,9 +141,16 @@ class expire_link {
     assert(link_pred_ == 0 && link_succ_ == 0); // Only allow linking when we're unlinked.
 
     expire_link* before = after->pred();
+    assert(before->get_queue_id() == after->get_queue_id());
     const std::uintptr_t self_ptr = reinterpret_cast<std::uintptr_t>(this) | (after->link_succ_ & Q_MASK);
     link_succ_ = std::exchange(before->link_succ_, self_ptr);
     link_pred_ = std::exchange(after->link_pred_, self_ptr);
+
+    assert(pred() == before && succ() == after);
+    assert(before->succ() == this);
+    assert(after->pred() == this);
+    assert(before->get_queue_id() == get_queue_id());
+    assert(after->get_queue_id() == get_queue_id());
   }
 
   ///\brief Unlink this.
@@ -414,7 +428,7 @@ class base_expire_queue {
   }
 
   std::uintptr_t cold_qlen = 0, hot_qlen = 0;
-  expire_link cold_q{ queue_id::hot }, hot_q{ queue_id::cold };
+  expire_link cold_q{ queue_id::cold }, hot_q{ queue_id::hot };
 };
 
 ///\brief Decorator that maintains a queue of \ref monsoon::cache::element "elements".

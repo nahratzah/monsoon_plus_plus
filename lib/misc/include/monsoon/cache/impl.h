@@ -33,6 +33,26 @@ struct cache_async_decorator {
 };
 
 
+///\brief Create memory tracking data and install it on the allocator.
+template<typename Alloc>
+auto create_mem_tracking(Alloc& alloc)
+-> std::shared_ptr<mem_use> {
+  // We use a temporary mem_use to track how much memory we allocate for mem_use.
+  auto tmp_mem_use = std::make_shared<mem_use>();
+  cache_alloc_dealloc_observer::maybe_set_stats(alloc, tmp_mem_use);
+
+  // Create memory usage tracker.
+  std::shared_ptr<mem_use> mem_tracking = std::allocate_shared<mem_use>(alloc);
+  // Install memory usage tracker.
+  cache_alloc_dealloc_observer::maybe_set_stats(alloc, mem_tracking);
+  // Move memory usage as measured by temporary allocator,
+  // to account for overhead from mem_tracking initialization.
+  mem_tracking->add_mem_use(1, tmp_mem_use->get());
+
+  return mem_tracking;
+}
+
+
 namespace {
 
 
@@ -261,6 +281,19 @@ constexpr auto apply_max_mem(const cache_builder_vars& b, NextApply&& next)
 }
 
 
+template<typename Cache, typename = void>
+struct has_set_mem_use_
+: std::false_type {};
+
+template<typename Cache,
+    typename = std::void_t<decltype(std::declval<Cache&>().set_mem_use(std::declval<std::shared_ptr<const mem_use>>()))>>
+struct hash_set_mem_use_
+: std::true_type {};
+
+template<typename Cache>
+constexpr bool has_set_mem_use = has_set_mem_use_<Cache>::value;
+
+
 } /* namespace monsoon::cache::builder_detail::<unnamed> */
 
 
@@ -352,7 +385,7 @@ class sharded_wrapper final
   sharded_wrapper& operator=(sharded_wrapper&&) = delete;
 
   template<typename CreateArg>
-  sharded_wrapper(const cache_builder<K, V, Hash, Eq, Alloc>& b,
+  sharded_wrapper(cache_builder<K, V, Hash, Eq, Alloc> b,
       unsigned int shards,
       CreateArg&& create,
       Alloc alloc)
@@ -365,10 +398,25 @@ class sharded_wrapper final
     assert(shards > 1);
     using traits = typename std::allocator_traits<Alloc>::template rebind_traits<Impl>;
 
+    // We grab a copy of the cache builder, so we can adjust parameters based
+    // on the number of shards.
+    if (b.max_memory().has_value())
+      b.max_memory(*b.max_memory() / shards);
+    if (b.max_size().has_value())
+      b.max_size(*b.max_size() / shards);
+
     traits::allocate(alloc_, shards);
     try {
+      // Shard overhead is billed on shard_[0].
+      traits::construct(alloc_, shards_ + num_shards_, b, alloc);
+      ++num_shards_;
+
       while (num_shards_ < shards) {
-        traits::construct(alloc_, shards_ + num_shards_, b, alloc);
+        auto alloc_copy = alloc;
+        auto mem_tracking = create_mem_tracking(alloc_copy);
+        traits::construct(alloc_, shards_ + num_shards_, b, alloc_copy);
+        if constexpr(has_set_mem_use<Impl>)
+          shards_[num_shards_].set_mem_use(mem_tracking);
         ++num_shards_;
       }
     } catch (...) {
@@ -390,6 +438,13 @@ class sharded_wrapper final
       traits::destroy(alloc_, shards_ + num_shards_);
     }
     traits::deallocate(alloc_, shards_, shards);
+  }
+
+  template<bool Enable = has_set_mem_use<Impl>>
+  auto set_mem_use(std::shared_ptr<mem_use>&& mptr)
+  noexcept
+  -> std::enable_if_t<Enable> {
+    shards_[0].set_mem_use(std::move(mptr));
   }
 
   auto get_if_present(const key_type& k)
@@ -447,19 +502,6 @@ class sharded_wrapper final
 };
 
 
-template<typename Cache, typename = void>
-struct has_set_mem_use_
-: std::false_type {};
-
-template<typename Cache,
-    typename = std::void_t<decltype(std::declval<Cache&>().set_mem_use(std::declval<std::shared_ptr<const mem_use>>()))>>
-struct hash_set_mem_use_
-: std::true_type {};
-
-template<typename Cache>
-constexpr bool has_set_mem_use = has_set_mem_use_<Cache>::value;
-
-
 } /* namespace monsoon::cache::builder_detail */
 
 
@@ -469,21 +511,8 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
 -> extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>> {
   using namespace builder_detail;
 
-  std::shared_ptr<mem_use> mem_tracking;
   auto alloc = allocator();
-  if (max_memory().has_value()) {
-    // We use a temporary mem_use to track how much memory we allocate for mem_use.
-    auto tmp_mem_use = std::make_shared<mem_use>();
-    cache_alloc_dealloc_observer::maybe_set_stats(alloc, tmp_mem_use);
-
-    // Create memory usage tracker.
-    mem_tracking = std::allocate_shared<mem_use>(alloc);
-    // Install memory usage tracker.
-    cache_alloc_dealloc_observer::maybe_set_stats(alloc, mem_tracking);
-    // Move memory usage as measured by temporary allocator,
-    // to account for overhead from mem_tracking initialization.
-    mem_tracking->add_mem_use(1, tmp_mem_use->get());
-  }
+  std::shared_ptr<mem_use> mem_tracking = create_mem_tracking(alloc);
 
   const unsigned int shards = (!thread_safe()
       ? 0u
@@ -502,7 +531,7 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
                                     using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
                                     using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
-                                    if (shards <= 1u) {
+                                    if (shards > 1u) {
                                       auto impl = std::allocate_shared<sharded_wrapper_type>(
                                           alloc,
                                           *this, shards, std::forward<Fn>(fn), alloc);

@@ -122,11 +122,6 @@ class element
  public:
   static auto is_nil(const ptr_return_type& p) noexcept -> bool;
 
-  ///\brief Create an empty element.
-  ///\details Creates an element holding a nullptr, with a hash value of zero.
-  template<typename Alloc>
-  element(std::allocator_arg_t tag, Alloc alloc) noexcept;
-
   /**
    * \brief Create an element pointing at the given init pointer.
    * \details This will be a strong reference to the pointee.

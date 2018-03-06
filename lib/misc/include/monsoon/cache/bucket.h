@@ -213,22 +213,20 @@ class bucket {
     assert(sptr != nullptr);
 
     store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
-    for (;;) {
-      store_type*const s = *iter;
-      assert(s != nullptr); // Only valid sptr may be supplied, so we'll never reach past the end of the bucket.
-
-      if (s == sptr) {
-        assert(s->use_count == 0u);
-        *iter = successor_ptr(*s);
-        --size;
-
-        on_delete(*s);
-        alloc_traits::destroy(alloc, s);
-        alloc_traits::deallocate(alloc, s, 1);
-      } else {
-        iter = &successor_ptr(*s);
-      }
+    while (*iter != sptr) {
+      assert(*iter != nullptr); // Only valid sptr may be supplied, so we'll never reach past the end of the bucket.
+      iter = &successor_ptr(**iter);
     }
+
+    store_type*const s = *iter;
+    assert(s != nullptr);
+    assert(s->use_count == 0u);
+    *iter = successor_ptr(*s);
+    --size;
+
+    on_delete(*s);
+    alloc_traits::destroy(alloc, s);
+    alloc_traits::deallocate(alloc, s, 1);
   }
 
   template<typename Alloc, typename SizeType, typename OnDelete>
