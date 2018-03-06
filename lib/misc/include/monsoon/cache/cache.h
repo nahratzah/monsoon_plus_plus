@@ -192,6 +192,9 @@ class extended_cache_intf
  * \brief A key-value cache.
  * \ingroup cache
  * \details This cache allows looking up values, by a given key.
+ *
+ * Unlike extended_cache, it only allows looking up by a specific key type.
+ *
  * \tparam K The key type of the cache.
  *    If \p K is void, the cache is an identity cache.
  * \tparam V The mapped type of the cache.
@@ -203,16 +206,28 @@ class cache {
   friend class extended_cache;
 
  public:
+  ///\brief Key type of the cache.
+  ///\details
+  ///For identity caches, this is the mapped type of the cache.
   using key_type = typename cache_intf<K, V>::key_type;
+  ///\brief Pointer returned by the cache.
+  ///\details Shared pointer to the mapped type.
   using pointer = typename cache_intf<K, V>::pointer;
 
+  ///\bug Should we enable this, seeing as that cache is copyable?
+  ///Current behaviour sends a clear message when you miss initialization,
+  ///though.
+  ///(Fix should be applied to both cache and extended_cache.)
   cache() = delete; // Use builder.
 
+  ///\brief Convenience method to create a builder that is compatible with this cache.
   static constexpr auto builder()
   -> cache_builder<K, V> {
     return cache_builder<K, V>();
   }
 
+  ///\brief Convenience method to create a builder that is compatible with this cache.
+  ///\param[in] alloc The allocator used by the cache builder.
   template<typename Alloc>
   static constexpr auto builder(Alloc alloc)
   -> cache_builder<K, V, std::hash<K>, std::equal_to<K>, Alloc> {
@@ -221,37 +236,72 @@ class cache {
   }
 
  private:
+  ///\brief Constructor used by cache builder to initialize the cache.
+  ///\param[in] impl A pointer to the implementation of the cache.
   explicit cache(std::shared_ptr<cache_intf<K, V>>&& impl) noexcept
   : impl_(std::move(impl))
   {}
 
  public:
+  /**
+   * \brief Retrieve a value if it is present in the cache.
+   * \param[in] key The key of the entry that is to be found.
+   * \returns The mapped value corresponding to the \p key,
+   * or a nullptr if the cache does not contain a (valid) mapping.
+   * \note This does not count as a cache hit and will not update expiry
+   * information.
+   */
   auto get_if_present(const key_type& key) const
   -> pointer {
     return impl_->get_if_present(key);
   }
 
+  /**
+   * \brief Retrieve a value if it is present in the cache.
+   * \param[in] key The key of the entry that is to be found.
+   * \returns The mapped value corresponding to the \p key,
+   * creating a mapping if needed.
+   */
   auto get(const key_type& key) const
   -> pointer {
     return impl_->get(key);
   }
 
+  /**
+   * \brief Retrieve a value if it is present in the cache.
+   * \details This version allows the cache to use move semantics on the key,
+   * if it needs to construct the value.
+   * \param[in] key The key of the entry that is to be found.
+   * \returns The mapped value corresponding to the \p key,
+   * creating a mapping if needed.
+   */
   auto get(key_type&& key) const
   -> pointer {
     return impl_->get(std::move(key));
   }
 
+  ///\brief Functional interface to the cache.
+  ///\param[in] key The key of the entry that is to be found.
+  ///\returns The mapped value corresponding to the \p key,
+  ///creating a mapping if needed.
   auto operator()(const key_type& key) const
   -> pointer {
     return get(key);
   }
 
+  ///\brief Functional interface to the cache.
+  ///\param[in] key The key of the entry that is to be found.
+  ///   If the mapped value is to be constructed, the key will be
+  ///   moved during construction.
+  ///\returns The mapped value corresponding to the \p key,
+  ///creating a mapping if needed.
   auto operator()(key_type&& key) const
   -> pointer {
     return get(std::move(key));
   }
 
  private:
+  ///\brief Pointer to the implementation.
   std::shared_ptr<cache_intf<K, V>> impl_;
 };
 
@@ -259,6 +309,12 @@ class cache {
  * \brief A cache that allows lookup by argument pack.
  * \ingroup cache
  * \details This cache allows looking up values, by a given argument pack.
+ *
+ * In addition to the functionality in the
+ * (non extended) \ref monsoon::cache::cache "cache", it allows
+ * variadic argument lookups.
+ * Due to this, it is a slightly leaky abstraction, as it
+ * needs access to the Hash, Eq, Alloc, and Create types.
  * \tparam K The key type of the cache.
  *    If \p K is void, the cache is an identity cache.
  * \tparam V The mapped type of the cache.
@@ -278,16 +334,27 @@ class extended_cache {
   using extended_query_type = typename extended_cache_type::extended_query_type;
 
  public:
+  ///\brief Key type of the cache.
+  ///\details
+  ///For identity caches, this is the mapped type of the cache.
   using key_type = typename cache<K, V>::key_type;
+  ///\brief Pointer returned by the cache.
+  ///\details Shared pointer to the mapped type.
   using pointer = typename cache<K, V>::pointer;
 
+  ///\bug Should we enable this, seeing as that cache is copyable?
+  ///Current behaviour sends a clear message when you miss initialization,
+  ///though.
+  ///(Fix should be applied to both cache and extended_cache.)
   extended_cache() = delete; // Use builder.
 
+  ///\copydoc cache::builder()
   static constexpr auto builder()
   -> cache_builder<K, V, Hash, Eq, Alloc> {
     return cache_builder<K, V, Hash, Eq, Alloc>();
   }
 
+  ///\copydoc cache::builder(Alloc)
   static constexpr auto builder(Alloc alloc)
   -> cache_builder<K, V, Hash, Eq, Alloc> {
     return cache_builder<K, V, Hash, Eq, Alloc>(
@@ -295,36 +362,83 @@ class extended_cache {
   }
 
  private:
+  ///\copydoc cache::cache(std::shared_ptr<cache_intf<K, V>>&&)
   extended_cache(std::shared_ptr<extended_cache_type>&& impl) noexcept
   : impl_(std::move(impl))
   {}
 
  public:
+  /**
+   * \brief Retrieve a value if it is present in the cache.
+   * \param[in] key The key of the entry that is to be found.
+   * \returns The mapped value corresponding to the \p key,
+   * or a nullptr if the cache does not contain a (valid) mapping.
+   * \note This does not count as a cache hit and will not update expiry
+   * information.
+   */
   auto get_if_present(const key_type& key) const
   -> pointer {
     return impl_->get_if_present(key);
   }
 
+  /**
+   * \brief Retrieve a value if it is present in the cache.
+   * \param[in] key The key of the entry that is to be found.
+   * \returns The mapped value corresponding to the \p key,
+   * creating a mapping if needed.
+   */
   auto get(const key_type& key) const
   -> pointer {
     return impl_->get(key);
   }
 
+  /**
+   * \brief Retrieve a value if it is present in the cache.
+   * \details This version allows the cache to use move semantics on the key,
+   * if it needs to construct the value.
+   * \param[in] key The key of the entry that is to be found.
+   * \returns The mapped value corresponding to the \p key,
+   * creating a mapping if needed.
+   */
   auto get(key_type&& key) const
   -> pointer {
     return impl_->get(std::move(key));
   }
 
+  ///\brief Functional interface to the cache.
+  ///\param[in] key The key of the entry that is to be found.
+  ///\returns The mapped value corresponding to the \p key,
+  ///creating a mapping if needed.
   auto operator()(const key_type& key) const
   -> pointer {
     return get(key);
   }
 
+  ///\brief Functional interface to the cache.
+  ///\param[in] key The key of the entry that is to be found.
+  ///   If the mapped value is to be constructed, the key will be
+  ///   moved during construction.
+  ///\returns The mapped value corresponding to the \p key,
+  ///creating a mapping if needed.
   auto operator()(key_type&& key) const
   -> pointer {
     return get(std::move(key));
   }
 
+  /**
+   * \brief Variadic interface to the cache.
+   * \details
+   * This function requires that the hash function, equality predicate,
+   * and create function are all invocable using the argument pack (the latter
+   * by perfect forwarding, the rest by const reference).
+   *
+   * \param[in] args Arguments to use during a lookup.
+   * \returns The mapped value corresponding to \p args,
+   * creating a mapping if needed.
+   * \sa \ref cache_builder::with_hash
+   * \sa \ref cache_builder::with_equality
+   * \sa \ref cache_builder::build
+   */
   template<typename... Args>
   auto get(Args&&... args) const
   -> pointer {
@@ -337,21 +451,38 @@ class extended_cache {
             impl_->bind_create_(std::forward<Args>(args)...)));
   }
 
+  /**
+   * \brief Variadic functional interface to the cache.
+   * \details
+   * This function requires that the hash function, equality predicate,
+   * and create function are all invocable using the argument pack (the latter
+   * by perfect forwarding, the rest by const reference).
+   *
+   * \param[in] args Arguments to use during a lookup.
+   * \returns The mapped value corresponding to \p args,
+   * creating a mapping if needed.
+   * \sa \ref cache_builder::with_hash
+   * \sa \ref cache_builder::with_equality
+   * \sa \ref cache_builder::build
+   */
   template<typename... Args>
   auto operator()(Args&&... args) const
   -> pointer {
     return get(std::forward<Args>(args)...);
   }
 
+  ///\brief This is implicitly convertible to a (non extended) cache.
   operator cache<K, V>() const & {
     return cache<K, V>(impl_);
   }
 
+  ///\brief This is implicitly convertible to a (non extended) cache.
   operator cache<K, V>() && {
     return cache<K, V>(std::move(impl_));
   }
 
  private:
+  ///\brief Pointer to the implementation.
   std::shared_ptr<extended_cache_type> impl_;
 };
 
