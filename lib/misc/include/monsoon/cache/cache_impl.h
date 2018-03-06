@@ -373,7 +373,7 @@ class cache_impl
     store_delete_lock<store_type> created;
     assert(buckets_.size() > 0);
     lookup_type lookup_result = buckets_[query.hash_code % buckets_.size()]
-        .lookup_or_create(alloc_, query, created);
+        .lookup_or_create(query, created);
     assert(!store_type::is_nil(lookup_result));
     pointer result = resolve_(lck, std::move(lookup_result), created.get()); // lck may be unlocked
     assert(result != nullptr);
@@ -429,7 +429,7 @@ class cache_impl
 template<typename T, typename Alloc, typename... CacheDecorators>
 cache_impl<T, Alloc, CacheDecorators...>::~cache_impl() noexcept {
   for (auto& b : buckets_)
-    b.erase_all(alloc_, [this](store_type& s) { on_delete(s); });
+    b.erase_all([this](store_type& s) { on_delete(s); });
 }
 
 template<typename T, typename A, typename... D>
@@ -474,7 +474,6 @@ noexcept
 -> bool {
   if (s.use_count.load(std::memory_order_acquire) == 0 && s.is_expired()) {
     buckets_[s.hash() % buckets_.size()].erase(
-        alloc_,
         &s,
         [this](store_type& s) { on_delete(s); });
     return true;
@@ -575,6 +574,11 @@ template<typename T, typename A, typename... D>
 void cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
   --size_;
   decorators_on_delete_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
+
+  using alloc_traits = typename std::allocator_traits<alloc_t>::template rebind_traits<store_type>;
+  typename std::allocator_traits<alloc_t>::template rebind_alloc<store_type> alloc = alloc_;
+  alloc_traits::destroy(alloc, &s);
+  alloc_traits::deallocate(alloc, &s, 1);
 }
 
 

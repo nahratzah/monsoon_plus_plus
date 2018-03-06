@@ -133,14 +133,9 @@ class bucket {
    * \returns Element with the given key, creating one if absent.
    * \bug Instead of using a pointer-reference for \p created, a reference to the deletion lock should be supplied.
    */
-  template<typename Alloc, typename KeyPredicate, typename Create, typename OnHit, typename OnDelete>
-  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, OnHit, OnDelete>& ctx, store_delete_lock<store_type>& created)
+  template<typename KeyPredicate, typename Create, typename OnHit, typename OnDelete>
+  auto lookup_or_create(const bucket_ctx<KeyPredicate, Create, OnHit, OnDelete>& ctx, store_delete_lock<store_type>& created)
   -> lookup_type {
-    using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
-    using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
-    using size_type = typename alloc_traits::size_type;
-    allocator_type alloc = use_alloc;
-
     assert(!created); // Lock must be supplied in empty state.
     void* alloc_hint = nullptr; // Address of predecessor.
     store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
@@ -160,8 +155,6 @@ class bucket {
         *iter = successor_ptr(*s); // Unlink s.
 
         ctx.on_delete(*s);
-        alloc_traits::destroy(alloc, s);
-        alloc_traits::deallocate(alloc, s, 1);
         continue;
       }
 
@@ -198,13 +191,10 @@ class bucket {
    * \pre sptr is a valid element of this bucket and is not locked against delete.
    * \post sptr will have been deleted from this bucket and deallocated.
    */
-  template<typename Alloc, typename OnDelete>
-  auto erase(Alloc& use_alloc, store_type* sptr, OnDelete on_delete)
+  template<typename OnDelete>
+  auto erase(store_type* sptr, OnDelete on_delete)
   noexcept
   -> void {
-    using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
-    using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
-    allocator_type alloc = use_alloc;
     assert(sptr != nullptr);
 
     store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
@@ -219,23 +209,15 @@ class bucket {
     *iter = successor_ptr(*s);
 
     on_delete(*s);
-    alloc_traits::destroy(alloc, s);
-    alloc_traits::deallocate(alloc, s, 1);
   }
 
-  template<typename Alloc, typename OnDelete>
-  auto erase_all(Alloc& use_alloc, OnDelete on_delete) {
-    using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
-    using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
-    allocator_type alloc = use_alloc;
-
+  template<typename OnDelete>
+  auto erase_all(OnDelete on_delete) {
     while (head_ != nullptr) {
       store_type* s = std::exchange(head_, successor_ptr(*head_));
       assert(s->use_count == 0u);
 
       on_delete(*s);
-      alloc_traits::destroy(alloc, s);
-      alloc_traits::deallocate(alloc, s, 1);
     }
   }
 
