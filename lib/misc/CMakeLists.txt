@@ -63,5 +63,26 @@ install (FILES
   include/monsoon/xdr/xdr_stream-inl.h
   include/monsoon/xdr/xdr_stream.h
   DESTINATION include/monsoon/xdr)
+install (FILES
+  include/monsoon/cache/access_expire_decorator.h
+  include/monsoon/cache/allocator.h
+  include/monsoon/cache/bucket.h
+  include/monsoon/cache/builder.h
+  include/monsoon/cache/cache.h
+  include/monsoon/cache/cache_impl.h
+  include/monsoon/cache/cache_query.h
+  include/monsoon/cache/create_handler.h
+  include/monsoon/cache/doc_.h
+  include/monsoon/cache/element.h
+  include/monsoon/cache/expire_queue.h
+  include/monsoon/cache/impl.h
+  include/monsoon/cache/key_decorator.h
+  include/monsoon/cache/max_age_decorator.h
+  include/monsoon/cache/max_size_decorator.h
+  include/monsoon/cache/mem_use.h
+  include/monsoon/cache/store_delete_lock.h
+  include/monsoon/cache/thread_safe_decorator.h
+  include/monsoon/cache/weaken_decorator.h
+  DESTINATION include/monsoon/cache)
 
 add_subdirectory (tests)
