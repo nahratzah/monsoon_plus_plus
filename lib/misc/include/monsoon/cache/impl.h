@@ -138,9 +138,7 @@ struct apply_access_expire_ {
     if (b.access_expire().has_value())
       return next(d
           .template remove<weaken_decorator>()
-#if 0 // Not yet, haven't figured out if we will use this queue.
           .template add<cache_expire_queue_decorator>()
-#endif
           .template add<access_expire_decorator>());
     else
       return next(d);

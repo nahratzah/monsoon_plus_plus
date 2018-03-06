@@ -6,6 +6,7 @@
 
 #include <chrono>
 #include <memory>
+#include <monsoon/cache/expire_queue.h>
 
 namespace monsoon::cache {
 
@@ -40,9 +41,11 @@ struct access_expire_decorator {
     : access_expire_(std::get<access_init>(init).expire)
     {}
 
+#if 0
     bool is_expired() const noexcept {
       return clock_type::now() > access_expire_;
     }
+#endif
 
    private:
     time_point access_expire_;
@@ -63,11 +66,33 @@ struct access_expire_decorator {
       return std::make_tuple(access_init{ clock_type::now() + duration });
     }
 
-    auto on_hit(element_decorator_type& elem) const noexcept -> void {
-      elem.access_expire_ = clock_type::now() + duration;
+    auto on_create(element_decorator_type& elem)
+    noexcept
+    -> void {
+      maintenance_(clock_type::now());
     }
 
+    auto on_hit(element_decorator_type& elem)
+    noexcept
+    -> void {
+      time_point now = clock_type::now();
+      elem.access_expire_ = now + duration;
+
+      maintenance_(now);
+    }
+
+   private:
     std::chrono::seconds duration;
+
+    auto maintenance_(time_point now)
+    noexcept
+    -> void {
+      expire_queue<ImplType>& q = static_cast<ImplType&>(*this);
+      q.shrink_while(
+          [&now](const element_decorator_type& s) {
+            return s.access_expire_ < now;
+          });
+    }
   };
 };
 
