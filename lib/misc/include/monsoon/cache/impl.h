@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <utility>
 #include <monsoon/cache/builder.h>
-#include <monsoon/cache/simple_cache_impl.h>
+#include <monsoon/cache/cache_impl.h>
 #include <monsoon/cache/thread_safe_decorator.h>
 #include <monsoon/cache/weaken_decorator.h>
 #include <monsoon/cache/access_expire_decorator.h>
@@ -60,7 +60,7 @@ struct cache_decorator_set {
   ///\tparam T The mapped type of the cache.
   ///\tparam Alloc The allocator for the cache.
   template<typename T, typename Alloc>
-  using cache_type = simple_cache_impl<T, Alloc, D...>;
+  using cache_type = cache_impl<T, Alloc, D...>;
 
   ///\brief Add type T to the decorator set.
   ///\details Does nothing if T is already part of the decorator set.

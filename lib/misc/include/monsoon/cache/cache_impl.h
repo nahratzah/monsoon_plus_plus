@@ -187,15 +187,15 @@ using select_decorator_type = typename select_decorator_type_<D, ImplType>::type
  * as well as cache maintenance tasks.
  */
 template<typename T, typename Alloc, typename... CacheDecorators>
-class simple_cache_impl
-: public select_decorator_type<CacheDecorators, simple_cache_impl<T, Alloc, CacheDecorators...>>...
+class cache_impl
+: public select_decorator_type<CacheDecorators, cache_impl<T, Alloc, CacheDecorators...>>...
 {
  public:
   ///\brief Size type of the cache.
   using size_type = std::uintptr_t;
 
  private:
-  using bucket_type = decorate_bucket_t<bucket<T>, select_decorator_type<CacheDecorators, simple_cache_impl>...>;
+  using bucket_type = decorate_bucket_t<bucket<T>, select_decorator_type<CacheDecorators, cache_impl>...>;
   using bucket_vector = std::vector<bucket_type, typename std::allocator_traits<Alloc>::template rebind_alloc<bucket_type>>;
   using lookup_type = typename bucket_type::lookup_type;
 
@@ -218,8 +218,8 @@ class simple_cache_impl
   ///\note \p alloc is passed in separately, so that the builder can decorate
   ///the allocator.
   template<typename Key, typename Hash, typename Eq>
-  simple_cache_impl(const cache_builder<Key, T, Hash, Eq, Alloc>& b, Alloc alloc)
-  : select_decorator_type<CacheDecorators, simple_cache_impl>(b)...,
+  cache_impl(const cache_builder<Key, T, Hash, Eq, Alloc>& b, Alloc alloc)
+  : select_decorator_type<CacheDecorators, cache_impl>(b)...,
     buckets_(b.allocator()),
     alloc_(alloc),
     lf_(b.load_factor())
@@ -227,7 +227,7 @@ class simple_cache_impl
     buckets_.resize(init_bucket_count); // May not be zero, or we'll get (unchecked) division by zero.
   }
 
-  ~simple_cache_impl() noexcept;
+  ~cache_impl() noexcept;
 
   auto load_factor() const noexcept -> float;
   auto max_load_factor() const noexcept -> float;
@@ -245,7 +245,7 @@ class simple_cache_impl
     // Acquire lock on the cache.
     // One of the decorators is to supply lock() and unlock() methods,
     // that can be called on a const-reference of this.
-    std::unique_lock<const simple_cache_impl> lck{ *this };
+    std::unique_lock<const cache_impl> lck{ *this };
 
     // Prepare query.
     const auto query = make_bucket_ctx(
@@ -253,7 +253,7 @@ class simple_cache_impl
         q.predicate,
         []() -> store_type { throw std::runtime_error("create should not be called"); },
         size_,
-        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, simple_cache_impl>...>::apply(s, *this); },
+        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, cache_impl>...>::apply(s, *this); },
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
@@ -267,7 +267,7 @@ class simple_cache_impl
     // Acquire lock on the cache.
     // One of the decorators is to supply lock() and unlock() methods,
     // that can be called on a const-reference of this.
-    std::unique_lock<const simple_cache_impl> lck{ *this };
+    std::unique_lock<const cache_impl> lck{ *this };
     auto ch = make_create_handler<store_type::is_async>(q.create);
 
     // Prepare query.
@@ -281,7 +281,7 @@ class simple_cache_impl
 
           // Create init tuple in advance, so that create function is free to
           // move its arguments.
-          auto init = std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, simple_cache_impl>>::apply(*this)...);
+          auto init = std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, cache_impl>>::apply(*this)...);
 
           store_type* new_store = alloc_traits::allocate(alloc, 1, hint);
           try {
@@ -293,7 +293,7 @@ class simple_cache_impl
           return new_store;
         },
         size_,
-        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, simple_cache_impl>...>::apply(s, *this); },
+        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, cache_impl>...>::apply(s, *this); },
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
@@ -329,7 +329,7 @@ class simple_cache_impl
    * \param[created] A pointer to the created store_type. Nullptr if no store type was created.
    * \returns Pointer from the lookup type.
    */
-  static auto resolve_(std::unique_lock<const simple_cache_impl>& lck,
+  static auto resolve_(std::unique_lock<const cache_impl>& lck,
       lookup_type&& l,
       store_type* created = nullptr)
   -> pointer;
@@ -350,33 +350,33 @@ class simple_cache_impl
 
 
 template<typename T, typename Alloc, typename... CacheDecorators>
-simple_cache_impl<T, Alloc, CacheDecorators...>::~simple_cache_impl() noexcept {
+cache_impl<T, Alloc, CacheDecorators...>::~cache_impl() noexcept {
   for (auto& b : buckets_)
     b.erase_all(alloc_, size_, [this](store_type& s) { on_delete(s); });
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::load_factor() const
+auto cache_impl<T, A, D...>::load_factor() const
 noexcept
 -> float {
-  std::lock_guard<const simple_cache_impl> lck{ *this };
+  std::lock_guard<const cache_impl> lck{ *this };
 
   return std::double_t(size_) / std::double_t(buckets_.size());
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::max_load_factor() const
+auto cache_impl<T, A, D...>::max_load_factor() const
 noexcept
 -> float {
-  std::lock_guard<const simple_cache_impl> lck{ *this };
+  std::lock_guard<const cache_impl> lck{ *this };
 
   return lf_;
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::max_load_factor(float lf)
+auto cache_impl<T, A, D...>::max_load_factor(float lf)
 -> void {
-  std::lock_guard<const simple_cache_impl> lck{ *this };
+  std::lock_guard<const cache_impl> lck{ *this };
 
   if (lf <= 0.0 || !std::isfinite(lf))
     throw std::invalid_argument("invalid load factor");
@@ -385,14 +385,14 @@ auto simple_cache_impl<T, A, D...>::max_load_factor(float lf)
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::size() const noexcept
+auto cache_impl<T, A, D...>::size() const noexcept
 -> size_type {
-  std::lock_guard<const simple_cache_impl> lck{ *this };
+  std::lock_guard<const cache_impl> lck{ *this };
   return size_;
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::erase_if_expired(store_type& s)
+auto cache_impl<T, A, D...>::erase_if_expired(store_type& s)
 noexcept
 -> bool {
   if (s.use_count.load(std::memory_order_acquire) == 0 && s.is_expired()) {
@@ -408,8 +408,8 @@ noexcept
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::resolve_(
-    std::unique_lock<const simple_cache_impl>& lck,
+auto cache_impl<T, A, D...>::resolve_(
+    std::unique_lock<const cache_impl>& lck,
     lookup_type&& l,
     store_type* created)
 -> pointer {
@@ -444,7 +444,7 @@ auto simple_cache_impl<T, A, D...>::resolve_(
 }
 
 template<typename T, typename A, typename... D>
-auto simple_cache_impl<T, A, D...>::maybe_rehash_()
+auto cache_impl<T, A, D...>::maybe_rehash_()
 noexcept // Allocation exception is swallowed.
 -> void {
   // Check if we require rehashing.
@@ -490,13 +490,13 @@ noexcept // Allocation exception is swallowed.
 }
 
 template<typename T, typename A, typename... D>
-void simple_cache_impl<T, A, D...>::on_create(store_type& s) noexcept {
-  decorators_on_create_<store_type, select_decorator_type<D, simple_cache_impl>...>::apply(s, *this);
+void cache_impl<T, A, D...>::on_create(store_type& s) noexcept {
+  decorators_on_create_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
 }
 
 template<typename T, typename A, typename... D>
-void simple_cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
-  decorators_on_delete_<store_type, select_decorator_type<D, simple_cache_impl>...>::apply(s, *this);
+void cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
+  decorators_on_delete_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
 }
 
 

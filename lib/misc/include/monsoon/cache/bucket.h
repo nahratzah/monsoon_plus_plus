@@ -26,7 +26,7 @@ namespace monsoon::cache {
  *  create() -> store_type.
  *
  * \bug Bucket_ctx contains a size reference, but the on_create and on_delete
- * functions in simple_cache_impl should do this instead.
+ * functions in cache_impl should do this instead.
  */
 template<typename Predicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
 struct bucket_ctx {

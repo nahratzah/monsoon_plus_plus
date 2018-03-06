@@ -472,7 +472,7 @@ class expire_queue
     for (auto ptr = coldest<typename ImplType::store_type>();
         ptr != nullptr;
         ptr = coldest<typename ImplType::store_type>()) {
-      // simple_cache_impl::erase_if_expired will invoke the on_delete
+      // cache_impl::erase_if_expired will invoke the on_delete
       // callback, which does the actual removing from the queue.
       if (!static_cast<ImplType&>(*this).erase_if_expired(*ptr))
         break;

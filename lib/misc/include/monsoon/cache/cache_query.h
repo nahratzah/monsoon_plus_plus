@@ -40,7 +40,7 @@ struct cache_query {
  * \param[in] predicate An equality predicate for the cache key.
  * \param[in] tpl_builder Functor that retrieves the initialization tuple for the key.
  * \param[in] create Constructor functor that creates the mapped type of the cache.
- * \returns A cache query, which is used by simple_cache_impl to perform lookups.
+ * \returns A cache query, which is used by cache_impl to perform lookups.
  */
 template<typename Predicate, typename TplBuilder, typename Create>
 auto make_cache_query(std::size_t hash_code, Predicate&& predicate, TplBuilder&& tpl_builder, Create&& create)
