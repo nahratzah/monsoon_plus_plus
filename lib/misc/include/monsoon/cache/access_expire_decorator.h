@@ -14,11 +14,6 @@ namespace monsoon::cache {
 /**
  * \brief Cache decorator that handles access expire.
  * \ingroup cache_detail
- *
- * \bug While the access expire correctly suppresses the element
- * once the timer is up, it would be nice to use a list of elements
- * to expire that can be updated independent of the bucket.
- * Currently, elements remain allocated until the bucket cleanup happens.
  */
 struct access_expire_decorator {
   using clock_type = std::chrono::steady_clock;
@@ -40,12 +35,6 @@ struct access_expire_decorator {
         const std::tuple<Types...>& init)
     : access_expire_(std::get<access_init>(init).expire)
     {}
-
-#if 0
-    bool is_expired() const noexcept {
-      return clock_type::now() > access_expire_;
-    }
-#endif
 
    private:
     time_point access_expire_;
@@ -84,6 +73,9 @@ struct access_expire_decorator {
    private:
     std::chrono::seconds duration;
 
+    ///\brief Maintenance loop for access_expire.
+    ///\details Removes items from the expire_queue, which exceed their
+    ///access_expire timer.
     auto maintenance_(time_point now)
     noexcept
     -> void {

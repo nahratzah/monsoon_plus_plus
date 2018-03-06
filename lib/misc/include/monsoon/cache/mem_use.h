@@ -49,7 +49,26 @@ class mem_use
   std::atomic<std::uintptr_t> mem_used_{ 0u };
 };
 
+/**
+ * \brief Decorator that enforces max_memory.
+ * \ingroup cache_internal
+ * \details
+ * The decorator functions by shrinking the cache to a size that
+ * probably is fine to keep memory usage within bounds.
+ *
+ * The implementation functions by reducing the expire queue size
+ * proportionally down.
+ *
+ * \note
+ * Memory usage by the cache is the sum of all elements
+ * in the cache, plus all live elements that were ever constructed
+ * by the cache.
+ * Therefore, a large pool of outside, live cache items may pressure
+ * the cache size down by a lot.
+ * However, this may be exactly what you want.
+ */
 struct cache_max_mem_decorator {
+  ///\brief Implementation of cache_max_mem_decorator.
   template<typename ImplType>
   class for_impl_type {
    public:
