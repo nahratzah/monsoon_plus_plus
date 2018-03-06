@@ -220,6 +220,7 @@ class element
  public:
   ///\brief Counter, used to prevent element from being destroyed, when a lock is released.
   ///\note We use an atomic, so we don't have to think about the cache lock when releasing.
+  ///\bug Optimization: use count should only be an atomic if the cache is thread safe.
   std::atomic<unsigned int> use_count{ 0u };
 };
 

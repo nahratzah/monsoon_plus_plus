@@ -5,6 +5,7 @@
 ///\ingroup cache_detail
 
 #include <monsoon/cache/element.h>
+#include <monsoon/cache/store_delete_lock.h>
 
 namespace monsoon::cache {
 
@@ -133,16 +134,17 @@ class bucket {
    * \params[out] created Set to point at newly created entry.
    *  Will be set to nullptr if the element was found.
    * \returns Element with the given key, creating one if absent.
+   * \bug Instead of using a pointer-reference for \p created, a reference to the deletion lock should be supplied.
    */
   template<typename Alloc, typename KeyPredicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
-  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, SizeType, OnHit, OnDelete>& ctx, store_type*& created)
+  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, SizeType, OnHit, OnDelete>& ctx, store_delete_lock<store_type>& created)
   -> lookup_type {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
     using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
     using size_type = typename alloc_traits::size_type;
     allocator_type alloc = use_alloc;
 
-    created = nullptr; // Initialization of output argument.
+    assert(!created); // Lock must be supplied in empty state.
     void* alloc_hint = nullptr; // Address of predecessor.
     store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
 
@@ -173,6 +175,7 @@ class bucket {
         // Must check for nullptr: could have expired
         // since s->is_expired() check above.
         if (!store_type::is_nil(ptr)) {
+          store_delete_lock<store_type> slck{ s };
           ctx.on_hit(*s);
           return ptr;
         }
@@ -183,8 +186,8 @@ class bucket {
 
     // Create new store_type.
     store_type* new_store = ctx.create(alloc_hint);
+    created = store_delete_lock<store_type>(new_store); // Inform called of newly constructed store.
     *iter = new_store; // Link.
-    created = new_store; // Inform called of newly constructed store.
     ++ctx.size;
     lookup_type new_ptr = new_store->ptr();
 
@@ -194,43 +197,38 @@ class bucket {
   }
 
   /**
-   * \brief Erases the element pointing at sptr.
+   * \brief Erases the element sptr.
    * \details
-   * Loops over elements, find the non-expired element with plain pointer
-   * equal to sptr.
-   * This element is unlinked and destroyed.
-   * \returns The result of element::ptr(), for the erased element.
-   *  By returning the (potentially shared) reference, we allow the caller to
-   *  delay destruction until after any locks have been released.
+   * The given store_type is removed from the bucket.
+   * \pre sptr is a valid element of this bucket and is not locked against delete.
+   * \post sptr will have been deleted from this bucket and deallocated.
    */
   template<typename Alloc, typename SizeType, typename OnDelete>
-  auto erase(Alloc& use_alloc, typename store_type::simple_pointer sptr, SizeType& size, OnDelete on_delete)
+  auto erase(Alloc& use_alloc, store_type* sptr, SizeType& size, OnDelete on_delete)
   noexcept
-  -> lookup_type {
+  -> void {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
     using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
     allocator_type alloc = use_alloc;
     assert(sptr != nullptr);
 
     store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
-    while (*iter != nullptr) {
+    for (;;) {
       store_type*const s = *iter;
+      assert(s != nullptr); // Only valid sptr may be supplied, so we'll never reach past the end of the bucket.
 
-      if (s->is_ptr(sptr)) {
+      if (s == sptr) {
         assert(s->use_count == 0u);
         *iter = successor_ptr(*s);
-        lookup_type result = s->ptr();
         --size;
 
         on_delete(*s);
         alloc_traits::destroy(alloc, s);
         alloc_traits::deallocate(alloc, s, 1);
-        if (!store_type::is_nil(result)) return result;
       } else {
         iter = &successor_ptr(*s);
       }
     }
-    return lookup_type();
   }
 
   template<typename Alloc, typename SizeType, typename OnDelete>

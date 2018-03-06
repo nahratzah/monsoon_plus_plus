@@ -9,70 +9,13 @@
 #include <monsoon/cache/create_handler.h>
 #include <monsoon/cache/key_decorator.h>
 #include <monsoon/cache/cache_query.h>
+#include <monsoon/cache/store_delete_lock.h>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
 
 namespace monsoon::cache {
 namespace {
-
-
-///\brief Scoped lock to prevent a store type from being deleted.
-///\ingroup cache_detail
-template<typename S>
-class store_delete_lock {
- public:
-  constexpr store_delete_lock() noexcept = default;
-
-  store_delete_lock(S* ptr) noexcept
-  : ptr_(ptr)
-  {
-    if (ptr_ != nullptr)
-      ptr_->use_count.fetch_add(1u, std::memory_order_acquire);
-  }
-
-  store_delete_lock(const store_delete_lock& other)
-  noexcept
-  : store_delete_lock(other.ptr_)
-  {}
-
-  store_delete_lock(store_delete_lock&& other)
-  noexcept
-  : ptr_(std::exchange(other.ptr_, nullptr))
-  {}
-
-  auto operator=(const store_delete_lock& other)
-  noexcept
-  -> store_delete_lock& {
-    if (&other != this) {
-      if (ptr_ != nullptr)
-        ptr_->use_count.fetch_sub(1u, std::memory_order_release);
-      ptr_ = other.ptr_;
-      if (ptr_ != nullptr)
-        ptr_->use_count.fetch_add(1u, std::memory_order_acquire);
-    }
-    return *this;
-  }
-
-  auto operator=(store_delete_lock&& other)
-  noexcept
-  -> store_delete_lock& {
-    if (&other != this) {
-      if (ptr_ != nullptr)
-        ptr_->use_count.fetch_sub(1u, std::memory_order_release);
-      ptr_ = std::exchange(other.ptr_, nullptr);
-    }
-    return *this;
-  }
-
-  ~store_delete_lock() noexcept {
-    if (ptr_ != nullptr)
-      ptr_->use_count.fetch_sub(1u, std::memory_order_release);
-  }
-
- private:
-  S* ptr_ = nullptr;
-};
 
 
 template<typename CacheDecorator, typename = void>
@@ -287,6 +230,12 @@ class simple_cache_impl
   auto max_load_factor() const noexcept -> float;
   auto max_load_factor(float fl) -> void;
   auto size() const noexcept -> size_type;
+  /**
+   * \brief Remove s, if it is expired.
+   * \details If s is expired and not locked against delete, it is removed.
+   * \returns True if the element was removed, false otherwise.
+   */
+  auto erase_if_expired(store_type& s) noexcept -> bool;
 
   template<typename Predicate, typename TplBuilder, typename Create>
   auto lookup_if_present(const cache_query<Predicate, TplBuilder, Create>& q) noexcept -> pointer {
@@ -345,17 +294,16 @@ class simple_cache_impl
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
-    store_type* created;
+    store_delete_lock<store_type> created;
     assert(buckets_.size() > 0);
     lookup_type lookup_result = buckets_[query.hash_code % buckets_.size()]
         .lookup_or_create(alloc_, query, created);
     assert(!store_type::is_nil(lookup_result));
-    auto slck = store_delete_lock<store_type>(created); // Prevent created entry from disappearing when we release the lock.
-    pointer result = resolve_(lck, std::move(lookup_result), created); // lck may be unlocked
+    pointer result = resolve_(lck, std::move(lookup_result), created.get()); // lck may be unlocked
     assert(result != nullptr);
 
     // If newly created, call post processing hooks.
-    if (created != nullptr) {
+    if (created) {
       if (!lck.owns_lock()) lck.lock(); // Relock.
       maybe_rehash_();
       on_create(*created);
@@ -438,6 +386,22 @@ auto simple_cache_impl<T, A, D...>::size() const noexcept
 -> size_type {
   std::lock_guard<const simple_cache_impl> lck{ *this };
   return size_;
+}
+
+template<typename T, typename A, typename... D>
+auto simple_cache_impl<T, A, D...>::erase_if_expired(store_type& s)
+noexcept
+-> bool {
+  if (s.use_count.load(std::memory_order_acquire) == 0 && s.is_expired()) {
+    buckets_[s.hash() % buckets_.size()].erase(
+        alloc_,
+        &s,
+        size_,
+        [this](store_type& s) { on_delete(s); });
+    return true;
+  } else {
+    return false;
+  }
 }
 
 template<typename T, typename A, typename... D>

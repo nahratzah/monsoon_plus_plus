@@ -280,6 +280,20 @@ class base_expire_queue {
 
  protected:
   /**
+   * \brief Retrieves the coldest element in the queue.
+   * \returns A pointer to the coldest element in the queue, or a nullptr if the queue is empty.
+   * \tparam StoreType The store_type of the queue.
+   */
+  template<typename StoreType>
+  auto coldest() const
+  noexcept
+  -> StoreType* {
+    if (cold_qlen > 0) return cold_q.pred<StoreType>();
+    if (hot_qlen > 0) return hot_q.pred<StoreType>();
+    return nullptr;
+  }
+
+  /**
    * \brief Shrink this queue to the given size.
    * \details
    * Reduces the size of this queue until it is less than or equal to \p new_size.
@@ -422,6 +436,41 @@ class expire_queue
   noexcept
   -> void {
     shrink_while_<typename ImplType::store_type>(std::move(predicate));
+  }
+
+  template<typename StoreType>
+  auto on_create(StoreType& s)
+  noexcept
+  -> void {
+    this->base_expire_queue::on_create(s);
+    cleanup_();
+  }
+
+  template<typename StoreType>
+  auto on_hit(StoreType& s)
+  noexcept
+  -> void {
+    this->base_expire_queue::on_hit(s);
+    cleanup_();
+  }
+
+ private:
+  /**
+   * \brief Erases expired elements from the queue.
+   * \details
+   * This implementation only evaluates the coldest elements,
+   * so some expired elements may stay in the queue.
+   * Those elements will bubble out eventually.
+   */
+  auto cleanup_() {
+    for (auto ptr = coldest<typename ImplType::store_type>();
+        ptr != nullptr;
+        ptr = coldest<typename ImplType::store_type>()) {
+      // simple_cache_impl::erase_if_expired will invoke the on_delete
+      // callback, which does the actual removing from the queue.
+      if (!static_cast<ImplType&>(*this).erase_if_expired(*ptr))
+        break;
+    }
   }
 };
 
