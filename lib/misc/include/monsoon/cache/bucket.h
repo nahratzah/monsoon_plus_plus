@@ -28,15 +28,14 @@ namespace monsoon::cache {
  * \bug Bucket_ctx contains a size reference, but the on_create and on_delete
  * functions in cache_impl should do this instead.
  */
-template<typename Predicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
+template<typename Predicate, typename Create, typename OnHit, typename OnDelete>
 struct bucket_ctx {
-  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create, SizeType& size, OnHit on_hit, OnDelete on_delete)
+  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create, OnHit on_hit, OnDelete on_delete)
   noexcept(std::is_nothrow_move_constructible_v<Predicate>
       && std::is_nothrow_move_constructible_v<Create>)
   : hash_code(std::move(hash_code)),
     predicate(std::move(predicate)),
     create(std::move(create)),
-    size(size),
     on_hit(std::move(on_hit)),
     on_delete(std::move(on_delete))
   {}
@@ -44,20 +43,18 @@ struct bucket_ctx {
   std::size_t hash_code;
   Predicate predicate; ///<\brief Element predicate.
   Create create; ///<\brief Constructor.
-  SizeType& size; ///<\brief Reference to cache size.
   OnHit on_hit; ///<\brief Invoked on cache hit.
   OnDelete on_delete; ///<\brief Invoked prior to deletion of element.
 };
 
-template<typename Predicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
-constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create, SizeType& size, OnHit&& on_hit, OnDelete&& on_delete)
--> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType, std::decay_t<OnHit>, std::decay_t<OnDelete>> {
-  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, SizeType, std::decay_t<OnHit>, std::decay_t<OnDelete>>;
+template<typename Predicate, typename Create, typename OnHit, typename OnDelete>
+constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create, OnHit&& on_hit, OnDelete&& on_delete)
+-> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, std::decay_t<OnHit>, std::decay_t<OnDelete>> {
+  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, std::decay_t<OnHit>, std::decay_t<OnDelete>>;
   return type(
       hash_code,
       std::forward<Predicate>(predicate),
       std::forward<Create>(create),
-      size,
       std::forward<OnHit>(on_hit),
       std::forward<OnDelete>(on_delete));
 }
@@ -103,8 +100,8 @@ class bucket {
    * \brief Look up element with given key.
    * \returns Element with the given key, or nullptr if no such element exists.
    */
-  template<typename KeyPredicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
-  auto lookup_if_present(const bucket_ctx<KeyPredicate, Create, SizeType, OnHit, OnDelete>& ctx) const
+  template<typename KeyPredicate, typename Create, typename OnHit, typename OnDelete>
+  auto lookup_if_present(const bucket_ctx<KeyPredicate, Create, OnHit, OnDelete>& ctx) const
   noexcept
   -> lookup_type {
     store_type* s = head_;
@@ -136,8 +133,8 @@ class bucket {
    * \returns Element with the given key, creating one if absent.
    * \bug Instead of using a pointer-reference for \p created, a reference to the deletion lock should be supplied.
    */
-  template<typename Alloc, typename KeyPredicate, typename Create, typename SizeType, typename OnHit, typename OnDelete>
-  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, SizeType, OnHit, OnDelete>& ctx, store_delete_lock<store_type>& created)
+  template<typename Alloc, typename KeyPredicate, typename Create, typename OnHit, typename OnDelete>
+  auto lookup_or_create(Alloc& use_alloc, const bucket_ctx<KeyPredicate, Create, OnHit, OnDelete>& ctx, store_delete_lock<store_type>& created)
   -> lookup_type {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
     using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
@@ -161,7 +158,6 @@ class bucket {
         }
 
         *iter = successor_ptr(*s); // Unlink s.
-        --ctx.size;
 
         ctx.on_delete(*s);
         alloc_traits::destroy(alloc, s);
@@ -188,7 +184,6 @@ class bucket {
     store_type* new_store = ctx.create(alloc_hint);
     created = store_delete_lock<store_type>(new_store); // Inform called of newly constructed store.
     *iter = new_store; // Link.
-    ++ctx.size;
     lookup_type new_ptr = new_store->ptr();
 
     assert(!store_type::is_nil(new_ptr)
@@ -203,8 +198,8 @@ class bucket {
    * \pre sptr is a valid element of this bucket and is not locked against delete.
    * \post sptr will have been deleted from this bucket and deallocated.
    */
-  template<typename Alloc, typename SizeType, typename OnDelete>
-  auto erase(Alloc& use_alloc, store_type* sptr, SizeType& size, OnDelete on_delete)
+  template<typename Alloc, typename OnDelete>
+  auto erase(Alloc& use_alloc, store_type* sptr, OnDelete on_delete)
   noexcept
   -> void {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
@@ -222,15 +217,14 @@ class bucket {
     assert(s != nullptr);
     assert(s->use_count == 0u);
     *iter = successor_ptr(*s);
-    --size;
 
     on_delete(*s);
     alloc_traits::destroy(alloc, s);
     alloc_traits::deallocate(alloc, s, 1);
   }
 
-  template<typename Alloc, typename SizeType, typename OnDelete>
-  auto erase_all(Alloc& use_alloc, SizeType& size, OnDelete on_delete) {
+  template<typename Alloc, typename OnDelete>
+  auto erase_all(Alloc& use_alloc, OnDelete on_delete) {
     using allocator_type = typename std::allocator_traits<Alloc>::template rebind_alloc<store_type>;
     using alloc_traits = typename std::allocator_traits<Alloc>::template rebind_traits<store_type>;
     allocator_type alloc = use_alloc;
@@ -238,7 +232,6 @@ class bucket {
     while (head_ != nullptr) {
       store_type* s = std::exchange(head_, successor_ptr(*head_));
       assert(s->use_count == 0u);
-      --size;
 
       on_delete(*s);
       alloc_traits::destroy(alloc, s);

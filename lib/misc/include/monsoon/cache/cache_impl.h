@@ -313,7 +313,6 @@ class cache_impl
         q.hash_code,
         q.predicate,
         []() -> store_type { throw std::runtime_error("create should not be called"); },
-        size_,
         [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, cache_impl>...>::apply(s, *this); },
         [this](store_type& s) { this->on_delete(s); });
 
@@ -367,7 +366,6 @@ class cache_impl
           }
           return new_store;
         },
-        size_,
         [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, cache_impl>...>::apply(s, *this); },
         [this](store_type& s) { this->on_delete(s); });
 
@@ -431,7 +429,7 @@ class cache_impl
 template<typename T, typename Alloc, typename... CacheDecorators>
 cache_impl<T, Alloc, CacheDecorators...>::~cache_impl() noexcept {
   for (auto& b : buckets_)
-    b.erase_all(alloc_, size_, [this](store_type& s) { on_delete(s); });
+    b.erase_all(alloc_, [this](store_type& s) { on_delete(s); });
 }
 
 template<typename T, typename A, typename... D>
@@ -478,7 +476,6 @@ noexcept
     buckets_[s.hash() % buckets_.size()].erase(
         alloc_,
         &s,
-        size_,
         [this](store_type& s) { on_delete(s); });
     return true;
   } else {
@@ -570,11 +567,13 @@ noexcept // Allocation exception is swallowed.
 
 template<typename T, typename A, typename... D>
 void cache_impl<T, A, D...>::on_create(store_type& s) noexcept {
+  ++size_;
   decorators_on_create_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
 }
 
 template<typename T, typename A, typename... D>
 void cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
+  --size_;
   decorators_on_delete_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
 }
 
