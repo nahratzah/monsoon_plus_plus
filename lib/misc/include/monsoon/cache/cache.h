@@ -189,11 +189,12 @@ class extended_cache_intf
 };
 
 /**
- * \brief A key-value cache.
+ * \brief An in-memory key-value cache.
  * \ingroup cache
  * \details This cache allows looking up values, by a given key.
  *
- * Unlike extended_cache, it only allows looking up by a specific key type.
+ * Unlike \ref extended_cache "extended_cache", it only allows looking up by a
+ * specific key type.
  *
  * \tparam K The key type of the cache.
  *    If \p K is void, the cache is an identity cache.
@@ -306,7 +307,7 @@ class cache {
 };
 
 /**
- * \brief A cache that allows lookup by argument pack.
+ * \brief An in-memory cache that allows lookup by argument pack.
  * \ingroup cache
  * \details This cache allows looking up values, by a given argument pack.
  *
