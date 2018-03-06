@@ -323,6 +323,29 @@ class cache_builder
 
   /**
    * \brief Build the cache described by this builder.
+   *
+   * \details
+   * The function is used to create cache elements.
+   * Its signature must be one of:
+   * \code
+   * U fn(Alloc alloc, Args&&... args);
+   * std::shared_ptr<U> fn(Alloc alloc, Args&&... args);
+   * std::future<U> fn(Alloc alloc, Args&&... args);
+   * std::shared_future<U> fn(Alloc alloc, Args&&... args);
+   * std::future<std::shared_ptr<U>> fn(Alloc alloc, Args&&... args);
+   * std::shared_future<std::shared_ptr<U>> fn(Alloc alloc, Args&&... args);
+   * \endcode
+   * Where \p U is the mapped type of the cache,
+   * \p alloc is the allocator of the cache,
+   * and \p args is an argument pack passed to the
+   * \ref cache::get "cache::get()" or
+   * \ref extended_cache::get "extended_cache::get()" methods.
+   * (Contrary to the other functors for a cache,
+   * \p fn is given rvalue references if possible.)
+   *
+   * The code will do the right thing regardless of which implementation is
+   * provided.
+   * If async() is set, the \p fn will resolve with the cache lock released.
    * \note You must include <monsoon/cache/impl.h> if you call this function,
    * since that header contains the implementation.
    * \returns A new cache described by the specification in this.
