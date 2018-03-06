@@ -349,6 +349,11 @@ class cache_builder
    * \note You must include <monsoon/cache/impl.h> if you call this function,
    * since that header contains the implementation.
    * \returns A new cache described by the specification in this.
+   *
+   * \bug Despite my attempts, the build function does not eliminate branches
+   * based on constexpr. Therefore, all possible paths are compiled by the
+   * compiler. Result of this is code bloat, but performance impact should be
+   * negligable, if any.
    */
   template<typename Fn>
   auto build(Fn&& fn) const
