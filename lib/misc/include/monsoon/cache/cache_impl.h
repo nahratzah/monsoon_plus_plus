@@ -185,6 +185,39 @@ using select_decorator_type = typename select_decorator_type_<D, ImplType>::type
  * \ingroup cache_detail
  * \details This class combines all decorators and performs lookups,
  * as well as cache maintenance tasks.
+ *
+ * \msc
+ * wrapper, cache_impl, bucket, decorator[ label="cache decorators" ];
+ *
+ * wrapper => cache_impl [ label="lookup_or_create()", URL="\ref cache_impl::lookup_or_create" ] ;
+ * cache_impl -> cache_impl [ label="lock()" ] ;
+ * cache_impl box cache_impl [ label="select bucket" ] ;
+ * cache_impl => bucket [ label="lookup_or_create()", URL="\ref bucket::lookup_or_create" ] ;
+ * bucket box bucket [ label="search for element" ] ;
+ * --- [ label="remove expired elements during search" ] ;
+ * bucket =>> cache_impl [ label="on_delete(expired)", URL="\ref cache_impl::on_delete" ] ;
+ * cache_impl => decorator [ label="on_delete(expired)" ];
+ * --- [ label="cache hit" ] ;
+ * bucket => decorator [ label="on_hit(element)" ] ;
+ * bucket >> cache_impl [ label="return element" ] ;
+ * cache_impl -> cache_impl [ label="unlock()" ] ;
+ * cache_impl note cache_impl [ label="Only in async case: future.get()\n(unlocked)" ] ;
+ * cache_impl >> wrapper [ label="return value" ] ;
+ * --- [ label="cache miss" ] ;
+ * bucket => decorator [ label="init_tuple()" ] ;
+ * bucket box bucket [ label="create new element (using init_tuple() from all decorators)" ] ;
+ * bucket >> cache_impl [ label="return new element" ] ;
+ * cache_impl note cache_impl [ label="Only in async case: resolve future\n(unlocked)", URL="\ref cache_impl::resolve_" ] ;
+ * cache_impl =>> cache_impl [ label="on_create(element)", URL="\ref cache_impl::on_create" ] ;
+ * cache_impl => decorator [ label="on_create(element)" ] ;
+ * cache_impl box cache_impl [ label="rehash", URL="\ref cache_impl::maybe_rehash_" ] ;
+ * cache_impl -> cache_impl [ label="unlock()" ] ;
+ * cache_impl >> wrapper [ label="return value" ] ;
+ * \endmsc
+ *
+ * \tparam T The type of elements in the cache.
+ * \tparam Alloc The allocator used for the cache data and elements.
+ * \tparam CacheDecorators Decorators that affect the behaviour of the cache.
  */
 template<typename T, typename Alloc, typename... CacheDecorators>
 class cache_impl

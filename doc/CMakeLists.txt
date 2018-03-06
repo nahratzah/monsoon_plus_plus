@@ -1,4 +1,4 @@
-find_package(Doxygen OPTIONAL_COMPONENTS dot)
+find_package(Doxygen OPTIONAL_COMPONENTS dot mscgen)
 
 if(DOXYGEN_FOUND)
   if (DOXYGEN_DOT_EXECUTABLE)
