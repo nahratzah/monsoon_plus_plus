@@ -238,6 +238,31 @@ constexpr auto apply_max_size(const cache_builder_vars& b, NextApply&& next)
 }
 
 
+template<typename NextApply>
+struct apply_max_mem_ {
+  template<typename... D>
+  auto operator()(cache_decorator_set<D...> d)
+  -> decltype(auto) {
+    if (b.max_memory().has_value())
+      return next(d
+          .template remove<weaken_decorator>()
+          .template add<cache_expire_queue_decorator>()
+          .template add<cache_max_mem_decorator>());
+    else
+      return next(d);
+  }
+
+  const cache_builder_vars& b;
+  NextApply next;
+};
+
+template<typename NextApply>
+constexpr auto apply_max_mem(const cache_builder_vars& b, NextApply&& next)
+-> apply_max_mem_<std::decay_t<NextApply>> {
+  return { b, std::forward<NextApply>(next) };
+}
+
+
 } /* namespace monsoon::cache::builder_detail::<unnamed> */
 
 
@@ -424,6 +449,19 @@ class sharded_wrapper final
 };
 
 
+template<typename Cache, typename = void>
+struct has_set_mem_use_
+: std::false_type {};
+
+template<typename Cache,
+    typename = std::void_t<decltype(std::declval<Cache&>().set_mem_use(std::declval<std::shared_ptr<const mem_use>>()))>>
+struct hash_set_mem_use_
+: std::true_type {};
+
+template<typename Cache>
+constexpr bool has_set_mem_use = has_set_mem_use_<Cache>::value;
+
+
 } /* namespace monsoon::cache::builder_detail */
 
 
@@ -450,8 +488,8 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
   }
 
   const unsigned int shards = (!thread_safe()
-      ? 1u
-      : (concurrency() == 0u ? std::max(1u, std::thread::hardware_concurrency()) : concurrency()));
+      ? 0u
+      : (concurrency() == 0u ? std::thread::hardware_concurrency() : concurrency()));
 
   auto builder_impl =
       apply_async(*this,
@@ -460,23 +498,28 @@ auto cache_builder<K, V, Hash, Eq, Alloc>::build(Fn&& fn) const
                   apply_key_type(*this,
                       apply_thread_safe(*this,
                           apply_max_size(*this,
-                              [this, &fn, shards, &alloc](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
-                                using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
-                                using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
-                                using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
+                              apply_max_mem(*this,
+                                  [this, &fn, shards, &alloc, &mem_tracking](auto decorators) -> std::shared_ptr<extended_cache_intf<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>> {
+                                    using basic_type = typename decltype(decorators)::template cache_type<V, Alloc>;
+                                    using wrapper_type = wrapper<K, V, basic_type, Hash, Eq, std::decay_t<Fn>>;
+                                    using sharded_wrapper_type = sharded_wrapper<K, V, basic_type, Hash, Eq, Alloc, std::decay_t<Fn>>;
 
-                                if (shards != 1u) {
-                                  auto impl = std::allocate_shared<sharded_wrapper_type>(
-                                      alloc,
-                                      *this, shards, std::forward<Fn>(fn), alloc);
-                                  return impl;
-                                } else {
-                                  auto impl = std::allocate_shared<wrapper_type>(
-                                      alloc,
-                                      *this, std::forward<Fn>(fn), alloc);
-                                  return impl;
-                                }
-                              }))))));
+                                    if (shards <= 1u) {
+                                      auto impl = std::allocate_shared<sharded_wrapper_type>(
+                                          alloc,
+                                          *this, shards, std::forward<Fn>(fn), alloc);
+                                      if constexpr(has_set_mem_use<basic_type>)
+                                        impl->set_mem_use(std::move(mem_tracking));
+                                      return impl;
+                                    } else {
+                                      auto impl = std::allocate_shared<wrapper_type>(
+                                          alloc,
+                                          *this, std::forward<Fn>(fn), alloc);
+                                      if constexpr(has_set_mem_use<basic_type>)
+                                        impl->set_mem_use(std::move(mem_tracking));
+                                      return impl;
+                                    }
+                                  })))))));
 
   return extended_cache<K, V, Hash, Eq, Alloc, std::decay_t<Fn>>(
       builder_impl(cache_decorator_set<>().template add<weaken_decorator>()));

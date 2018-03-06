@@ -278,6 +278,12 @@ class base_expire_queue {
     rebalance_();
   }
 
+  auto size() const
+  noexcept
+  -> std::uintptr_t {
+    return hot_qlen + cold_qlen;
+  }
+
  protected:
   /**
    * \brief Retrieves the coldest element in the queue.

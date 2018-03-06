@@ -49,6 +49,55 @@ class mem_use
   std::atomic<std::uintptr_t> mem_used_{ 0u };
 };
 
+struct cache_max_mem_decorator {
+  template<typename ImplType>
+  class for_impl_type {
+   public:
+    for_impl_type(const cache_builder_vars& v)
+    : max_mem_use_(v.max_memory().value())
+    {}
+
+    template<typename StoreType>
+    auto on_create([[maybe_unused]] const StoreType& s)
+    noexcept
+    -> void {
+      maintenance_();
+    }
+
+    template<typename StoreType>
+    auto on_hit([[maybe_unused]] const StoreType& s)
+    noexcept
+    -> void {
+      maintenance_();
+    }
+
+    // Filled in by cache_builder.
+    auto set_mem_use(std::shared_ptr<const mem_use> m)
+    noexcept
+    -> void {
+      mem_use_ = std::move(m);
+    }
+
+   private:
+    auto maintenance_()
+    noexcept
+    -> void {
+      if (mem_use_ == nullptr) return;
+
+      expire_queue<ImplType>& q = static_cast<ImplType&>(*this);
+      const std::uintptr_t cur_mem_use = mem_use_->get();
+      if (cur_mem_use < max_mem_use_) return;
+
+      float multiplier = float(max_mem_use_) / float(cur_mem_use);
+      std::uintptr_t shrink_sz = static_cast<std::uintptr_t>(q.size() * multiplier);
+      q.shrink_to_size(shrink_sz);
+    }
+
+    std::shared_ptr<const mem_use> mem_use_;
+    std::uintptr_t max_mem_use_;
+  };
+};
+
 
 } /* namespace monsoon::cache */
 
