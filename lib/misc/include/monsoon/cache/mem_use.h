@@ -69,6 +69,7 @@ class mem_use
  */
 struct cache_max_mem_decorator {
   ///\brief Implementation of cache_max_mem_decorator.
+  ///\ingroup cache_internal
   template<typename ImplType>
   class for_impl_type {
    public:
