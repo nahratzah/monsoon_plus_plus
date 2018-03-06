@@ -198,7 +198,8 @@ using select_decorator_type = typename select_decorator_type_<D, ImplType>::type
  * bucket =>> cache_impl [ label="on_delete(expired)", URL="\ref cache_impl::on_delete" ] ;
  * cache_impl => decorator [ label="on_delete(expired)" ];
  * --- [ label="cache hit" ] ;
- * bucket => decorator [ label="on_hit(element)" ] ;
+ * bucket =>> cache_impl [ label="on_hit(element)", URL="\ref cache_impl::on_hit" ] ;
+ * cache_impl => decorator [ label="on_hit(element)" ] ;
  * bucket >> cache_impl [ label="return element" ] ;
  * cache_impl -> cache_impl [ label="unlock()" ] ;
  * cache_impl note cache_impl [ label="Only in async case: future.get()\n(unlocked)" ] ;
@@ -313,7 +314,7 @@ class cache_impl
         q.hash_code,
         q.predicate,
         []() -> store_type { throw std::runtime_error("create should not be called"); },
-        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, cache_impl>...>::apply(s, *this); },
+        [this](store_type& s) { this->on_hit(s); },
         [this](store_type& s) { this->on_delete(s); });
 
     // Execute query.
@@ -408,12 +409,14 @@ class cache_impl
   -> pointer;
 
   ///\brief Perform rehashing, if load factor constraint requires it.
-  void maybe_rehash_() noexcept;
+  auto maybe_rehash_() noexcept -> void;
 
   ///\brief Invoke on_create method for each cache decorator that implements it.
-  void on_create(store_type& s) noexcept;
+  auto on_create(store_type& s) noexcept -> void;
+  ///\brief Invoke on_hit method for each cache decorator that implements it.
+  auto on_hit(store_type& s) noexcept -> void;
   ///\brief Invoke on_delete method for each cache decorator that implements it.
-  void on_delete(store_type& s) noexcept;
+  auto on_delete(store_type& s) noexcept -> void;
 
   ///\brief List of the buckets.
   bucket_vector buckets_;
@@ -565,13 +568,24 @@ noexcept // Allocation exception is swallowed.
 }
 
 template<typename T, typename A, typename... D>
-void cache_impl<T, A, D...>::on_create(store_type& s) noexcept {
+auto cache_impl<T, A, D...>::on_create(store_type& s)
+noexcept
+-> void {
   ++size_;
   decorators_on_create_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
 }
 
 template<typename T, typename A, typename... D>
-void cache_impl<T, A, D...>::on_delete(store_type& s) noexcept {
+auto cache_impl<T, A, D...>::on_hit(store_type& s)
+noexcept
+-> void {
+  decorators_on_hit_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
+}
+
+template<typename T, typename A, typename... D>
+auto cache_impl<T, A, D...>::on_delete(store_type& s)
+noexcept
+-> void {
   --size_;
   decorators_on_delete_<store_type, select_decorator_type<D, cache_impl>...>::apply(s, *this);
 
