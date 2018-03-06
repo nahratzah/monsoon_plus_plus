@@ -224,6 +224,8 @@ template<typename T, typename Alloc, typename... CacheDecorators>
 class cache_impl
 : public select_decorator_type<CacheDecorators, cache_impl<T, Alloc, CacheDecorators...>>...
 {
+  template<typename, typename...> friend class bucket;
+
  public:
   ///\brief Size type of the cache.
   using size_type = std::uintptr_t;
@@ -357,15 +359,13 @@ class cache_impl
             throw;
           }
           return new_store;
-        },
-        [this](store_type& s) { decorators_on_hit_<store_type, select_decorator_type<CacheDecorators, cache_impl>...>::apply(s, *this); },
-        [this](store_type& s) { this->on_delete(s); });
+        });
 
     // Execute query.
     store_delete_lock<store_type> created;
     assert(buckets_.size() > 0);
     lookup_type lookup_result = buckets_[query.hash_code % buckets_.size()]
-        .lookup_or_create(query, created);
+        .lookup_or_create(*this, query, created);
     assert(!store_type::is_nil(lookup_result));
     pointer result = resolve_(lck, std::move(lookup_result), created.get()); // lck may be unlocked
     assert(result != nullptr);
@@ -374,7 +374,6 @@ class cache_impl
     if (created) {
       if (!lck.owns_lock()) lck.lock(); // Relock.
       maybe_rehash_();
-      on_create(*created);
     }
 
     return result;

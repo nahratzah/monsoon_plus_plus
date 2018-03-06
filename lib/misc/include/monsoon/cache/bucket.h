@@ -28,35 +28,29 @@ namespace monsoon::cache {
  * \bug Bucket_ctx contains a size reference, but the on_create and on_delete
  * functions in cache_impl should do this instead.
  */
-template<typename Predicate, typename Create, typename OnHit, typename OnDelete>
+template<typename Predicate, typename Create>
 struct bucket_ctx {
-  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create, OnHit on_hit, OnDelete on_delete)
+  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create)
   noexcept(std::is_nothrow_move_constructible_v<Predicate>
       && std::is_nothrow_move_constructible_v<Create>)
   : hash_code(std::move(hash_code)),
     predicate(std::move(predicate)),
-    create(std::move(create)),
-    on_hit(std::move(on_hit)),
-    on_delete(std::move(on_delete))
+    create(std::move(create))
   {}
 
   std::size_t hash_code;
   Predicate predicate; ///<\brief Element predicate.
   Create create; ///<\brief Constructor.
-  OnHit on_hit; ///<\brief Invoked on cache hit.
-  OnDelete on_delete; ///<\brief Invoked prior to deletion of element.
 };
 
-template<typename Predicate, typename Create, typename OnHit, typename OnDelete>
-constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create, OnHit&& on_hit, OnDelete&& on_delete)
--> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, std::decay_t<OnHit>, std::decay_t<OnDelete>> {
-  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>, std::decay_t<OnHit>, std::decay_t<OnDelete>>;
+template<typename Predicate, typename Create>
+constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create)
+-> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>> {
+  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>>;
   return type(
       hash_code,
       std::forward<Predicate>(predicate),
-      std::forward<Create>(create),
-      std::forward<OnHit>(on_hit),
-      std::forward<OnDelete>(on_delete));
+      std::forward<Create>(create));
 }
 
 /**
@@ -132,8 +126,8 @@ class bucket {
    * \returns Element with the given key, creating one if absent.
    * \bug Instead of using a pointer-reference for \p created, a reference to the deletion lock should be supplied.
    */
-  template<typename KeyPredicate, typename Create, typename OnHit, typename OnDelete>
-  auto lookup_or_create(const bucket_ctx<KeyPredicate, Create, OnHit, OnDelete>& ctx, store_delete_lock<store_type>& created)
+  template<typename CacheImpl, typename KeyPredicate, typename Create>
+  auto lookup_or_create(CacheImpl& owner, const bucket_ctx<KeyPredicate, Create>& ctx, store_delete_lock<store_type>& created)
   -> lookup_type {
     assert(!created); // Lock must be supplied in empty state.
     void* alloc_hint = nullptr; // Address of predecessor.
@@ -152,8 +146,7 @@ class bucket {
         }
 
         *iter = successor_ptr(*s); // Unlink s.
-
-        ctx.on_delete(*s);
+        owner.on_delete(*s);
         continue;
       }
 
@@ -164,7 +157,7 @@ class bucket {
         // since s->is_expired() check above.
         if (!store_type::is_nil(ptr)) {
           store_delete_lock<store_type> slck{ s };
-          ctx.on_hit(*s);
+          owner.on_hit(*s);
           return ptr;
         }
       }
@@ -175,6 +168,7 @@ class bucket {
     // Create new store_type.
     store_type* new_store = ctx.create(alloc_hint);
     created = store_delete_lock<store_type>(new_store); // Inform called of newly constructed store.
+    owner.on_create(*created);
     *iter = new_store; // Link.
     lookup_type new_ptr = new_store->ptr();
 
