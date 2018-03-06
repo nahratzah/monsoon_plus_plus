@@ -103,13 +103,13 @@ TEST(constructor) {
 
   // String value.
   CHECK_EQUAL(
-      build_mv_types<std::string>(u8"foo"),
+      build_mv_types<std::string_view>(u8"foo"sv),
       metric_value(u8"foo").get()); // Using char*
   CHECK_EQUAL(
-      build_mv_types<std::string>(u8"foo"),
+      build_mv_types<std::string_view>(u8"foo"sv),
       metric_value(u8"foo"s).get()); // Using std::string
   CHECK_EQUAL(
-      build_mv_types<std::string>(u8"foo"),
+      build_mv_types<std::string_view>(u8"foo"sv),
       metric_value(u8"foo"sv).get()); // Using std::string_view
 
   // Histogram value.

@@ -189,7 +189,7 @@ void encode_metric_value(monsoon::xdr::xdr_ostream& out,
             out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
             out.put_flt64(v);
           },
-          [&out, &dict](const std::string& v) {
+          [&out, &dict](const std::string_view& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
             out.put_uint32(dict.encode(v));
           },
@@ -310,7 +310,8 @@ void dictionary_delta::decode_update(xdr::xdr_istream& in) {
       [this](xdr::xdr_istream& in) {
         return in.template get_collection<std::vector<std::string>>(
             [this](xdr::xdr_istream& in) {
-              return sdd.decode(in.get_uint32());
+              std::string_view sv = sdd.decode(in.get_uint32());
+              return std::string(sv.begin(), sv.end());
             });
       });
   tdd.decode_update(
@@ -330,7 +331,8 @@ void dictionary_delta::decode_update(xdr::xdr_istream& in) {
             keys.begin(), keys.end(), std::make_move_iterator(values.begin()),
             std::inserter(tag_map, tag_map.end()),
             [this](std::uint32_t str_ref, metric_value&& mv) {
-              return std::make_pair(sdd.decode(str_ref), std::move(mv));
+              std::string_view sv = sdd.decode(str_ref);
+              return std::make_pair(std::string(sv.begin(), sv.end()), std::move(mv));
             });
         return tags(std::move(tag_map));
       });
@@ -738,7 +740,7 @@ void write_metric_table(xdr::xdr_ostream& out,
   mt<std::int32_t> mt_32bit{ std::vector<bool>(metrics.size(), false), {} };
   mt<std::int64_t> mt_64bit{ std::vector<bool>(metrics.size(), false), {} };
   mt<metric_value::fp_type> mt_dbl{ std::vector<bool>(metrics.size(), false), {} };
-  mt<std::reference_wrapper<const std::string>> mt_str{ std::vector<bool>(metrics.size(), false), {} };
+  mt<std::string_view> mt_str{ std::vector<bool>(metrics.size(), false), {} };
   mt<std::reference_wrapper<const histogram>> mt_hist{ std::vector<bool>(metrics.size(), false), {} };
   std::vector<bool> mt_empty = std::vector<bool>(metrics.size(), false);
   mt<std::reference_wrapper<const metric_value>> mt_other{ std::vector<bool>(metrics.size(), false), {} };
@@ -796,7 +798,7 @@ void write_metric_table(xdr::xdr_ostream& out,
                 mt_dbl.presence[index] = true;
                 mt_dbl.value.push_back(v);
               },
-              [&](const std::string& v) {
+              [&](const std::string_view& v) {
                 mt_str.presence[index] = true;
                 mt_str.value.emplace_back(v);
               },

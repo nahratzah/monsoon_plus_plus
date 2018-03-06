@@ -303,7 +303,7 @@ void encode_metric_value(monsoon::xdr::xdr_ostream& out,
             out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
             out.put_flt64(v);
           },
-          [&out](const std::string& v) {
+          [&out](const std::string_view& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
             out.put_string(v);
           },

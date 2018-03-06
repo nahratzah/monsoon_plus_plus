@@ -35,11 +35,16 @@ auto interpolate(time_point at,
         if constexpr(std::is_same_v<metric_value::empty, x_type>
             || std::is_same_v<metric_value::empty, y_type>)
           return metric_value();
+        else if constexpr(std::is_same_v<metric_value::string_ptr, x_type>
+            && std::is_same_v<metric_value::string_ptr, y_type>)
+          return (*xval == *yval
+              ? std::make_optional(metric_value(*xval))
+              : std::optional<metric_value>());
         else if constexpr(std::is_same_v<bool, x_type>
-            || std::is_same_v<std::string, x_type>
-            || std::is_same_v<bool, y_type>
-            || std::is_same_v<std::string, y_type>)
-          return metric_value(xval);
+            && std::is_same_v<bool, y_type>)
+          return (xval == yval
+              ? std::make_optional(metric_value(xval))
+              : std::optional<metric_value>());
         else if constexpr(
             (std::is_same_v<metric_value::signed_type, x_type>
              || std::is_same_v<metric_value::unsigned_type, x_type>

@@ -448,9 +448,9 @@ void encode_metric_value(monsoon::xdr::xdr_ostream& out,
             out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
             out.put_flt64(v);
           },
-          [&out, &dict](const std::string& v) {
+          [&out, &dict](const std::string_view& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
-            out.put_uint32(dict.encode(v));
+            out.put_uint32(dict.encode(std::string(v.begin(), v.end())));
           },
           [&out](const histogram& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
