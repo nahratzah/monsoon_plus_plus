@@ -11,49 +11,6 @@ namespace monsoon::cache {
 
 
 /**
- * \brief Variables used by bucket to do its work.
- * \ingroup cache_detail
- * \details These variables are kept outside bucket,
- * in order to reduce memory overhead.
- *
- * This essentially functions as the query to a bucket lookup.
- *
- * \tparam KeyEq A key predicate functor.
- * \code
- *  predicate(const store_type&) -> bool
- * \endcode
- * \tparam Create Constructor function.
- *  create() -> store_type.
- *
- * \bug Bucket_ctx contains a size reference, but the on_create and on_delete
- * functions in cache_impl should do this instead.
- */
-template<typename Predicate, typename Create>
-struct bucket_ctx {
-  constexpr bucket_ctx(std::size_t hash_code, Predicate predicate, Create create)
-  noexcept(std::is_nothrow_move_constructible_v<Predicate>
-      && std::is_nothrow_move_constructible_v<Create>)
-  : hash_code(std::move(hash_code)),
-    predicate(std::move(predicate)),
-    create(std::move(create))
-  {}
-
-  std::size_t hash_code;
-  Predicate predicate; ///<\brief Element predicate.
-  Create create; ///<\brief Constructor.
-};
-
-template<typename Predicate, typename Create>
-constexpr auto make_bucket_ctx(std::size_t hash_code, Predicate&& predicate, Create&& create)
--> bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>> {
-  using type = bucket_ctx<std::decay_t<Predicate>, std::decay_t<Create>>;
-  return type(
-      hash_code,
-      std::forward<Predicate>(predicate),
-      std::forward<Create>(create));
-}
-
-/**
  * \brief Cache bucket.
  * \ingroup cache_detail
  * \details A bucket contains all objects, based on a given modulo of the hash code.
@@ -120,14 +77,22 @@ class bucket {
    * \details
    * Iterates over all elements in the bucket.
    * While iterating, erases any expired entries.
-   * \params[in] ctx Query context.
+   * \params[in] owner The cache implementation, used to invoke on_hit, on_create, and on_delete.
+   * \param[in] hash_code The hash code of the object to search.
+   * \param[in] predicate Predicate matching the object to search.
+   * \param[in] create_fn A function that will allocate the \ref element element to search.
    * \params[out] created Set to point at newly created entry.
    *  Will be set to nullptr if the element was found.
    * \returns Element with the given key, creating one if absent.
    * \bug Instead of using a pointer-reference for \p created, a reference to the deletion lock should be supplied.
    */
-  template<typename CacheImpl, typename KeyPredicate, typename Create>
-  auto lookup_or_create(CacheImpl& owner, const bucket_ctx<KeyPredicate, Create>& ctx, store_delete_lock<store_type>& created)
+  template<typename CacheImpl, typename Predicate, typename Create>
+  auto lookup_or_create(
+      CacheImpl& owner,
+      std::size_t hash_code,
+      Predicate predicate,
+      Create create_fn,
+      store_delete_lock<store_type>& created)
   -> lookup_type {
     assert(!created); // Lock must be supplied in empty state.
     void* alloc_hint = nullptr; // Address of predecessor.
@@ -151,7 +116,7 @@ class bucket {
       }
 
       alloc_hint = s; // Allocation hint update.
-      if (s->hash() == ctx.hash_code && ctx.predicate(*s)) {
+      if (s->hash() == hash_code && predicate(*s)) {
         lookup_type ptr = s->ptr();
         // Must check for nullptr: could have expired
         // since s->is_expired() check above.
@@ -166,14 +131,14 @@ class bucket {
     }
 
     // Create new store_type.
-    store_type* new_store = ctx.create(alloc_hint);
+    store_type* new_store = create_fn(alloc_hint);
     created = store_delete_lock<store_type>(new_store); // Inform called of newly constructed store.
     owner.on_create(*created);
     *iter = new_store; // Link.
     lookup_type new_ptr = new_store->ptr();
 
     assert(!store_type::is_nil(new_ptr)
-        && new_store->hash() == ctx.hash_code);
+        && new_store->hash() == hash_code);
     return new_ptr;
   }
 

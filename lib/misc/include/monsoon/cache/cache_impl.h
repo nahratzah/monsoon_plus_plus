@@ -339,33 +339,30 @@ class cache_impl
     auto ch = make_create_handler<store_type::is_async>(q.create);
 
     // Prepare query.
-    const auto query = make_bucket_ctx(
-        q.hash_code,
-        q.predicate,
-        [this, &q, &ch](void* hint) -> store_type* {
-          // Rebind allocator to store_type.
-          using alloc_traits = typename std::allocator_traits<alloc_t>::template rebind_traits<store_type>;
-          typename std::allocator_traits<alloc_t>::template rebind_alloc<store_type> alloc = alloc_;
+    auto create_fn = [this, &q, &ch](void* hint) -> store_type* {
+      // Rebind allocator to store_type.
+      using alloc_traits = typename std::allocator_traits<alloc_t>::template rebind_traits<store_type>;
+      typename std::allocator_traits<alloc_t>::template rebind_alloc<store_type> alloc = alloc_;
 
-          // Create init tuple in advance, so that create function is free to
-          // move its arguments.
-          auto init = std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, cache_impl>>::apply(*this)...);
+      // Create init tuple in advance, so that create function is free to
+      // move its arguments.
+      auto init = std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, cache_impl>>::apply(*this)...);
 
-          store_type* new_store = alloc_traits::allocate(alloc, 1, hint);
-          try {
-            alloc_traits::construct(alloc, new_store, std::allocator_arg, alloc_, ch(alloc_), q.hash_code, std::move(init));
-          } catch (...) {
-            alloc_traits::deallocate(alloc, new_store, 1);
-            throw;
-          }
-          return new_store;
-        });
+      store_type* new_store = alloc_traits::allocate(alloc, 1, hint);
+      try {
+        alloc_traits::construct(alloc, new_store, std::allocator_arg, alloc_, ch(alloc_), q.hash_code, std::move(init));
+      } catch (...) {
+        alloc_traits::deallocate(alloc, new_store, 1);
+        throw;
+      }
+      return new_store;
+    };
 
     // Execute query.
     store_delete_lock<store_type> created;
     assert(buckets_.size() > 0);
-    lookup_type lookup_result = buckets_[query.hash_code % buckets_.size()]
-        .lookup_or_create(*this, query, created);
+    lookup_type lookup_result = buckets_[q.hash_code % buckets_.size()]
+        .lookup_or_create(*this, q.hash_code, q.predicate, create_fn, created);
     assert(!store_type::is_nil(lookup_result));
     pointer result = resolve_(lck, std::move(lookup_result), created.get()); // lck may be unlocked
     assert(result != nullptr);
