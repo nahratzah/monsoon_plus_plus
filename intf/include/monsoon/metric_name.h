@@ -5,12 +5,15 @@
 ///\ingroup intf
 
 #include <monsoon/intf_export_.h>
-#include <cstddef>
-#include <functional>
+#include <monsoon/cache/allocator.h>
+#include <monsoon/cache/cache.h>
 #include <initializer_list>
 #include <iosfwd>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
+#include <string_view>
 
 namespace monsoon {
 
@@ -22,32 +25,45 @@ namespace monsoon {
  * Metric names are always local to a group.
  */
 class monsoon_intf_export_ metric_name {
+ private:
+  using string_type = std::basic_string<char, std::char_traits<char>, cache_allocator<std::allocator<char>>>;
+
  public:
-  ///\brief The collection type holding path segments.
-  using path_type = std::vector<std::string>;
-  ///\brief Iterator over path segments.
-  using iterator = path_type::iterator;
-  ///\brief Const iterator over path segments.
-  using const_iterator = path_type::const_iterator;
+  ///\brief The internal path type.
+  using path_type = std::vector<string_type, cache_allocator<std::allocator<string_type>>>;
+  ///\brief Iterator over internal path.
+  using iterator = path_type::const_iterator;
 
-  metric_name() = default;
-  metric_name(const metric_name&) = default;
-  metric_name(metric_name&&) noexcept;
-  metric_name& operator=(const metric_name&) = default;
-  metric_name& operator=(metric_name&&) noexcept;
+ private:
+  struct cache_hasher_;
+  struct cache_eq_;
+  struct cache_create_;
 
-  /**
-   * \brief Create a new metric name.
-   *
-   * \param path The path of the metric name.
-   */
-  explicit metric_name(path_type&& path) noexcept;
+  using cache_type = cache::extended_cache<
+      void,
+      const path_type,
+      cache_hasher_,
+      cache_eq_,
+      cache_allocator<std::allocator<path_type>>,
+      cache_create_>;
+
+ public:
+  ///\brief Default constructor creates an empty path.
+  metric_name();
+
   /**
    * \brief Create a new metric name.
    *
    * \param path The path of the metric name.
    */
   explicit metric_name(const path_type& path);
+  /**
+   * \brief Construct a simple group using the supplied path.
+   *
+   * \param path The path of the constructed simple group.
+   */
+  template<typename T, typename Alloc>
+  explicit metric_name(const std::vector<T, Alloc>& path);
   /**
    * \brief Create a new metric name.
    *
@@ -63,6 +79,12 @@ class monsoon_intf_export_ metric_name {
   /**
    * \brief Create a new metric name.
    *
+   * \param path The path of the metric name.
+   */
+  metric_name(std::initializer_list<std::string_view> path);
+  /**
+   * \brief Create a new metric name.
+   *
    * \param[in] b,e Iteration of path segments.
    */
   template<typename Iter> metric_name(Iter b, Iter e);
@@ -74,17 +96,9 @@ class monsoon_intf_export_ metric_name {
 
   ///@{
   ///\brief Iterate over path segments.
-  iterator begin();
+  iterator begin() const noexcept;
   ///\brief Iterate over path segments.
-  iterator end();
-  ///\brief Iterate over path segments.
-  const_iterator begin() const;
-  ///\brief Iterate over path segments.
-  const_iterator end() const;
-  ///\brief Iterate over path segments.
-  const_iterator cbegin() const;
-  ///\brief Iterate over path segments.
-  const_iterator cend() const;
+  iterator end() const noexcept;
   ///@}
 
   ///@{
@@ -116,7 +130,26 @@ class monsoon_intf_export_ metric_name {
   static metric_name parse(std::string_view s);
 
  private:
-  path_type path_;
+  /**
+   * \brief Construct a simple group using input iterators.
+   *
+   * \tparam Iterator type.
+   * \param[in] b,e Iterators over path segments.
+   * \param[in] tag Iterator category of \p Iterator.
+   */
+  template<typename Iter> metric_name(Iter b, Iter e, std::input_iterator_tag tag);
+
+  /**
+   * \brief Construct a simple group using input iterators.
+   *
+   * \tparam Iterator type.
+   * \param[in] b,e Iterators over path segments.
+   * \param[in] tag Iterator category of \p Iterator.
+   */
+  template<typename Iter> metric_name(Iter b, Iter e, std::forward_iterator_tag tag);
+
+  static cache_type cache_();
+  std::shared_ptr<const path_type> path_;
 };
 
 /**

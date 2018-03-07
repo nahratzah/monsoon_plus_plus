@@ -5,10 +5,15 @@
 ///\ingroup intf
 
 #include <monsoon/intf_export_.h>
+#include <monsoon/cache/allocator.h>
+#include <monsoon/cache/cache.h>
 #include <initializer_list>
 #include <iosfwd>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <vector>
+#include <string_view>
 
 namespace monsoon {
 
@@ -20,30 +25,45 @@ namespace monsoon {
  * A simple group is simply the path of a group name.
  */
 class monsoon_intf_export_ simple_group {
+ private:
+  using string_type = std::basic_string<char, std::char_traits<char>, cache_allocator<std::allocator<char>>>;
+
  public:
   ///\brief The internal path type.
-  using path_type = std::vector<std::string>;
+  using path_type = std::vector<string_type, cache_allocator<std::allocator<string_type>>>;
   ///\brief Iterator over internal path.
   using iterator = path_type::const_iterator;
 
-  simple_group() = default;
-  simple_group(const simple_group&) = default;
-  simple_group(simple_group&&) noexcept;
-  simple_group& operator=(const simple_group&) = default;
-  simple_group& operator=(simple_group&&) noexcept;
+ private:
+  struct cache_hasher_;
+  struct cache_eq_;
+  struct cache_create_;
 
-  /**
-   * \brief Construct a simple group using the supplied path.
-   *
-   * \param path The path of the constructed simple group.
-   */
-  explicit simple_group(path_type&& path) noexcept;
+  using cache_type = cache::extended_cache<
+      void,
+      const path_type,
+      cache_hasher_,
+      cache_eq_,
+      cache_allocator<std::allocator<path_type>>,
+      cache_create_>;
+
+ public:
+  ///\brief Default constructor creates an empty path.
+  simple_group();
+
   /**
    * \brief Construct a simple group using the supplied path.
    *
    * \param path The path of the constructed simple group.
    */
   explicit simple_group(const path_type& path);
+  /**
+   * \brief Construct a simple group using the supplied path.
+   *
+   * \param path The path of the constructed simple group.
+   */
+  template<typename T, typename Alloc>
+  explicit simple_group(const std::vector<T, Alloc>& path);
   /**
    * \brief Construct a simple group using the supplied path.
    *
@@ -56,6 +76,12 @@ class monsoon_intf_export_ simple_group {
    * \param path The path of the constructed simple group.
    */
   simple_group(std::initializer_list<std::string> path);
+  /**
+   * \brief Construct a simple group using the supplied path.
+   *
+   * \param path The path of the constructed simple group.
+   */
+  simple_group(std::initializer_list<std::string_view> path);
   /**
    * \brief Construct a simple group.
    *
@@ -101,7 +127,26 @@ class monsoon_intf_export_ simple_group {
   static simple_group parse(std::string_view s);
 
  private:
-  path_type path_;
+  /**
+   * \brief Construct a simple group using input iterators.
+   *
+   * \tparam Iterator type.
+   * \param[in] b,e Iterators over path segments.
+   * \param[in] tag Iterator category of \p Iterator.
+   */
+  template<typename Iter> simple_group(Iter b, Iter e, std::input_iterator_tag tag);
+
+  /**
+   * \brief Construct a simple group using input iterators.
+   *
+   * \tparam Iterator type.
+   * \param[in] b,e Iterators over path segments.
+   * \param[in] tag Iterator category of \p Iterator.
+   */
+  template<typename Iter> simple_group(Iter b, Iter e, std::forward_iterator_tag tag);
+
+  static cache_type cache_();
+  std::shared_ptr<const path_type> path_;
 };
 
 /**

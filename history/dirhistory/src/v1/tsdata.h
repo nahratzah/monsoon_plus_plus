@@ -120,7 +120,9 @@ void encode_tsfile_header(monsoon::xdr::xdr_ostream&,
 monsoon_dirhistory_local_
 std::vector<std::string> decode_path(monsoon::xdr::xdr_istream&);
 monsoon_dirhistory_local_
-void encode_path(monsoon::xdr::xdr_ostream&, const std::vector<std::string>&);
+void encode_path(monsoon::xdr::xdr_ostream&, const metric_name&);
+monsoon_dirhistory_local_
+void encode_path(monsoon::xdr::xdr_ostream&, const simple_group&);
 
 monsoon_dirhistory_local_
 metric_value decode_metric_value(monsoon::xdr::xdr_istream&,

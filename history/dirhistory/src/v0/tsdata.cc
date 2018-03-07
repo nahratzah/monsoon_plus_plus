@@ -247,9 +247,18 @@ std::vector<std::string> decode_path(monsoon::xdr::xdr_istream& in) {
 }
 
 void encode_path(monsoon::xdr::xdr_ostream& out,
-    const std::vector<std::string>& p) {
+    const metric_name& p) {
   out.put_collection(
-      [](monsoon::xdr::xdr_ostream& out, const std::string& elem) {
+      [](monsoon::xdr::xdr_ostream& out, std::string_view elem) {
+        out.put_string(elem);
+      },
+      p.begin(), p.end());
+}
+
+void encode_path(monsoon::xdr::xdr_ostream& out,
+    const simple_group& p) {
+  out.put_collection(
+      [](monsoon::xdr::xdr_ostream& out, std::string_view elem) {
         out.put_string(elem);
       },
       p.begin(), p.end());
@@ -390,13 +399,13 @@ void encode_time_series(monsoon::xdr::xdr_ostream& out,
   out.put_int64(ts.get_time().millis_since_posix_epoch());
   out.put_collection(
       [](monsoon::xdr::xdr_ostream& out, auto& group_entry) {
-        encode_path(out, group_entry.first.get_path());
+        encode_path(out, group_entry.first);
         out.put_collection(
             [](monsoon::xdr::xdr_ostream& out, auto& tag_entry) {
               encode_tags(out, tag_entry.first);
               out.put_collection(
                   [](monsoon::xdr::xdr_ostream& out, auto& metrics_entry) {
-                    encode_path(out, metrics_entry.first.get_path());
+                    encode_path(out, metrics_entry.first);
                     encode_metric_value(out, metrics_entry.second);
                   },
                   tag_entry.second.begin(), tag_entry.second.end());

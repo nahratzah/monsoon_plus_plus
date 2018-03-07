@@ -23,7 +23,7 @@ bool do_match(
     const bool continue_search = std::visit(
         overload(
             [&val_b, &val_e](const literal& lit) {
-              if (val_b != val_e && lit == *val_b) {
+              if (val_b != val_e && lit == std::string_view(*val_b)) {
                 ++val_b;
                 return true;
               } else {

@@ -193,6 +193,26 @@ class monsoon_dirhistory_local_ dictionary {
   std::uint32_t update_start_ = 0;
 };
 
+template<typename Hasher>
+class monsoon_dirhistory_local_ dictionary<std::vector<std::string>, Hasher> {
+ public:
+  template<typename T, typename Alloc>
+  std::uint32_t encode(const std::vector<T, Alloc>&);
+  const std::vector<std::string>& decode(std::uint32_t) const;
+
+  template<typename SerFn>
+  void decode_update(xdr::xdr_istream&, SerFn);
+  template<typename SerFn>
+  void encode_update(xdr::xdr_ostream&, SerFn);
+
+  bool update_pending() const noexcept;
+
+ private:
+  std::vector<std::vector<std::string>> decode_map_;
+  std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher> encode_map_;
+  std::uint32_t update_start_ = 0;
+};
+
 class monsoon_dirhistory_local_ dictionary_delta {
  private:
   struct strvector_hasher {

@@ -189,6 +189,85 @@ bool dictionary<T, H>::update_pending() const noexcept {
 }
 
 
+template<typename H>
+template<typename T, typename Alloc>
+std::uint32_t dictionary<std::vector<std::string>, H>::encode(const std::vector<T, Alloc>& v_tmpl) {
+  std::vector<std::string> v;
+  if constexpr(std::is_same_v<std::vector<std::string>, std::vector<T, Alloc>>) {
+    v = v_tmpl;
+  } else {
+    std::for_each(v_tmpl.begin(), v_tmpl.end(),
+        [&v](std::string_view s) {
+          v.emplace_back(s.begin(), s.end());
+        });
+  }
+
+  auto ptr = encode_map_.find(v);
+  if (ptr != encode_map_.end()) return ptr->second;
+
+  if (decode_map_.size() > 0xffffffffu)
+    throw xdr::xdr_exception("dictionary too large");
+  const std::uint32_t new_idx = decode_map_.size();
+
+  decode_map_.push_back(v);
+  try {
+    encode_map_.emplace(std::move(v), new_idx);
+  } catch (...) {
+    decode_map_.pop_back();
+    throw;
+  }
+  return new_idx;
+}
+
+template<typename H>
+auto dictionary<std::vector<std::string>, H>::decode(std::uint32_t idx) const -> const std::vector<std::string>& {
+  if (idx >= decode_map_.size())
+    throw xdr::xdr_exception("invalid dictionary index");
+  return decode_map_[idx];
+}
+
+template<typename H>
+template<typename SerFn>
+void dictionary<std::vector<std::string>, H>::decode_update(xdr::xdr_istream& in, SerFn fn) {
+  const std::uint32_t offset = in.get_uint32();
+  if (offset != decode_map_.size())
+    throw xdr::xdr_exception("dictionary updates must be contiguous");
+
+  in.accept_collection(
+      fn,
+      [this, &offset](const std::vector<std::string>& v) {
+        auto idx = decode_map_.size();
+        if (idx > 0xffffffffu)
+          throw xdr::xdr_exception("dictionary too large");
+
+        decode_map_.push_back(v);
+        try {
+          encode_map_.emplace(v, idx);
+        } catch (...) {
+          decode_map_.pop_back();
+          throw;
+        }
+      });
+  update_start_ = decode_map_.size();
+}
+
+template<typename H>
+template<typename SerFn>
+void dictionary<std::vector<std::string>, H>::encode_update(xdr::xdr_ostream& out, SerFn fn) {
+  out.put_uint32(update_start_);
+  out.put_collection(
+      fn,
+      decode_map_.begin() + update_start_,
+      decode_map_.end());
+  update_start_ = decode_map_.size();
+}
+
+template<typename H>
+bool dictionary<std::vector<std::string>, H>::update_pending() const noexcept {
+  return update_start_ < decode_map_.size();
+}
+
+
 template<typename Alloc1, typename Alloc2, typename Char, typename CharT>
 std::size_t dictionary_delta::strvector_hasher::operator()(
     const std::vector<std::basic_string<Char, CharT, Alloc2>, Alloc1>& sv)
