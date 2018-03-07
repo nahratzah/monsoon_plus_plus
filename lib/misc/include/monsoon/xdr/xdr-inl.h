@@ -66,7 +66,15 @@ inline std::int32_t xdr_istream::get_int32() {
 
 inline std::uint32_t xdr_istream::get_uint32() {
   std::uint32_t i;
-  get_raw_bytes_(&i, sizeof(i));
+
+  if (buffer_.size() - buffer_off_ >= sizeof(std::uint32_t)
+      && reinterpret_cast<std::uintptr_t>(buffer_.data() + buffer_off_) % alignof(std::uint32_t) == 0) {
+    i = *reinterpret_cast<const std::uint32_t*>(buffer_.data() + buffer_off_);
+    buffer_off_ += sizeof(std::uint32_t);
+  } else {
+    get_raw_bytes_(&i, sizeof(i));
+  }
+
   return boost::endian::big_to_native(i);
 }
 
@@ -82,7 +90,15 @@ inline std::int64_t xdr_istream::get_int64() {
 
 inline std::uint64_t xdr_istream::get_uint64() {
   std::uint64_t i;
-  get_raw_bytes_(&i, sizeof(i));
+
+  if (buffer_.size() - buffer_off_ >= sizeof(std::uint64_t)
+      && reinterpret_cast<std::uintptr_t>(buffer_.data() + buffer_off_) % alignof(std::uint64_t) == 0) {
+    i = *reinterpret_cast<const std::uint64_t*>(buffer_.data() + buffer_off_);
+    buffer_off_ += sizeof(std::uint64_t);
+  } else {
+    get_raw_bytes_(&i, sizeof(i));
+  }
+
   return boost::endian::big_to_native(i);
 }
 
@@ -93,21 +109,17 @@ inline float xdr_istream::get_flt32() {
       "expecting uint32 and float to have same size");
 
   std::uint32_t tmp = get_uint32();
-  float f;
-  std::memcpy(&f, &tmp, sizeof(f));
-  return f;
+  return reinterpret_cast<float&>(tmp);
 }
 
 inline double xdr_istream::get_flt64() {
   static_assert(std::numeric_limits<double>::is_iec559,
       "require IEEE 754 layout.");
   static_assert(sizeof(double) == sizeof(std::uint64_t),
-      "expecting uint32 and float to have same size");
+      "expecting uint64 and double to have same size");
 
   std::uint64_t tmp = get_uint64();
-  double f;
-  std::memcpy(&f, &tmp, sizeof(f));
-  return f;
+  return reinterpret_cast<double&>(tmp);
 }
 
 template<typename Alloc>
@@ -121,24 +133,21 @@ inline auto xdr_istream::get_string(const Alloc& alloc)
   const std::size_t rounded_len = // len, rounded up to a multiple of 4
       ((static_cast<std::size_t>(len) + 3u) / 4u) * 4u;
 
+  result.reserve(rounded_len);
+  result.resize(len);
+
+  char* dptr;
 #if __cplusplus >= 201703L
-  result.resize(rounded_len);
-  get_raw_bytes_(result.data(), rounded_len);
-  // Verify padding of zeroes.
-  if (std::any_of(result.begin() + len, result.end(),
-          [](char c) { return c != '\0'; }))
-    throw xdr_exception();
-  if (len != rounded_len) result.resize(len); // Remove excess characters.
-#else // std::basic_string::data() is not (safely) modifiable before C++17.
-  result.reserve(len);
-  auto tmp = std::vector<char, Alloc>(rounded_len, alloc);
-  get_raw_bytes_(tmp.data(), rounded_len);
-  // Verify padding of zeroes.
-  if (std::any_of(tmp.begin() + len, tmp.end(),
-          [](char c) { return c != '\0'; }))
-    throw xdr_exception();
-  result.assign(tmp.begin(), tmp.begin() + len);
+  dptr = result.data();
+#else
+  dptr = &*result.begin(); // Bypass any wrapping of iterator.
 #endif
+  get_raw_bytes_(dptr, rounded_len);
+
+  // Verify padding of zeroes.
+  if (std::any_of(dptr + len, dptr + rounded_len,
+          [](char c) { return c != '\0'; }))
+    throw xdr_exception();
 
   return result;
 }
@@ -153,13 +162,15 @@ inline auto xdr_istream::get_opaque_n(std::size_t len, const Alloc& alloc)
   const std::size_t rounded_len = // len, rounded up to a multiple of 4
       ((static_cast<std::size_t>(len) + 3u) / 4u) * 4u;
 
-  result.resize(rounded_len);
+  result.reserve(rounded_len);
+  result.resize(len);
+
   get_raw_bytes_(result.data(), rounded_len);
+
   // Verify padding of zeroes.
-  if (std::any_of(result.begin() + len, result.end(),
+  if (std::any_of(result.data() + len, result.data() + rounded_len,
           [](std::uint8_t c) { return c != 0u; }))
     throw xdr_exception();
-  if (len != rounded_len) result.resize(len); // Remove excess characters.
   return result;
 }
 
@@ -301,9 +312,7 @@ inline void xdr_ostream::put_flt32(float f) {
   static_assert(sizeof(float) == sizeof(std::uint32_t),
       "expecting uint32 and float to have same size");
 
-  std::uint32_t tmp;
-  std::memcpy(&tmp, &f, sizeof(tmp));
-  put_uint32(tmp);
+  put_uint32(reinterpret_cast<const std::uint64_t&>(f));
 }
 
 inline void xdr_ostream::put_flt64(double f) {
@@ -312,9 +321,7 @@ inline void xdr_ostream::put_flt64(double f) {
   static_assert(sizeof(double) == sizeof(std::uint64_t),
       "expecting uint32 and float to have same size");
 
-  std::uint64_t tmp;
-  std::memcpy(&tmp, &f, sizeof(tmp));
-  put_uint64(tmp);
+  put_uint64(reinterpret_cast<const std::uint64_t&>(f));
 }
 
 inline void xdr_ostream::put_uint64(std::uint64_t v) {
