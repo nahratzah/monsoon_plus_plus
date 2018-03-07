@@ -18,14 +18,18 @@ struct max_age_decorator {
   using clock_type = std::chrono::steady_clock;
   using time_point = std::chrono::time_point<clock_type>;
 
+  struct init_arg {
+    time_point expire;
+  };
+
   max_age_decorator(const cache_builder_vars& b)
   : duration(b.access_expire().value())
   {}
 
   auto init_tuple() const
   noexcept
-  -> std::tuple<max_age_decorator> {
-    return std::make_tuple(*this);
+  -> std::tuple<init_arg> {
+    return std::make_tuple(init_arg{ clock_type::now() + duration });
   }
 
   ///\brief Element decorator counterpart.
@@ -36,8 +40,7 @@ struct max_age_decorator {
         [[maybe_unused]] std::allocator_arg_t aa,
         [[maybe_unused]] Alloc a,
         const std::tuple<Types...>& init)
-    : max_age_expire_(clock_type::now()
-        + std::get<max_age_decorator>(init).duration)
+    : max_age_expire_(std::get<init_arg>(init).expire)
     {}
 
     bool is_expired() const noexcept {
