@@ -341,7 +341,7 @@ class cache_impl
     store_delete_lock<store_type> created;
     assert(buckets_.size() > 0);
     lookup_type lookup_result = buckets_[q.hash_code % buckets_.size()]
-        .lookup_or_create(*this, q.hash_code, q.predicate, make_create_fn(q), created);
+        .lookup_or_create(*this, q.hash_code, std::ref(q.predicate), make_create_fn(q), created);
     assert(!store_type::is_nil(lookup_result));
     pointer result = resolve_(lck, std::move(lookup_result), created.get()); // lck may be unlocked
     assert(result != nullptr);
@@ -434,6 +434,7 @@ class cache_impl
     CacheQuery& q;
   };
 
+  ///\brief Convenience method to make a create_fn.
   template<typename CacheQuery>
   auto make_create_fn(CacheQuery& q)
   -> create_fn<CacheQuery> {
