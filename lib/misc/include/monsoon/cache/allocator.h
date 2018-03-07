@@ -286,8 +286,7 @@ class cache_allocator
   ///\brief Initializing constructor.
   cache_allocator(const Allocator& a, const Tail&... tail)
   : Allocator(a),
-    cache_alloc_tail<cache_allocator, Tail...>(tail...),
-    stats_(a.stats_)
+    cache_alloc_tail<cache_allocator, Tail...>(tail...)
   {}
 
   ///\brief Initializing constructor.
@@ -295,8 +294,7 @@ class cache_allocator
       typename = std::enable_if_t<std::is_constructible_v<Allocator, const OtherAllocator&>>>
   cache_allocator(const OtherAllocator& a, const OtherTail&... tail)
   : Allocator(a),
-    cache_alloc_tail<cache_allocator, Tail...>(tail...),
-    stats_(a.stats_)
+    cache_alloc_tail<cache_allocator, Tail...>(tail...)
   {}
 
   ///\brief Returns the parent allocator.

@@ -394,6 +394,7 @@ class sharded_wrapper final
   {
     assert(shards > 1);
     using traits = typename std::allocator_traits<Alloc>::template rebind_traits<Impl>;
+    using impl_alloc_t = typename std::allocator_traits<Alloc>::template rebind_alloc<Impl>;
 
     // We grab a copy of the cache builder, so we can adjust parameters based
     // on the number of shards.
@@ -402,16 +403,17 @@ class sharded_wrapper final
     if (b.max_size().has_value())
       b.max_size(*b.max_size() / shards);
 
-    traits::allocate(alloc_, shards);
+    impl_alloc_t impl_alloc = alloc_;
+    shards_ = traits::allocate(impl_alloc, shards);
     try {
       // Shard overhead is billed on shard_[0].
-      traits::construct(alloc_, shards_ + num_shards_, b, alloc);
+      traits::construct(impl_alloc, shards_ + num_shards_, b, alloc);
       ++num_shards_;
 
       while (num_shards_ < shards) {
-        auto alloc_copy = alloc;
+        impl_alloc_t alloc_copy = impl_alloc;
         auto mem_tracking = create_mem_tracking(alloc_copy);
-        traits::construct(alloc_, shards_ + num_shards_, b, alloc_copy);
+        traits::construct(impl_alloc, shards_ + num_shards_, b, alloc_copy);
         if constexpr(has_set_mem_use<Impl>)
           shards_[num_shards_].set_mem_use(mem_tracking);
         ++num_shards_;
@@ -419,9 +421,9 @@ class sharded_wrapper final
     } catch (...) {
       while (num_shards_ > 0) {
         --num_shards_;
-        traits::destroy(alloc_, shards_ + num_shards_);
+        traits::destroy(impl_alloc, shards_ + num_shards_);
       }
-      traits::deallocate(alloc_, shards_, shards);
+      traits::deallocate(impl_alloc, shards_, shards);
       throw;
     }
   }
