@@ -336,33 +336,12 @@ class cache_impl
     // One of the decorators is to supply lock() and unlock() methods,
     // that can be called on a const-reference of this.
     std::unique_lock<const cache_impl> lck{ *this };
-    auto ch = make_create_handler<store_type::is_async>(q.create);
-
-    // Prepare query.
-    auto create_fn = [this, &q, &ch](void* hint) -> store_type* {
-      // Rebind allocator to store_type.
-      using alloc_traits = typename std::allocator_traits<alloc_t>::template rebind_traits<store_type>;
-      typename std::allocator_traits<alloc_t>::template rebind_alloc<store_type> alloc = alloc_;
-
-      // Create init tuple in advance, so that create function is free to
-      // move its arguments.
-      auto init = std::tuple_cat(q.tpl_builder(), cache_decorator_tpl_<select_decorator_type<CacheDecorators, cache_impl>>::apply(*this)...);
-
-      store_type* new_store = alloc_traits::allocate(alloc, 1, hint);
-      try {
-        alloc_traits::construct(alloc, new_store, std::allocator_arg, alloc_, ch(alloc_), q.hash_code, std::move(init));
-      } catch (...) {
-        alloc_traits::deallocate(alloc, new_store, 1);
-        throw;
-      }
-      return new_store;
-    };
 
     // Execute query.
     store_delete_lock<store_type> created;
     assert(buckets_.size() > 0);
     lookup_type lookup_result = buckets_[q.hash_code % buckets_.size()]
-        .lookup_or_create(*this, q.hash_code, q.predicate, create_fn, created);
+        .lookup_or_create(*this, q.hash_code, q.predicate, make_create_fn(q), created);
     assert(!store_type::is_nil(lookup_result));
     pointer result = resolve_(lck, std::move(lookup_result), created.get()); // lck may be unlocked
     assert(result != nullptr);
@@ -377,6 +356,90 @@ class cache_impl
   }
 
  private:
+  ///\brief Adapter around create functor.
+  ///\ingroup cache_detail
+  ///\details Adapts a create functor from what cache_impl accepted, to what
+  ///bucket can accept.
+  template<typename CacheQuery>
+  class create_fn {
+   public:
+    ///Rebind allocator to store_type.
+    using alloc_traits = typename std::allocator_traits<alloc_t>::template rebind_traits<store_type>;
+    using alloc_type = typename std::allocator_traits<alloc_t>::template rebind_alloc<store_type>;
+
+    ///\brief Constructor.
+    ///\param[in] owner The cache_impl invoking the create method.
+    ///Used to populate initialization tuple.
+    ///\param[in] q The lookup_or_create query.
+    explicit create_fn(cache_impl& owner, CacheQuery& q)
+    : owner(owner),
+      q(q)
+    {}
+
+    ///\brief Create a new store type, based on the cache_impl and query.
+    ///\details This method implements the 'create' portion of
+    ///\ref cache_impl::lookup_or_create.
+    ///\param[in] hint Allocation hint provided by the bucket. Points to the
+    ///last store_type that is unlikely to go away soon.
+    ///May be nullptr.
+    auto operator()(void* hint)
+    -> store_type* {
+      // Wrap create in a handler that fixes the return type.
+      auto ch = make_create_handler<store_type::is_async>(q.create);
+      alloc_type alloc = owner.alloc_;
+
+      // Allocate storage.
+      store_type* new_store = alloc_traits::allocate(alloc, 1, hint);
+      assert(new_store != nullptr); // We expect allocator to throw on failure.
+      try {
+        // Create init tuple in advance, so that create function is free to
+        // move its arguments.
+        auto init = build_init_();
+        alloc_traits::construct(alloc, new_store,
+            std::allocator_arg,
+            alloc, ch(alloc),
+            q.hash_code,
+            std::move(init));
+      } catch (...) {
+        undo_allocation_(alloc, new_store);
+        throw;
+      }
+      return new_store;
+    }
+
+   private:
+    ///\brief Create the initialization tuple for \ref element "store_type".
+    auto build_init_()
+    -> decltype(auto) {
+      return std::tuple_cat(
+          q.tpl_builder(),
+          cache_decorator_tpl_<select_decorator_type<CacheDecorators, cache_impl>>::apply(owner)...);
+    }
+
+    ///\brief Exception recovery function, that prevents nested exceptions from
+    ///throwing.
+    ///\bug I'm not sure what to do if the recovery path throws.
+    ///Maybe rethrow with nested?
+    ///Either way, I don't think swallowing is right, so the function is
+    ///currently noexcept, so that the compiler will inject an abort method.
+    auto undo_allocation_(alloc_type& alloc, store_type* new_store)
+    noexcept // Exception recovery path is not supposed to throw...
+    -> void {
+      alloc_traits::deallocate(alloc, new_store, 1);
+    }
+
+    ///\brief Cache implementation.
+    cache_impl& owner;
+    ///\brief Query for lookup_or_create.
+    CacheQuery& q;
+  };
+
+  template<typename CacheQuery>
+  auto make_create_fn(CacheQuery& q)
+  -> create_fn<CacheQuery> {
+    return create_fn<CacheQuery>(*this, q);
+  }
+
   /**
    * \brief Handle resolution of shared future component of lookup type.
    * \details This function is a noop if the lookup_type doesn't have a shared future component.
