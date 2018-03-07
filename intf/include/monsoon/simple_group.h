@@ -40,7 +40,7 @@ class monsoon_intf_export_ simple_group {
 
   using cache_type = cache::extended_cache<
       void,
-      path_type,
+      const path_type,
       cache_hasher_,
       cache_eq_,
       cache_allocator<std::allocator<path_type>>,

@@ -104,7 +104,7 @@ inline simple_group::simple_group(Iter b, Iter e)
 template<typename Iter>
 inline simple_group::simple_group(Iter b, Iter e, std::input_iterator_tag) {
   path_type tmp = path_type(b, e);
-  *this = simple_group(tmp.begin(), tmp.end());
+  *this = simple_group(tmp);
 }
 
 template<typename Iter>

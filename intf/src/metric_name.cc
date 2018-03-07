@@ -10,12 +10,14 @@ namespace monsoon {
 
 
 auto metric_name::operator==(const metric_name& other) const noexcept -> bool {
-  return path_ == other.path_;
+  return path_ == other.path_
+      || std::equal(begin(), end(), other.begin(), other.end());
 }
 
 auto metric_name::operator<(const metric_name& other) const noexcept -> bool {
-  return std::lexicographical_compare(path_.begin(), path_.end(),
-                                      other.path_.begin(), other.path_.end());
+  return path_ != other.path_
+      && std::lexicographical_compare(begin(), end(),
+                                      other.begin(), other.end());
 }
 
 auto metric_name::config_string() const -> std::string {
@@ -40,7 +42,7 @@ metric_name metric_name::parse(std::string_view s) {
 auto operator<<(std::ostream& out, const metric_name& n) -> std::ostream& {
   bool first = true;
 
-  for (const std::string& s : n.get_path()) {
+  for (std::string_view s : n.get_path()) {
     if (!std::exchange(first, false))
       out << ".";
     out << maybe_quote_identifier(s);
@@ -58,10 +60,10 @@ namespace std {
 auto std::hash<monsoon::metric_name>::operator()(const monsoon::metric_name& v)
     const noexcept
 ->  size_t {
-  auto s_hash = std::hash<std::string>();
+  auto s_hash = std::hash<std::string_view>();
 
   size_t rv = 0;
-  for (const std::string& s : v.get_path())
+  for (std::string_view s : v.get_path())
     rv = 17u * rv + s_hash(s);
   return rv;
 }
