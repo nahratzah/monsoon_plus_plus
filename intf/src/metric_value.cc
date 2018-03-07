@@ -29,7 +29,7 @@ using string_cache_type = cache::extended_cache<
     std::equal_to<std::string_view>,
     cache_allocator<std::allocator<metric_value::string_type>>,
     string_cache_create>;
-thread_local string_cache_type string_cache = string_cache_type::builder(cache_allocator<std::allocator<metric_value::string_type>>(nullptr, std::allocator<metric_value::string_type>()))
+thread_local string_cache_type string_cache = string_cache_type::builder()
     .not_thread_safe()
     .no_concurrency()
     .load_factor(4)

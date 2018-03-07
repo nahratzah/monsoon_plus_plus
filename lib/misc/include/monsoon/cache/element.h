@@ -380,10 +380,11 @@ noexcept
 namespace std {
 
 
-///\brief Specialize uses_allocator for element to accept any allocator.
+///\brief Specialize uses_allocator to suppress allocator acceptance.
+///\note Cache implementation explicitly forwards an allocator.
 template<typename T, typename... D, typename Alloc>
 struct uses_allocator<monsoon::cache::element<T, D...>, Alloc>
-: true_type
+: false_type
 {};
 
 

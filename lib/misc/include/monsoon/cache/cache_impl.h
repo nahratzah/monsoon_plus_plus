@@ -677,6 +677,8 @@ auto cache_impl<T, A, D...>::create_fn<CacheQuery>::operator()(void* hint)
     // Create init tuple in advance, so that create function is free to
     // move its arguments.
     auto init = build_init_();
+    // Create element, invoking create function as one of its constructor
+    // arguments.
     alloc_traits::construct(alloc, new_store,
         std::allocator_arg,
         alloc, ch(alloc),
