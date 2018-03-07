@@ -20,6 +20,7 @@ namespace xdr {
 class monsoon_misc_export_ xdr_istream {
  private:
   static const std::size_t BUFFER_SIZE;
+  static const std::size_t MIN_PASSTHROUGH_SIZE;
 
  protected:
   xdr_istream() = default;

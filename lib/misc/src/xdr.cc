@@ -6,6 +6,7 @@ namespace xdr {
 
 
 const std::size_t xdr_istream::BUFFER_SIZE = 65536u;
+const std::size_t xdr_istream::MIN_PASSTHROUGH_SIZE = 256u;
 
 xdr_istream::xdr_istream(xdr_istream&& o) noexcept
 : buffer_(std::move(o.buffer_)),
@@ -33,7 +34,7 @@ void xdr_istream::get_raw_bytes_(void* dst_ptr, std::size_t len) {
     }
 
     if (len > 0u && buffer_off_ == buffer_.size()) {
-      if (len > BUFFER_SIZE) { // Pass-through read.
+      if (len > MIN_PASSTHROUGH_SIZE) { // Pass-through read.
         const std::size_t rlen = get_raw_bytes(dst, len);
         assert(rlen <= len);
         len -= rlen;
