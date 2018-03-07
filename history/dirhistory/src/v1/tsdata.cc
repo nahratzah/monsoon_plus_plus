@@ -326,11 +326,11 @@ void dictionary_delta::encode_update(xdr::xdr_ostream& out) {
       });
   gdd.encode_update(out,
       [](xdr::xdr_ostream& out, const auto& v) {
-        encode_path(out, v.get_path());
+        encode_path(out, v);
       });
   mdd.encode_update(out,
       [](xdr::xdr_ostream& out, const auto& v) {
-        encode_path(out, v.get_path());
+        encode_path(out, v);
       });
   pre_encoded_tags.copy_to(out);
 }
@@ -391,9 +391,18 @@ std::vector<std::string> decode_path(monsoon::xdr::xdr_istream& in) {
 }
 
 void encode_path(monsoon::xdr::xdr_ostream& out,
-    const std::vector<std::string>& p) {
+    const metric_name& p) {
   out.put_collection(
-      [](monsoon::xdr::xdr_ostream& out, const std::string& elem) {
+      [](monsoon::xdr::xdr_ostream& out, std::string_view elem) {
+        out.put_string(elem);
+      },
+      p.begin(), p.end());
+}
+
+void encode_path(monsoon::xdr::xdr_ostream& out,
+    const simple_group& p) {
+  out.put_collection(
+      [](monsoon::xdr::xdr_ostream& out, std::string_view elem) {
         out.put_string(elem);
       },
       p.begin(), p.end());
