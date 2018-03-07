@@ -75,25 +75,9 @@ struct simple_group::cache_create_ {
 };
 
 
-inline simple_group::simple_group()
-: path_(cache_()())
-{}
-
-inline simple_group::simple_group(const path_type& p)
-: path_(cache_()(p))
-{}
-
 template<typename T, typename Alloc>
 inline simple_group::simple_group(const std::vector<T, Alloc>& p)
 : simple_group(p.begin(), p.end())
-{}
-
-inline simple_group::simple_group(std::initializer_list<const char*> init)
-: simple_group(init.begin(), init.end())
-{}
-
-inline simple_group::simple_group(std::initializer_list<std::string> init)
-: simple_group(init.begin(), init.end())
 {}
 
 template<typename Iter>

@@ -1,13 +1,42 @@
 #include <monsoon/metric_name.h>
 #include <monsoon/config_support.h>
 #include <monsoon/grammar/intf/rules.h>
+#include <monsoon/cache/impl.h>
 #include <algorithm>
 #include <utility>
 #include <ostream>
 #include <sstream>
+#include <chrono>
 
 namespace monsoon {
 
+
+metric_name::cache_type metric_name::cache_() {
+  static cache_type impl = metric_name::cache_type::builder()
+      .access_expire(std::chrono::minutes(10))
+      .build(cache_create_());
+  return impl;
+}
+
+metric_name::metric_name()
+: path_(cache_()())
+{}
+
+metric_name::metric_name(const path_type& p)
+: path_(cache_()(p))
+{}
+
+metric_name::metric_name(std::initializer_list<const char*> init)
+: metric_name(init.begin(), init.end())
+{}
+
+metric_name::metric_name(std::initializer_list<std::string> init)
+: metric_name(init.begin(), init.end())
+{}
+
+metric_name::metric_name(std::initializer_list<std::string_view> init)
+: metric_name(init.begin(), init.end())
+{}
 
 auto metric_name::operator==(const metric_name& other) const noexcept -> bool {
   return path_ == other.path_

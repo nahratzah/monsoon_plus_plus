@@ -75,25 +75,9 @@ struct metric_name::cache_create_ {
 };
 
 
-inline metric_name::metric_name()
-: path_(cache_()())
-{}
-
-inline metric_name::metric_name(const path_type& p)
-: path_(cache_()(p))
-{}
-
 template<typename T, typename Alloc>
 inline metric_name::metric_name(const std::vector<T, Alloc>& p)
 : metric_name(p.begin(), p.end())
-{}
-
-inline metric_name::metric_name(std::initializer_list<const char*> init)
-: metric_name(init.begin(), init.end())
-{}
-
-inline metric_name::metric_name(std::initializer_list<std::string> init)
-: metric_name(init.begin(), init.end())
 {}
 
 template<typename Iter>

@@ -18,6 +18,26 @@ simple_group::cache_type simple_group::cache_() {
   return impl;
 }
 
+simple_group::simple_group()
+: path_(cache_()())
+{}
+
+simple_group::simple_group(const path_type& p)
+: path_(cache_()(p))
+{}
+
+simple_group::simple_group(std::initializer_list<const char*> init)
+: simple_group(init.begin(), init.end())
+{}
+
+simple_group::simple_group(std::initializer_list<std::string> init)
+: simple_group(init.begin(), init.end())
+{}
+
+simple_group::simple_group(std::initializer_list<std::string_view> init)
+: simple_group(init.begin(), init.end())
+{}
+
 auto simple_group::operator==(const simple_group& other) const noexcept
 ->  bool {
   return path_ == other.path_ ||

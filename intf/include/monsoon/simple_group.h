@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <string_view>
 
 namespace monsoon {
 
@@ -75,6 +76,12 @@ class monsoon_intf_export_ simple_group {
    * \param path The path of the constructed simple group.
    */
   simple_group(std::initializer_list<std::string> path);
+  /**
+   * \brief Construct a simple group using the supplied path.
+   *
+   * \param path The path of the constructed simple group.
+   */
+  simple_group(std::initializer_list<std::string_view> path);
   /**
    * \brief Construct a simple group.
    *

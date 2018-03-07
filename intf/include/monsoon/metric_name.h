@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <string_view>
 
 namespace monsoon {
 
@@ -75,6 +76,12 @@ class monsoon_intf_export_ metric_name {
    * \param path The path of the metric name.
    */
   metric_name(std::initializer_list<std::string> path);
+  /**
+   * \brief Create a new metric name.
+   *
+   * \param path The path of the metric name.
+   */
+  metric_name(std::initializer_list<std::string_view> path);
   /**
    * \brief Create a new metric name.
    *
