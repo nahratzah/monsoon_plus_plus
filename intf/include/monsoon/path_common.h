@@ -101,9 +101,13 @@ class monsoon_intf_export_ path_common {
 
   ///@{
   ///\brief Iterate over path elements.
-  iterator begin() const noexcept;
+  const_iterator begin() const noexcept;
   ///\brief Iterate over path elements.
-  iterator end() const noexcept;
+  const_iterator end() const noexcept;
+  ///\brief Iterate over path elements.
+  const_iterator cbegin() const noexcept;
+  ///\brief Iterate over path elements.
+  const_iterator cend() const noexcept;
   ///@}
 
  protected:

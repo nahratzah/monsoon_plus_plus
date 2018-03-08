@@ -101,12 +101,22 @@ inline auto path_common::get_path() const noexcept -> const path_type& {
   return *path_;
 }
 
-inline auto path_common::begin() const noexcept -> iterator {
+inline auto path_common::begin() const noexcept -> const_iterator {
   assert(path_ != nullptr);
   return path_->begin();
 }
 
-inline auto path_common::end() const noexcept -> iterator {
+inline auto path_common::end() const noexcept -> const_iterator {
+  assert(path_ != nullptr);
+  return path_->end();
+}
+
+inline auto path_common::cbegin() const noexcept -> const_iterator {
+  assert(path_ != nullptr);
+  return path_->begin();
+}
+
+inline auto path_common::cend() const noexcept -> const_iterator {
   assert(path_ != nullptr);
   return path_->end();
 }
