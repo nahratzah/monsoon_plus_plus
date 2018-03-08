@@ -1,59 +1,9 @@
 #include <monsoon/simple_group.h>
-#include <monsoon/config_support.h>
 #include <monsoon/grammar/intf/rules.h>
-#include <monsoon/cache/impl.h>
-#include <algorithm>
-#include <utility>
-#include <ostream>
-#include <sstream>
-#include <chrono>
+#include <stdexcept>
 
 namespace monsoon {
 
-
-simple_group::cache_type simple_group::cache_() {
-  static cache_type impl = simple_group::cache_type::builder()
-      .access_expire(std::chrono::minutes(10))
-      .build(cache_create_());
-  return impl;
-}
-
-simple_group::simple_group()
-: path_(cache_()())
-{}
-
-simple_group::simple_group(const path_type& p)
-: path_(cache_()(p))
-{}
-
-simple_group::simple_group(std::initializer_list<const char*> init)
-: simple_group(init.begin(), init.end())
-{}
-
-simple_group::simple_group(std::initializer_list<std::string> init)
-: simple_group(init.begin(), init.end())
-{}
-
-simple_group::simple_group(std::initializer_list<std::string_view> init)
-: simple_group(init.begin(), init.end())
-{}
-
-auto simple_group::operator==(const simple_group& other) const noexcept
-->  bool {
-  return path_ == other.path_ ||
-      std::equal(begin(), end(), other.begin(), other.end());
-}
-
-auto simple_group::operator<(const simple_group& other) const noexcept
-->  bool {
-  return path_ != other.path_
-      && std::lexicographical_compare(begin(), end(),
-                                      other.begin(), other.end());
-}
-
-auto simple_group::config_string() const -> std::string {
-  return (std::ostringstream() << *this).str();
-}
 
 simple_group simple_group::parse(std::string_view s) {
   std::string_view::iterator parse_end = s.begin();
@@ -70,34 +20,4 @@ simple_group simple_group::parse(std::string_view s) {
 }
 
 
-auto operator<<(std::ostream& out, const simple_group& n) -> std::ostream& {
-  bool first = true;
-
-  for (std::string_view s : n) {
-    if (!std::exchange(first, false))
-      out << ".";
-    out << maybe_quote_identifier(s);
-  }
-  return out;
-}
-
-
 } /* namespace monsoon */
-
-
-namespace std {
-
-
-auto std::hash<monsoon::simple_group>::operator()(const monsoon::simple_group& v)
-    const noexcept
-->  size_t {
-  auto s_hash = std::hash<std::string_view>();
-
-  size_t rv = 0;
-  for (std::string_view s : v)
-    rv = 19u * rv + s_hash(s);
-  return rv;
-}
-
-
-} /* namespace std */
