@@ -117,9 +117,9 @@ class merge_pipe_base {
       // Both must have values, so compare those.
       assert(x_front.has_value() && y_front.has_value());
       // Operate on constants.
-      const value_type* x_val = x_front.value_ptr();
-      const value_type* y_val = y_front.value_ptr();
-      return std::invoke(less_, *y_val, *x_val);
+      const value_type& x_val = static_cast<const value_type&>(x_front.value());
+      const value_type& y_val = static_cast<const value_type&>(y_front.value());
+      return std::invoke(less_, y_val, x_val);
     }
 
    private:
