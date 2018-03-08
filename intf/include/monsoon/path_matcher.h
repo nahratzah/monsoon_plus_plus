@@ -93,21 +93,31 @@ class monsoon_intf_export_ path_matcher {
   /**
    * \brief Append a literal segment match to the path matcher.
    * \param lit The literal to match against.
+   * \returns *this
    */
-  void push_back_literal(literal&& lit);
+  path_matcher& push_back_literal(literal&& lit);
   /**
    * \brief Append a literal segment match to the path matcher.
    * \param lit The literal to match against.
+   * \returns *this
    */
-  void push_back_literal(std::string_view lit);
+  path_matcher& push_back_literal(std::string_view lit);
+  /**
+   * \brief Append a literal segment match to the path matcher.
+   * \param lit The literal to match against.
+   * \returns *this
+   */
+  path_matcher& push_back_literal(const char* lit);
   /**
    * \brief Append a wildcard segment match to the path matcher.
+   * \returns *this
    */
-  void push_back_wildcard();
+  path_matcher& push_back_wildcard();
   /**
    * \brief Append a double wildcard segment match to the path matcher.
+   * \returns *this
    */
-  void push_back_double_wildcard();
+  path_matcher& push_back_double_wildcard();
   ///@}
 
  private:
