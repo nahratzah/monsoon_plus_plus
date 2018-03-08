@@ -25,6 +25,7 @@ add_library (monsoon_intf
   src/config_support.cc
   src/path_matcher.cc
   src/tag_matcher.cc
+  src/path_common.cc
   src/grammar/intf/ast.cc
   src/grammar/intf/rules.cc
 )
@@ -74,6 +75,8 @@ install (FILES
   include/monsoon/path_matcher-inl.h
   include/monsoon/tag_matcher.h
   include/monsoon/tag_matcher-inl.h
+  include/monsoon/path_common.h
+  include/monsoon/path_common-inl.h
   DESTINATION include/monsoon)
 install (FILES
   include/monsoon/grammar/intf/ast.h
