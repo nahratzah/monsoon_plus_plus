@@ -109,135 +109,87 @@ void tsdata_v2_tables::push_back(const time_series&) {
   throw std::runtime_error("unsupported");
 }
 
-class monsoon_dirhistory_local_ metric_iteration {
- public:
-  metric_iteration() = default;
-  metric_iteration(const metric_iteration&) = default;
-  metric_iteration& operator=(const metric_iteration&) = default;
+namespace {
 
-  metric_iteration(metric_iteration&& o) noexcept
-  : group(std::move(o.group)),
-    metric(std::move(o.metric)),
-    table(std::move(o.table)),
-    b_(std::move(o.b_)),
-    e_(std::move(o.e_))
-  {}
 
-  metric_iteration& operator=(metric_iteration&& o) noexcept {
-    group = std::move(o.group);
-    metric = std::move(o.metric);
-    table = std::move(o.table);
-    b_ = std::move(o.b_);
-    e_ = std::move(o.e_);
-    return *this;
-  }
-
-  metric_iteration(
-      std::shared_ptr<const group_name> group,
-      std::shared_ptr<const metric_name> metric,
-      std::shared_ptr<const metric_table> table)
-  : group(std::move(group)),
-    metric(std::move(metric)),
-    table(std::move(table))
-  {
-    if (table != nullptr)
-      std::tie(b_, e_) = std::forward_as_tuple(table->begin(), table->end());
-  }
-
-  std::shared_ptr<const group_name> group;
-  std::shared_ptr<const metric_name> metric;
-  std::shared_ptr<const metric_table> table;
-
-  explicit operator bool() const noexcept {
-    return table != nullptr && b_ != e_;
-  }
-
-  auto next()
-  -> std::optional<std::tuple<const group_name&, const metric_name&, const metric_value&>> {
-    assert(group != nullptr && metric != nullptr && table != nullptr);
-    assert(b_ != e_);
-    const std::optional<metric_value> opt_mv = *b_++;
-    if (!opt_mv.has_value()) return {};
-    return std::tie(*group, *metric, opt_mv.value());
-  }
-
- private:
-  metric_table::const_iterator b_, e_;
+auto emit_type_less = [](const tsdata_v2_tables::emit_type& x, const tsdata_v2_tables::emit_type& y) noexcept -> bool {
+  return std::get<0>(x) < std::get<0>(y); // Compare time points.
 };
 
-template<typename Callback>
-void monsoon_dirhistory_local_ emit_fdtblock(
+auto emit_type_merge = [](tsdata_v2_tables::emit_type&& x, tsdata_v2_tables::emit_type&& y) -> tsdata_v2_tables::emit_type&& {
+#if __cplusplus >= 201703
+  std::get<1>(x).merge(std::get<1>(y));
+#else
+  std::copy(std::get<1>(y).begin(), std::get<1>(y).end(), std::inserter(std::get<1>(x), std::get<1>(x).end()));
+#endif
+  return std::move(x);
+};
+
+auto emit_fdtblock(
     std::shared_ptr<const file_data_tables_block> block,
-    Callback& cb,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const path_matcher& group_filter,
     const tag_matcher& tag_filter,
-    const path_matcher& metric_filter) {
-  auto timestamps = std::get<0>(*block);
-  std::vector<metric_iteration> data;
+    const path_matcher& metric_filter)
+-> objpipe::reader<tsdata_v2_tables::emit_type> {
+  using emit_type = tsdata_v2_tables::emit_type;
 
-  // Build parallel iterators per each selected metric.
+  auto time_points_ptr = std::shared_ptr<const std::vector<time_point>>(block, &std::get<0>(*block));
   const std::shared_ptr<const tables> tbl_ptr = std::get<1>(*block).get();
-  std::for_each(tbl_ptr->begin(), tbl_ptr->end(),
-      [&data, &tbl_ptr, &group_filter, &tag_filter, &metric_filter](const auto& tbl_entry) {
-        if (!group_filter(std::get<0>(tbl_entry).get_path())
-            || !tag_filter(std::get<0>(tbl_entry).get_tags()))
-          return; // SKIP
 
-        const std::shared_ptr<const group_name> group_ptr =
-            std::shared_ptr<const group_name>(tbl_ptr, &std::get<0>(tbl_entry));
-        std::shared_ptr<const group_table> gr_tbl = std::get<1>(tbl_entry).get();
-        const auto metric_map =
-            std::shared_ptr<std::tuple_element_t<1, const group_table>>(
-                gr_tbl,
-                &std::get<1>(*gr_tbl));
+  std::vector<objpipe::reader<emit_type>>
+      columns;
+  for (const auto& tbl_entry : *tbl_ptr) {
+    if (!group_filter(std::get<0>(tbl_entry).get_path())
+        || !tag_filter(std::get<0>(tbl_entry).get_tags()))
+      continue; // SKIP
 
-        std::for_each(metric_map->begin(), metric_map->end(),
-            [&data, &group_ptr, &metric_map, &metric_filter](
-                const auto& metric_map_entry) {
-              if (!metric_filter(metric_map_entry.first))
-                return; // SKIP
+    auto group_name_ptr = std::shared_ptr<const group_name>(tbl_ptr, &std::get<0>(tbl_entry));
+    auto group_table_ptr = std::get<1>(tbl_entry).get();
 
-              const std::shared_ptr<const metric_name> metric_ptr =
-                  std::shared_ptr<const metric_name>(
-                      metric_map,
-                      &metric_map_entry.first);
+    for (const auto& mv_map_entry : std::get<1>(*group_table_ptr)) {
+      if (!metric_filter(mv_map_entry.first))
+        continue; // SKIP
+      auto metric_name_ptr = std::shared_ptr<const metric_name>(group_table_ptr, &mv_map_entry.first);
 
-              data.emplace_back(
-                  group_ptr,
-                  metric_ptr,
-                  metric_map_entry.second.get());
-            });
-      });
+      std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr = mv_map_entry.second.get();
 
-  // Emit timestamps and parallel iterators.
-  auto emit = tsdata_v2_tables::emit_type();
-  for (const time_point& tp : timestamps) {
-    std::get<0>(emit) = tp;
-    std::get<1>(emit).clear();
-    std::get<1>(emit).reserve(data.size());
+      columns.emplace_back(
+          objpipe::new_callback<emit_type>(
+              [time_points_ptr, group_name_ptr, metric_name_ptr, mv_column_ptr](auto cb) {
+                auto tp_iter = time_points_ptr->begin();
+                auto mv_iter = mv_column_ptr->begin();
 
-    std::for_each(data.begin(), data.end(),
-        [&emit](auto& iter) {
-          if (iter) {
-            auto opt_tpl = iter.next();
-            if (opt_tpl.has_value()) {
-              std::get<1>(emit).emplace(
-                  std::piecewise_construct,
-                  std::forward_as_tuple(
-                      std::get<0>(std::move(opt_tpl.value())),
-                      std::get<1>(std::move(opt_tpl.value()))),
-                  std::forward_as_tuple(
-                      std::get<2>(std::move(opt_tpl.value()))));
-            }
-          }
-        });
-
-    if ((!tr_begin.has_value() || tp >= tr_begin)
-        && (!tr_end.has_value() || tp <= tr_end))
-      cb(std::move(emit));
+                for (;
+                    tp_iter != time_points_ptr->end()
+                    && mv_iter != mv_column_ptr->end();
+                    ++tp_iter, ++mv_iter) {
+                  if (mv_iter->has_value()) {
+                    std::tuple_element_t<1, emit_type> map;
+                    map.emplace(
+                        std::piecewise_construct,
+                        std::forward_as_tuple(*group_name_ptr, *metric_name_ptr),
+                        std::forward_as_tuple(**mv_iter));
+                    cb(std::make_tuple(*tp_iter, std::move(map)));
+                  }
+                }
+              })
+              .filter([tr_begin, tr_end](const emit_type& x) {
+                const time_point tp = std::get<0>(x);
+                return (!tr_begin.has_value() || tp >= tr_begin)
+                    && (!tr_end.has_value() || tp <= tr_end);
+              }));
+    }
   }
+
+  return objpipe::merge_combine(
+      std::make_move_iterator(columns.begin()), std::make_move_iterator(columns.end()),
+      emit_type_less,
+      emit_type_merge);
 }
+
+
+} /* namespace <monsoon::history::v2::<unnamed> */
 
 auto tsdata_v2_tables::emit(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
@@ -249,43 +201,23 @@ auto tsdata_v2_tables::emit(
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();
 
+  auto block_chain = objpipe::new_callback<objpipe::reader<emit_type>>(
+      [file_data_tables, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
+        for (const file_data_tables_block& block : *file_data_tables) {
+          cb(emit_fdtblock(
+                  std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
+                  tr_begin, tr_end, group_filter, tag_filter, metric_filter));
+        }
+      });
+
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
-    return objpipe::new_callback<emit_type>(
-        [file_data_tables, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
-          for (const file_data_tables_block& block : *file_data_tables) {
-            emit_fdtblock(
-                std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
-                cb,
-                tr_begin, tr_end, group_filter, tag_filter, metric_filter);
-          }
-        });
+    return block_chain.iterate();
   } else { // Parallel iteration of blocks.
-    auto callback_factory =
-        [&](const file_data_tables_block& block) {
-          auto block_ptr = std::shared_ptr<const file_data_tables_block>(file_data_tables, &block);
-          return objpipe::new_callback<emit_type>(
-              [block_ptr, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
-                emit_fdtblock(
-                    block_ptr,
-                    cb,
-                    tr_begin, tr_end, group_filter, tag_filter, metric_filter);
-              });
-        };
-    using callback_factory_type = std::decay_t<decltype(callback_factory(std::declval<const file_data_tables_block&>()))>;
-
-    auto less = [](const emit_type& x, const emit_type& y) noexcept {
-      return std::get<0>(x) < std::get<0>(y);
-    };
-
-    std::vector<callback_factory_type> parallel;
-    for (const file_data_tables_block& block : *file_data_tables)
-      parallel.emplace_back(callback_factory(block));
-
     if (is_distinct()) { // Merge only.
       return objpipe::merge(
-          std::make_move_iterator(parallel.begin()),
-          std::make_move_iterator(parallel.end()),
-          std::move(less));
+          block_chain.begin(),
+          block_chain.end(),
+          emit_type_less);
     } else {
       auto combine = [](emit_type& x, emit_type&& y) -> emit_type& {
 #if __cplusplus >= 201703
@@ -300,10 +232,10 @@ auto tsdata_v2_tables::emit(
       };
 
       return objpipe::merge_combine(
-          std::make_move_iterator(parallel.begin()),
-          std::make_move_iterator(parallel.end()),
-          std::move(less),
-          std::move(combine));
+          block_chain.begin(),
+          block_chain.end(),
+          emit_type_less,
+          emit_type_merge);
     }
   }
 }
