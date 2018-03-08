@@ -30,6 +30,7 @@ bool do_match(
             },
             [](const double_wildcard&) -> bool {
               assert(false); // Loop stops when reaching double wildcard.
+              return false;
             }),
         *m_b);
     if (!match_one) return false; // Mismatch
