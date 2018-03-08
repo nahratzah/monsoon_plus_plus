@@ -125,6 +125,50 @@ auto emit_type_merge = [](tsdata_v2_tables::emit_type&& x, tsdata_v2_tables::emi
   return std::move(x);
 };
 
+auto emit_fdtblock_pipe(
+    std::optional<time_point> tr_begin,
+    std::optional<time_point> tr_end,
+    std::shared_ptr<const std::vector<time_point>> time_points_ptr,
+    group_name group_name_ptr,
+    metric_name metric_name_ptr,
+    std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr)
+-> decltype(auto) {
+  using emit_type = tsdata_v2_tables::emit_type;
+
+  return objpipe::new_callback<emit_type>(
+      [=](auto cb) {
+        auto tp_iter = time_points_ptr->begin();
+        auto mv_iter = mv_column_ptr->begin();
+
+        for (;
+            tp_iter != time_points_ptr->end() && mv_iter != mv_column_ptr->end();
+            ++tp_iter, ++mv_iter) {
+          if (tr_begin.has_value() && *tp_iter < *tr_begin)
+            continue;
+          if (tr_end.has_value() && *tp_iter > *tr_end)
+            continue;
+
+          if (mv_iter->has_value()) {
+            std::tuple_element_t<1, emit_type> map;
+            map.emplace(
+                std::piecewise_construct,
+                std::forward_as_tuple(group_name_ptr, metric_name_ptr),
+                std::forward_as_tuple(**mv_iter));
+            cb(emit_type(*tp_iter, std::move(map)));
+          }
+        }
+      });
+}
+
+using emit_fdtblock_pipe_t = decltype(
+    emit_fdtblock_pipe(
+        std::declval<std::optional<time_point>>(),
+        std::declval<std::optional<time_point>>(),
+        std::declval<std::shared_ptr<const std::vector<time_point>>>(),
+        std::declval<group_name>(),
+        std::declval<metric_name>(),
+        std::declval<std::shared_ptr<const std::vector<std::optional<metric_value>>>>()));
+
 auto emit_fdtblock(
     std::shared_ptr<const file_data_tables_block> block,
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
@@ -137,48 +181,29 @@ auto emit_fdtblock(
   auto time_points_ptr = std::shared_ptr<const std::vector<time_point>>(block, &std::get<0>(*block));
   const std::shared_ptr<const tables> tbl_ptr = std::get<1>(*block).get();
 
-  std::vector<objpipe::reader<emit_type>>
-      columns;
+  std::vector<emit_fdtblock_pipe_t> columns;
   for (const auto& tbl_entry : *tbl_ptr) {
     if (!group_filter(std::get<0>(tbl_entry).get_path())
         || !tag_filter(std::get<0>(tbl_entry).get_tags()))
       continue; // SKIP
 
-    auto group_name_ptr = std::shared_ptr<const group_name>(tbl_ptr, &std::get<0>(tbl_entry));
+    auto group_name_ptr = std::get<0>(tbl_entry);
     auto group_table_ptr = std::get<1>(tbl_entry).get();
 
     for (const auto& mv_map_entry : std::get<1>(*group_table_ptr)) {
       if (!metric_filter(mv_map_entry.first))
         continue; // SKIP
-      auto metric_name_ptr = std::shared_ptr<const metric_name>(group_table_ptr, &mv_map_entry.first);
 
+      auto metric_name_ptr = mv_map_entry.first;
       std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr = mv_map_entry.second.get();
 
       columns.emplace_back(
-          objpipe::new_callback<emit_type>(
-              [time_points_ptr, group_name_ptr, metric_name_ptr, mv_column_ptr](auto cb) {
-                auto tp_iter = time_points_ptr->begin();
-                auto mv_iter = mv_column_ptr->begin();
-
-                for (;
-                    tp_iter != time_points_ptr->end()
-                    && mv_iter != mv_column_ptr->end();
-                    ++tp_iter, ++mv_iter) {
-                  if (mv_iter->has_value()) {
-                    std::tuple_element_t<1, emit_type> map;
-                    map.emplace(
-                        std::piecewise_construct,
-                        std::forward_as_tuple(*group_name_ptr, *metric_name_ptr),
-                        std::forward_as_tuple(**mv_iter));
-                    cb(std::make_tuple(*tp_iter, std::move(map)));
-                  }
-                }
-              })
-              .filter([tr_begin, tr_end](const emit_type& x) {
-                const time_point tp = std::get<0>(x);
-                return (!tr_begin.has_value() || tp >= tr_begin)
-                    && (!tr_end.has_value() || tp <= tr_end);
-              }));
+          emit_fdtblock_pipe(
+              tr_begin, tr_end,
+              time_points_ptr,
+              group_name_ptr,
+              metric_name_ptr,
+              mv_column_ptr));
     }
   }
 
@@ -187,6 +212,15 @@ auto emit_fdtblock(
       emit_type_less,
       emit_type_merge);
 }
+
+using emit_fdtblock_t = decltype(
+    emit_fdtblock(
+        std::declval<std::shared_ptr<const file_data_tables_block>>(),
+        std::declval<std::optional<time_point>>(),
+        std::declval<std::optional<time_point>>(),
+        std::declval<const path_matcher&>(),
+        std::declval<const tag_matcher&>(),
+        std::declval<const path_matcher&>()));
 
 
 } /* namespace <monsoon::history::v2::<unnamed> */
@@ -201,7 +235,7 @@ auto tsdata_v2_tables::emit(
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();
 
-  auto block_chain = objpipe::new_callback<objpipe::reader<emit_type>>(
+  auto block_chain = objpipe::new_callback<emit_fdtblock_t>(
       [file_data_tables, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
         for (const file_data_tables_block& block : *file_data_tables) {
           cb(emit_fdtblock(
@@ -219,18 +253,6 @@ auto tsdata_v2_tables::emit(
           block_chain.end(),
           emit_type_less);
     } else {
-      auto combine = [](emit_type& x, emit_type&& y) -> emit_type& {
-#if __cplusplus >= 201703
-        std::get<1>(x).merge(std::get<1>(std::move(y)));
-#else
-        std::copy(
-            std::get<1>(y).begin(),
-            std::get<1>(y).end(),
-            std::inserter(std::get<1>(x), std::get<1>(x).end()));
-#endif
-        return x;
-      };
-
       return objpipe::merge_combine(
           block_chain.begin(),
           block_chain.end(),
