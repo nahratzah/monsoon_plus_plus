@@ -70,10 +70,6 @@ inline auto metric_name::operator>=(const metric_name& other) const noexcept
   return this->path_common::operator>=(other);
 }
 
-inline std::ostream& operator<<(std::ostream& out, const metric_name& n) {
-  return out << static_cast<const path_common&>(n);
-}
-
 
 } /* namespace monsoon */
 

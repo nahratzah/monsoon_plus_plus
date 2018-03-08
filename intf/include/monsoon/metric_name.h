@@ -19,18 +19,6 @@ namespace monsoon {
 class monsoon_intf_export_ metric_name
 : public path_common
 {
-  /**
-   * \brief Write metric name to a stream.
-   * \ingroup intf_io
-   *
-   * @param n The metric name of which to write the textual representation.
-   * @param out The destination stream.
-   * @return out
-   */
-  friend std::ostream& operator<<(std::ostream& out, const metric_name& n);
-
-  friend struct std::hash<metric_name>;
-
  public:
   ///\brief Default constructor creates an empty path.
   metric_name() = default;

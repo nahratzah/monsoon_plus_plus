@@ -70,10 +70,6 @@ inline auto simple_group::operator>=(const simple_group& other) const noexcept
   return this->path_common::operator>=(other);
 }
 
-inline std::ostream& operator<<(std::ostream& out, const simple_group& n) {
-  return out << static_cast<const path_common&>(n);
-}
-
 
 } /* namespace monsoon */
 

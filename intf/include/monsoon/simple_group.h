@@ -19,18 +19,6 @@ namespace monsoon {
 class monsoon_intf_export_ simple_group
 : public path_common
 {
-  /**
-   * \brief Write textual representation of simple group to output stream.
-   * \ingroup intf_io
-   *
-   * \param out Output stream.
-   * \param n The simple path for which to write a textual representation.
-   * \return \p out
-   */
-  friend std::ostream& operator<<(std::ostream& out, const simple_group& n);
-
-  friend struct std::hash<monsoon::simple_group>;
-
  public:
   ///\brief Default constructor creates an empty path.
   simple_group() = default;
