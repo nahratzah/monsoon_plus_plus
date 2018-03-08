@@ -886,7 +886,7 @@ class adapter_t {
 };
 
 namespace {
-template<typename Source> void adapter_fn_(adapter_t<Source>) {}
+template<typename Source> void adapter_fn_(const adapter_t<Source>&) {}
 template<typename T, typename = void>
 struct is_adapter_
 : std::false_type
@@ -903,14 +903,23 @@ using is_adapter = typename is_adapter_<std::decay_t<T>>::type;
 template<typename T>
 constexpr bool is_adapter_v = is_adapter<T>::value;
 
+template<typename T, bool = is_adapter_v<T>>
+struct adapter_underlying_type_ {};
 template<typename T>
-struct adapter_underlying_type {};
-template<typename T>
-struct adapter_underlying_type<adapter_t<T>> {
-  using type = T;
+struct adapter_underlying_type_<T, true> {
+  using type = std::decay_t<decltype(std::declval<T>().underlying())>;
 };
 template<typename T>
+struct adapter_underlying_type
+: adapter_underlying_type_<T>
+{};
+template<typename T>
 using adapter_underlying_type_t = typename adapter_underlying_type<T>::type;
+
+static_assert(is_adapter_v<reader<int>>,
+    "is_adapter does not function properly for reader");
+static_assert(std::is_same_v<adapter_underlying_type_t<reader<int>>, virtual_pipe<int>>,
+    "adapter_underlying_type does not function properly for reader");
 
 
 } /* namespace monsoon::objpipe::detail */
