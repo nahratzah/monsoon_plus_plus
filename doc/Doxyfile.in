@@ -799,10 +799,15 @@ WARN_LOGFILE           =
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = @PROJECT_SOURCE_DIR@/lib/include \
+                         @PROJECT_SOURCE_DIR@/lib/src \
                          @PROJECT_SOURCE_DIR@/lib/objpipe/include \
+                         @PROJECT_SOURCE_DIR@/lib/objpipe/src \
                          @PROJECT_SOURCE_DIR@/lib/misc/include \
+                         @PROJECT_SOURCE_DIR@/lib/misc/src \
                          @PROJECT_SOURCE_DIR@/intf/include \
-                         @PROJECT_SOURCE_DIR@/expr/include
+                         @PROJECT_SOURCE_DIR@/intf/src \
+                         @PROJECT_SOURCE_DIR@/expr/include \
+                         @PROJECT_SOURCE_DIR@/expr/src
 
 # This tag can be used to specify the character encoding of the source files
 # that doxygen parses. Internally doxygen uses the UTF-8 encoding. Doxygen uses
