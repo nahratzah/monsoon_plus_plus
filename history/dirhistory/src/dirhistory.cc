@@ -4,7 +4,6 @@
 #include <cstddef>
 #include <functional>
 #include <iomanip>
-#include <iostream>
 #include <iterator>
 #include <memory>
 #include <numeric>
@@ -57,20 +56,20 @@ struct merge_emit_greater_ {
 
   static auto tp(const tsdata& tsd)
   noexcept(noexcept(std::declval<const tsdata&>().time()))
-  -> const time_point& {
+  -> time_point {
     return std::get<0>(tsd.time());
   }
 
   template<typename T>
   static auto tp(const std::shared_ptr<T>& ptr)
   noexcept(noexcept(tp(std::declval<std::add_lvalue_reference_t<std::add_const_t<T>>>())))
-  -> const time_point& {
+  -> time_point {
     return tp(*ptr);
   }
 
   template<typename T>
   static auto tp(const objpipe::detail::adapter_t<T>& pipe)
-  -> const time_point& {
+  -> time_point {
     return tp(pipe.front());
   }
 };
