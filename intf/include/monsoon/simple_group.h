@@ -35,6 +35,16 @@ class monsoon_intf_export_ simple_group
   ///\brief Default constructor creates an empty path.
   simple_group() = default;
 
+ private:
+  explicit simple_group(const path_common& p) noexcept : path_common(p) {}
+  explicit simple_group(path_common&& p) noexcept : path_common(std::move(p)) {}
+
+ public:
+  ///\brief Construct simple group from common path.
+  static auto from_path(const path_common& p) noexcept -> simple_group;
+  ///\brief Construct simple group from common path.
+  static auto from_path(path_common&& p) noexcept -> simple_group;
+
   /**
    * \brief Construct a simple group using the supplied path.
    *
