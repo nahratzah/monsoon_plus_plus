@@ -74,10 +74,8 @@ class merge_queue_elem_ {
   noexcept(std::is_nothrow_destructible_v<transport_type>
       && std::is_nothrow_move_constructible_v<transport_type>
       && noexcept(std::declval<Source&>().pop_front()))
-  -> transport_type {
-    transport_type result = std::move(get());
-    front_val_.reset();
-    return result;
+  -> transport_type&& {
+    return std::move(get());
   }
 
  private:
