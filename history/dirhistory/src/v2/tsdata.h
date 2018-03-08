@@ -32,6 +32,7 @@ class monsoon_dirhistory_local_ tsdata_v2
   std::vector<time_series> read_all() const override final;
   std::tuple<std::uint16_t, std::uint16_t> version() const noexcept override;
   auto time() const -> std::tuple<time_point, time_point> override;
+  std::optional<std::string> get_path() const override;
 
  protected:
   inline auto hdr_file_size() const noexcept { return file_size_; }

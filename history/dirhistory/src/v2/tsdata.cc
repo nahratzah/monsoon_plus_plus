@@ -170,6 +170,12 @@ auto tsdata_v2::time() const -> std::tuple<time_point, time_point> {
   return std::make_tuple(first_, last_);
 }
 
+auto tsdata_v2::get_path() const -> std::optional<std::string> {
+  std::shared_ptr<io::fd> fd_ptr = fd();
+  if (fd_ptr == nullptr) return {};
+  return fd_ptr->get_path();
+}
+
 void tsdata_v2::update_hdr(time_point lo, time_point hi,
     const file_segment_ptr& fsp, io::fd::size_type new_file_len) {
   constexpr auto HDR_LEN =

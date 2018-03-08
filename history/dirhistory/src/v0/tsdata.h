@@ -43,6 +43,7 @@ class monsoon_dirhistory_local_ tsdata_v0
       override;
   bool is_writable() const noexcept override;
   void push_back(const time_series&) override;
+  std::optional<std::string> get_path() const override;
   auto time() const -> std::tuple<time_point, time_point> override;
 
   static std::shared_ptr<tsdata_v0> new_file(io::fd&&, time_point tp);

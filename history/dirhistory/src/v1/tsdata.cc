@@ -103,6 +103,10 @@ bool tsdata_v1::is_writable() const noexcept {
   return file_.can_write() && !gzipped_;
 }
 
+std::optional<std::string> tsdata_v1::get_path() const {
+  return file_.get_path();
+}
+
 void tsdata_v1::push_back(const time_series& ts) {
   if (gzipped_) throw std::runtime_error("not writable");
 

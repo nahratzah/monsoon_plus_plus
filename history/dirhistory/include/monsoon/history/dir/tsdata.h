@@ -61,6 +61,9 @@ class monsoon_dirhistory_export_ tsdata {
 
   virtual void push_back(const time_series&) = 0;
 
+  ///\brief Returns the path to the underlying file.
+  virtual std::optional<std::string> get_path() const = 0;
+
   /**
    * \brief Emit metrics matching the given constraints.
    *
