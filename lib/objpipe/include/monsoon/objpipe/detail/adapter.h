@@ -233,6 +233,9 @@ class adapter_iterator {
  */
 template<typename Source>
 class adapter_t {
+  static_assert(std::is_move_constructible_v<Source>,
+      "Source must be move constructible.");
+
  public:
   using value_type = adapt::value_type<Source>;
   using iterator = adapter_iterator<Source>;
