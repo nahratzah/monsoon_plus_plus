@@ -12,6 +12,8 @@
 #include <iosfwd>
 #include <string>
 #include <map>
+#include <memory>
+#include <monsoon/cache/allocator.h>
 
 namespace monsoon {
 
@@ -27,8 +29,12 @@ namespace monsoon {
  */
 class monsoon_intf_export_ tags {
  public:
+  ///\brief Key type.
+  using string_type = std::basic_string<char, std::char_traits<char>, cache_allocator<std::allocator<char>>>;
   ///\brief Underlying map type.
-  using map_type = std::map<std::string, metric_value>;
+  using map_type = std::map<string_type, metric_value,
+        std::less<>,
+        cache_allocator<std::allocator<std::pair<const string_type, metric_value>>>>;
   ///\brief Iterator type.
   using iterator = map_type::const_iterator;
 
@@ -75,7 +81,7 @@ class monsoon_intf_export_ tags {
    *   the metric value for the given tag name,
    *   or an empty optional if it does not exist.
    */
-  auto operator[](const std::string& name) const noexcept
+  auto operator[](std::string_view name) const noexcept
       -> std::optional<metric_value>;
 
   ///@{

@@ -54,7 +54,7 @@ inline auto tags::operator>=(const tags& other) const noexcept -> bool {
 template<typename Iter>
 auto tags::has_keys(Iter b, Iter e) const -> bool {
   while (b != e) {
-    if (map_.find(*b++) == map_.end())
+    if (map_.find(std::string_view(*b++)) == map_.end())
       return false;
   }
   return true;

@@ -240,7 +240,7 @@ class monsoon_expr_export_ without_match_clause final
   virtual bool eq_cmp(const tags& x, const tags& y) const noexcept override;
 
  private:
-  std::unordered_set<std::string> tag_names_;
+  std::unordered_set<std::string, std::hash<std::string_view>, std::equal_to<>> tag_names_;
 };
 
 /**

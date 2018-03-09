@@ -39,10 +39,10 @@ tags by_match_clause::reduce(const tags& x, const tags& y) const {
           tag_names_.begin(), tag_names_.end(),
           std::inserter(result, result.end()),
           overload(
-              [](const std::pair<const std::string, metric_value>& x, const std::string& y) {
+              [](const std::pair<const tags::string_type, metric_value>& x, std::string_view y) {
                 return x.first < y;
               },
-              [](const std::string x, const std::pair<const std::string, metric_value>& y) {
+              [](std::string_view x, const std::pair<const tags::string_type, metric_value>& y) {
                 return x < y.first;
               }));
       break;
@@ -81,10 +81,10 @@ std::size_t by_match_clause::hash(const tags& x) const noexcept {
 
   auto name = tag_names_.begin();
   for (const auto& [first, second] : x) {
-    while (name != tag_names_.end() && *name < first)
+    while (name != tag_names_.end() && std::string_view(*name) < first)
       ++name;
 
-    if (name == tag_names_.end() || *name != first) {
+    if (name == tag_names_.end() || std::string_view(*name) != first) {
       using first_type =
           std::remove_const_t<std::remove_reference_t<decltype(first)>>;
       using second_type =
@@ -123,17 +123,22 @@ bool without_match_clause::less_cmp(const tags& x, const tags& y)
   const auto x_end = x.end(), y_end = y.end();
 
   while (x_i != x_end && y_i != y_end) {
-    if (std::get<0>(*x_i) < std::get<0>(*y_i)) {
-      if (tag_names_.count(std::get<0>(*x_i)) == 0) return true;
+    std::string_view x_key = std::get<0>(*x_i);
+    std::string_view y_key = std::get<0>(*y_i);
+    const metric_value& x_val = std::get<1>(*x_i);
+    const metric_value& y_val = std::get<1>(*y_i);
+
+    if (x_key < y_key) {
+      if (tag_names_.count(std::string(x_key.begin(), x_key.end())) == 0) return true;
       ++x_i;
-    } else if (std::get<0>(*x_i) > std::get<0>(*y_i)) {
-      if (tag_names_.count(std::get<0>(*y_i)) == 0) return false;
+    } else if (x_key > y_key) {
+      if (tag_names_.count(std::string(y_key.begin(), y_key.end())) == 0) return false;
       ++y_i;
     } else {
-      if (tag_names_.count(std::get<0>(*x_i)) == 0) {
-        if (metric_value::before(std::get<1>(*x_i), std::get<1>(*y_i)))
+      if (tag_names_.count(std::string(x_key.begin(), x_key.end())) == 0) {
+        if (metric_value::before(x_val, y_val))
           return true;
-        else if (metric_value::before(std::get<1>(*y_i), std::get<1>(*x_i)))
+        else if (metric_value::before(y_val, x_val))
           return false;
       }
 
@@ -143,12 +148,14 @@ bool without_match_clause::less_cmp(const tags& x, const tags& y)
   }
 
   while (x_i != x_end) {
-    if (tag_names_.count(std::get<0>(*x_i)) == 0) return false;
+    std::string_view x_key = std::get<0>(*x_i);
+    if (tag_names_.count(std::string(x_key.begin(), x_key.end())) == 0) return false;
     ++x_i;
   }
 
   while (y_i != y_end) {
-    if (tag_names_.count(std::get<0>(*y_i)) == 0) return true;
+    std::string_view y_key = std::get<0>(*y_i);
+    if (tag_names_.count(std::string(y_key.begin(), y_key.end())) == 0) return true;
     ++y_i;
   }
 
@@ -161,7 +168,7 @@ tags without_match_clause::reduce(const tags& x, const tags& y) const {
       x.begin(), x.end(),
       std::inserter(result, result.end()),
       [this](const auto& kv) {
-        return tag_names_.count(std::get<0>(kv)) == 0;
+        return tag_names_.count(std::string(std::get<0>(kv).begin(), std::get<0>(kv).end())) == 0;
       });
   return tags(std::move(result));
 }
@@ -170,7 +177,7 @@ std::size_t without_match_clause::hash(const tags& x) const noexcept {
   std::size_t cumulative = 0;
 
   for (const auto& [first, second] : x) {
-    if (tag_names_.count(first) == 0) {
+    if (tag_names_.count(std::string(first.begin(), first.end())) == 0) {
       using first_type =
           std::remove_const_t<std::remove_reference_t<decltype(first)>>;
       using second_type =
@@ -189,11 +196,14 @@ bool without_match_clause::eq_cmp(const tags& x, const tags& y) const noexcept {
   const auto x_end = x.end(), y_end = y.end();
 
   while (x_i != x_end && y_i != y_end) {
-    if (tag_names_.count(std::get<0>(*x_i)) != 0) {
+    std::string_view x_key = std::get<0>(*x_i);
+    std::string_view y_key = std::get<0>(*y_i);
+
+    if (tag_names_.count(std::string(x_key.begin(), x_key.end())) != 0) {
       ++x_i;
       continue;
     }
-    if (tag_names_.count(std::get<0>(*y_i)) != 0) {
+    if (tag_names_.count(std::string(y_key.begin(), y_key.end())) != 0) {
       ++y_i;
       continue;
     }
@@ -202,14 +212,16 @@ bool without_match_clause::eq_cmp(const tags& x, const tags& y) const noexcept {
   }
 
   while (x_i != x_end) {
-    if (tag_names_.count(std::get<0>(*x_i)) != 0)
+    std::string_view x_key = std::get<0>(*x_i);
+    if (tag_names_.count(std::string(x_key.begin(), x_key.end())) != 0)
       ++x_i;
     else
       return false;
   }
 
   while (y_i != y_end) {
-    if (tag_names_.count(std::get<0>(*y_i)) != 0)
+    std::string_view y_key = std::get<0>(*y_i);
+    if (tag_names_.count(std::string(y_key.begin(), y_key.end())) != 0)
       ++y_i;
     else
       return false;

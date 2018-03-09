@@ -24,7 +24,7 @@ tags tags::parse(std::string_view s) {
   throw std::invalid_argument("invalid expression");
 }
 
-auto tags::operator[](const std::string& key) const noexcept
+auto tags::operator[](std::string_view key) const noexcept
 ->  std::optional<metric_value> {
   auto pos = map_.find(key);
   if (pos == map_.end()) return {};
