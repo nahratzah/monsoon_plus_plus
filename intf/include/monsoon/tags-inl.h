@@ -145,6 +145,14 @@ struct tags::cache_create_ {
   -> std::shared_ptr<map_type> {
     return std::allocate_shared<map_type>(alloc, std::forward<Args>(args)...);
   }
+
+  template<typename Alloc, typename Arg>
+  auto operator()(const Alloc& alloc, Arg&& arg) const
+  -> std::enable_if_t<
+      !std::is_constructible_v<map_type, Arg>,
+      std::shared_ptr<map_type>> {
+    return std::allocate_shared<map_type>(alloc, arg.begin(), arg.end());
+  }
 };
 
 
@@ -153,13 +161,15 @@ tags::tags(Iter b, Iter e)
 : tags(b, e, typename std::iterator_traits<Iter>::iterator_category())
 {}
 
+template<typename Collection>
+tags::tags(const Collection& collection)
+: map_(cache_()(collection))
+{}
+
 template<typename Iter>
 tags::tags(Iter b, Iter e, [[maybe_unused]] std::input_iterator_tag tag)
-: map_(cache_()(std::vector<typename std::iterator_traits<Iter>::value_type>(b, e)))
-{
-  map_type tmp = map_type(b, e);
-  *this = tags(tmp);
-}
+: tags(map_type(b, e))
+{}
 
 template<typename Iter>
 tags::tags(Iter b, Iter e, [[maybe_unused]] std::forward_iterator_tag tag)

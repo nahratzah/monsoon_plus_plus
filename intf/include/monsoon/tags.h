@@ -65,6 +65,12 @@ class monsoon_intf_export_ tags {
    */
   template<typename Iter> tags(Iter b, Iter e);
   /**
+   * \brief Construct a tag set using the values in the given \p collection.
+   * \param[in] collection A list of key-value pairs from which to construct tags.
+   */
+  template<typename Collection>
+  explicit tags(const Collection& collection);
+  /**
    * \brief Construct a tag set using the given values.
    */
   explicit tags(const map_type& map);
