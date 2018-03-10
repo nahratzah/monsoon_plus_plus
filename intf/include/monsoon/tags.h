@@ -14,6 +14,7 @@
 #include <map>
 #include <memory>
 #include <monsoon/cache/allocator.h>
+#include <monsoon/cache/cache.h>
 
 namespace monsoon {
 
@@ -38,8 +39,23 @@ class monsoon_intf_export_ tags {
   ///\brief Iterator type.
   using iterator = map_type::const_iterator;
 
+ private:
+  struct cache_hasher_;
+  struct cache_eq_;
+  struct cache_create_;
+
+  using cache_type = cache::extended_cache<
+      void,
+      const map_type,
+      cache_hasher_,
+      cache_eq_,
+      cache_allocator<std::allocator<map_type>>,
+      cache_create_>;
+
+ public:
   ///@{
-  tags() = default;
+  ///\brief Create empty tag map.
+  tags();
 
   /**
    * \brief Construct a tag set using an iteration.
@@ -51,7 +67,11 @@ class monsoon_intf_export_ tags {
   /**
    * \brief Construct a tag set using the given values.
    */
-  explicit tags(map_type) noexcept;
+  explicit tags(const map_type& map);
+  /**
+   * \brief Construct a tag set using the given values.
+   */
+  explicit tags(map_type&& map);
   /**
    * \brief Construct a tag set using the given values.
    */
@@ -116,7 +136,11 @@ class monsoon_intf_export_ tags {
   template<typename Iter> bool has_keys(Iter b, Iter e) const;
 
  private:
-  map_type map_;
+  template<typename Iter> tags(Iter b, Iter e, std::input_iterator_tag tag);
+  template<typename Iter> tags(Iter b, Iter e, std::forward_iterator_tag tag);
+
+  static cache_type cache_();
+  std::shared_ptr<const map_type> map_;
 };
 
 /**
