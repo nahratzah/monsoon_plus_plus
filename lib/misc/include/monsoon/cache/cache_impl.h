@@ -314,7 +314,7 @@ class cache_impl
    * \ref element "store_type elements".
    */
   template<typename Predicate, typename TplBuilder, typename Create>
-  auto lookup_or_create(const cache_query<Predicate, TplBuilder, Create>& q) noexcept -> pointer;
+  auto lookup_or_create(const cache_query<Predicate, TplBuilder, Create>& q) -> pointer;
 
  private:
   ///\brief Adapter around create functor.
@@ -508,7 +508,6 @@ template<typename T, typename A, typename... D>
 template<typename Predicate, typename TplBuilder, typename Create>
 auto cache_impl<T, A, D...>::lookup_or_create(
     const cache_query<Predicate, TplBuilder, Create>& q)
-noexcept
 -> pointer {
   // Acquire lock on the cache.
   // One of the decorators is to supply lock() and unlock() methods,
