@@ -442,9 +442,9 @@ void encode_timestamp(monsoon::xdr::xdr_ostream& out, const time_point& tp) {
 tags decode_tags(monsoon::xdr::xdr_istream& in) {
   using collection_type = std::vector<std::pair<std::string, metric_value>>;
 
-  return tags(in.template get_collection<tags::map_type>(
+  return tags(in.template get_collection<collection_type>(
       [](monsoon::xdr::xdr_istream& in) {
-        auto key = in.get_string<tags::string_type::allocator_type>();
+        auto key = in.get_string();
         auto value = decode_metric_value(in);
         return std::make_pair(std::move(key), std::move(value));
       }));

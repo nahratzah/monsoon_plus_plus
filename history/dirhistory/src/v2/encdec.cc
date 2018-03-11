@@ -326,13 +326,13 @@ void dictionary_delta::decode_update(xdr::xdr_istream& in) {
         if (keys.size() != values.size())
           throw xdr::xdr_exception("tag dictionary length mismatch");
 
-        tags::map_type tag_map;
+        std::vector<std::pair<std::string_view, metric_value>> tag_map;
+        tag_map.reserve(keys.size());
         std::transform(
             keys.begin(), keys.end(), std::make_move_iterator(values.begin()),
             std::inserter(tag_map, tag_map.end()),
             [this](std::uint32_t str_ref, metric_value&& mv) {
-              std::string_view sv = sdd.decode(str_ref);
-              return std::make_pair(tags::string_type(sv.begin(), sv.end()), std::move(mv));
+              return std::make_pair(sdd.decode(str_ref), std::move(mv));
             });
         return tags(std::move(tag_map));
       });
@@ -355,24 +355,18 @@ void dictionary_delta::encode_update(xdr::xdr_ostream& out) {
   tdd.encode_update(
       pre_computed,
       [this](xdr::xdr_ostream& out, const tags& v) {
-        std::vector<const metric_value*> values;
-
-        const auto& tag_map = v.get_map();
-        values.reserve(tag_map.size());
-
         // First pass: encode metric name keys (using dictionary).
         out.put_collection(
-            [&values, this](xdr::xdr_ostream& out, const auto& entry) {
-              values.push_back(&entry.second); // Use in second pass.
+            [this](xdr::xdr_ostream& out, const auto& entry) {
               out.put_uint32(sdd.encode(entry.first));
             },
-            tag_map.begin(), tag_map.end());
+            v.begin(), v.end());
         // Second pass: encode metric values.
         out.put_collection(
-            [this](xdr::xdr_ostream& out, const auto& v) {
-              encode_metric_value(out, *v, sdd);
+            [this](xdr::xdr_ostream& out, const auto& entry) {
+              encode_metric_value(out, entry.second, sdd);
             },
-            values.begin(), values.end());
+            v.begin(), v.end());
       });
 
   sdd.encode_update(

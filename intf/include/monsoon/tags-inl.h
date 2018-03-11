@@ -181,9 +181,9 @@ inline auto tags::empty() const noexcept -> bool {
   return map_->empty();
 }
 
-inline auto tags::get_map() const noexcept -> const map_type& {
+inline auto tags::size() const noexcept -> std::size_t {
   assert(map_ != nullptr);
-  return *map_;
+  return map_->size();
 }
 
 inline auto tags::begin() const noexcept -> iterator {

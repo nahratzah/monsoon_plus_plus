@@ -79,7 +79,7 @@ auto operator<<(std::ostream& out, const tags& tv) -> std::ostream& {
 
   bool first = true;
   out << "{";
-  for (const auto& s : tv.get_map()) {
+  for (const auto& s : tv) {
     if (!std::exchange(first, false))
       out << ", ";
     out << maybe_quote_identifier(std::get<0>(s)) << "=" << std::get<1>(s);
@@ -99,9 +99,16 @@ auto to_string(const tags& t) -> std::string {
 namespace std {
 
 
+// Hash code differs from cache computation.
 auto hash<monsoon::tags>::operator()(const monsoon::tags& v) const noexcept
 ->  size_t {
-  return monsoon::map_to_hash(v.get_map());
+  std::hash<std::string_view> key_hash;
+  std::hash<monsoon::metric_value> val_hash;
+
+  std::size_t rv = 0;
+  for (const auto& e : v)
+    rv = 23u * rv + 59u * key_hash(e.first) + val_hash(e.second);
+  return rv;
 }
 
 

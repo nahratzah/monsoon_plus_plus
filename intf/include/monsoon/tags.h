@@ -32,10 +32,14 @@ class monsoon_intf_export_ tags {
  public:
   ///\brief Key type.
   using string_type = std::basic_string<char, std::char_traits<char>, cache_allocator<std::allocator<char>>>;
+ private:
+
   ///\brief Underlying map type.
   using map_type = std::map<string_type, metric_value,
         std::less<>,
         cache_allocator<std::allocator<std::pair<const string_type, metric_value>>>>;
+
+ public:
   ///\brief Iterator type.
   using iterator = map_type::const_iterator;
 
@@ -97,9 +101,9 @@ class monsoon_intf_export_ tags {
    */
   bool empty() const noexcept;
   /**
-   * \return the underlying tag map.
+   * \return the size of the tag set.
    */
-  const map_type& get_map() const noexcept;
+  std::size_t size() const noexcept;
   /**
    * \brief Lookup tag value.
    * \param name The tag name to look for.

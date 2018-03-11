@@ -30,42 +30,54 @@ bool by_match_clause::less_cmp(const tags& x, const tags& y) const noexcept {
 }
 
 tags by_match_clause::reduce(const tags& x, const tags& y) const {
-  tags::map_type result;
+  tags result;
 
   switch (keep_) {
     case match_clause_keep::selected:
-      std::set_intersection(
-          x.begin(), x.end(),
-          tag_names_.begin(), tag_names_.end(),
-          std::inserter(result, result.end()),
-          overload(
-              [](const std::pair<const tags::string_type, metric_value>& x, std::string_view y) {
-                return x.first < y;
-              },
-              [](std::string_view x, const std::pair<const tags::string_type, metric_value>& y) {
-                return x < y.first;
-              }));
+      {
+        std::vector<std::pair<std::string_view, metric_value>> tmp;
+        tmp.reserve(std::min(x.size(), y.size()));
+
+        std::set_intersection(
+            x.begin(), x.end(),
+            tag_names_.begin(), tag_names_.end(),
+            std::back_inserter(tmp),
+            overload(
+                [](const std::pair<const tags::string_type, metric_value>& x, std::string_view y) {
+                  return x.first < y;
+                },
+                [](std::string_view x, const std::pair<const tags::string_type, metric_value>& y) {
+                  return x < y.first;
+                }));
+        result = tags(std::move(tmp));
+      }
       break;
     case match_clause_keep::left:
-      result = x.get_map();
+      result = x;
       break;
     case match_clause_keep::right:
-      result = y.get_map();
+      result = y;
       break;
     case match_clause_keep::common:
-      std::set_intersection(
-          x.begin(), x.end(),
-          y.begin(), y.end(),
-          std::inserter(result, result.end()),
-          [](const auto& x, const auto& y) {
-            if (std::get<0>(x) != std::get<0>(y))
-              return std::get<0>(x) < std::get<0>(y);
-            return metric_value::before(x.second, y.second);
-          });
+      {
+        std::vector<std::pair<std::string_view, metric_value>> tmp;
+        tmp.reserve(std::min(x.size(), y.size()));
+
+        std::set_intersection(
+            x.begin(), x.end(),
+            y.begin(), y.end(),
+            std::back_inserter(tmp),
+            [](const auto& x, const auto& y) {
+              if (std::get<0>(x) != std::get<0>(y))
+                return std::get<0>(x) < std::get<0>(y);
+              return metric_value::before(x.second, y.second);
+            });
+        result = tags(std::move(tmp));
+      }
       break;
   }
 
-  return tags(std::move(result));
+  return result;
 }
 
 void by_match_clause::fixup_() noexcept {
@@ -163,7 +175,9 @@ bool without_match_clause::less_cmp(const tags& x, const tags& y)
 }
 
 tags without_match_clause::reduce(const tags& x, const tags& y) const {
-  tags::map_type result;
+  std::vector<std::pair<std::string_view, metric_value>> result;
+  result.reserve(x.size());
+
   std::copy_if(
       x.begin(), x.end(),
       std::inserter(result, result.end()),
