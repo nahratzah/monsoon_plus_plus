@@ -10,56 +10,62 @@ using namespace monsoon;
 using namespace std::string_view_literals;
 using namespace std::string_literals;
 
+using map_type = std::map<std::string, metric_value>;
+
+auto tags_to_map(const tags& t) -> map_type {
+  return map_type(t.begin(), t.end());
+}
+
 TEST(constructor) {
   // Empty tags.
   CHECK_EQUAL(
-      tags::map_type(),
-      tags().get_map());
+      map_type(),
+      tags_to_map(tags()));
 
   // Initializer list.
   CHECK_EQUAL(
-      tags::map_type({{"foo", metric_value("bar")}}),
-      tags({{"foo", metric_value("bar")}}).get_map());
+      map_type({{"foo", metric_value("bar")}}),
+      tags_to_map(tags({{"foo", metric_value("bar")}})));
 
   // Vector.
   CHECK_EQUAL(
-      tags::map_type({
+      map_type({
           {"foo", metric_value("bar")},
           {"bar", metric_value(16)}
       }),
-      tags(std::vector<std::tuple<std::string, metric_value>>({
+      tags_to_map(tags(std::vector<std::tuple<std::string, metric_value>>({
               {"foo", metric_value("bar")},
               {"bar", metric_value(16)}
-          })).get_map());
+          }))));
 
   // Any string->metric_value map.
   CHECK_EQUAL(
-      tags::map_type({
+      map_type({
           {"foo", metric_value("bar")},
           {"bar", metric_value(16)}
       }),
-      tags(std::map<std::string, metric_value>({
+      tags_to_map(tags(std::map<std::string, metric_value>({
               {"foo", metric_value("bar")},
               {"bar", metric_value(16)}
-          })).get_map());
+          }))));
   CHECK_EQUAL(
-      tags::map_type({
+      map_type({
           {"foo", metric_value("bar")},
           {"bar", metric_value(16)}
       }),
-      tags(std::unordered_map<std::string, metric_value>({
+      tags_to_map(tags(std::unordered_map<std::string, metric_value>({
               {"foo", metric_value("bar")},
               {"bar", metric_value(16)}
-          })).get_map());
+          }))));
   CHECK_EQUAL(
-      tags::map_type({
+      map_type({
           {"foo", metric_value("bar")},
           {"bar", metric_value(16)}
       }),
-      tags(std::map<std::string_view, metric_value, std::less<>>({
+      tags_to_map(tags(std::map<std::string_view, metric_value, std::less<>>({
               {"foo"sv, metric_value("bar")},
               {"bar"sv, metric_value(16)}
-          })).get_map());
+          }))));
 
   // Iterators.
   std::vector<std::tuple<std::string, metric_value>> init = {
@@ -67,19 +73,19 @@ TEST(constructor) {
       {"bar", metric_value(16)}
   };
   CHECK_EQUAL(
-      tags::map_type({
+      map_type({
           {"foo", metric_value("bar")},
           {"bar", metric_value(16)}
       }),
-      tags(init.begin(), init.end()).get_map());
+      tags_to_map(tags(init.begin(), init.end())));
   // Input iterator.
   auto init_input_iters = objpipe::new_array(init.begin(), init.end());
   CHECK_EQUAL(
-      tags::map_type({
+      map_type({
           {"foo", metric_value("bar")},
           {"bar", metric_value(16)}
       }),
-      tags(init_input_iters.begin(), init_input_iters.end()).get_map());
+      tags_to_map(tags(init_input_iters.begin(), init_input_iters.end())));
 }
 
 TEST(to_string) {
@@ -164,6 +170,19 @@ TEST(equality) {
   CHECK_EQUAL(false, bar >  foo_bar);
   CHECK_EQUAL(true,  bar <= foo_bar);
   CHECK_EQUAL(false, bar >= foo_bar);
+}
+
+TEST(find) {
+  CHECK_EQUAL(std::optional<metric_value>(), tags()["foo"]);
+  CHECK_EQUAL(
+      std::optional<metric_value>(metric_value(6)),
+      tags({{"foo", metric_value(6)}, {"bar", metric_value(7)}})["foo"]);
+  CHECK_EQUAL(
+      std::optional<metric_value>(metric_value(7)),
+      tags({{"foo", metric_value(6)}, {"bar", metric_value(7)}})["bar"]);
+  CHECK_EQUAL(
+      std::optional<metric_value>(),
+      tags({{"foo", metric_value(6)}, {"bar", metric_value(7)}})["barium"]);
 }
 
 int main() {

@@ -1,9 +1,10 @@
 #ifndef HACKS_H
 #define HACKS_H
 
-#include <vector>
 #include <map>
+#include <optional>
 #include <ostream>
+#include <vector>
 
 namespace std {
 
@@ -31,6 +32,15 @@ auto operator<<(std::ostream& out, const std::map<K, V, Less, Alloc>& m)
         << e.first << ": " << e.second;
   }
   return out << (std::exchange(first, false) ? "{}" : " }");
+}
+
+template<typename T>
+auto operator<<(std::ostream& out, const std::optional<T>& opt)
+-> std::ostream& {
+  if (opt.has_value())
+    return out << *opt;
+  else
+    return out << "[[empty optional]]";
 }
 
 

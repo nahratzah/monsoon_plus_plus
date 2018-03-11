@@ -32,14 +32,20 @@ class monsoon_intf_export_ tags {
  public:
   ///\brief Key type.
   using string_type = std::basic_string<char, std::char_traits<char>, cache_allocator<std::allocator<char>>>;
+ private:
+
   ///\brief Underlying map type.
-  using map_type = std::map<string_type, metric_value,
-        std::less<>,
-        cache_allocator<std::allocator<std::pair<const string_type, metric_value>>>>;
+  using map_type = std::vector<
+      std::pair<string_type, metric_value>,
+      cache_allocator<std::allocator<std::pair<string_type, metric_value>>>>;
+
+ public:
   ///\brief Iterator type.
-  using iterator = map_type::const_iterator;
+  using const_iterator = map_type::const_iterator;
+  using iterator = const_iterator;
 
  private:
+  struct less_;
   struct cache_hasher_;
   struct cache_eq_;
   struct cache_create_;
@@ -97,9 +103,9 @@ class monsoon_intf_export_ tags {
    */
   bool empty() const noexcept;
   /**
-   * \return the underlying tag map.
+   * \return the size of the tag set.
    */
-  const map_type& get_map() const noexcept;
+  std::size_t size() const noexcept;
   /**
    * \brief Lookup tag value.
    * \param name The tag name to look for.
@@ -127,9 +133,9 @@ class monsoon_intf_export_ tags {
 
   ///@{
   ///\brief Iterate over tags.
-  iterator begin() const noexcept;
+  const_iterator begin() const noexcept;
   ///\brief Iterate over tags.
-  iterator end() const noexcept;
+  const_iterator end() const noexcept;
   ///@}
 
   /**
@@ -144,6 +150,9 @@ class monsoon_intf_export_ tags {
  private:
   template<typename Iter> tags(Iter b, Iter e, std::input_iterator_tag tag);
   template<typename Iter> tags(Iter b, Iter e, std::forward_iterator_tag tag);
+
+  static const_iterator find_(const map_type& m, std::string_view v) noexcept;
+  static void fix_and_validate_(map_type& m);
 
   static cache_type cache_();
   std::shared_ptr<const map_type> map_;
