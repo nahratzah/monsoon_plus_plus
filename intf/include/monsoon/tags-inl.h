@@ -17,18 +17,11 @@ struct tags::cache_hasher_ {
     return 0;
   }
 
-  template<typename K, typename V, typename Less, typename Alloc>
-  auto operator()(const std::map<K, V, Less, Alloc>& p) const
+  template<typename Collection>
+  auto operator()(const Collection& collection) const
   noexcept
   -> std::size_t {
-    return (*this)(p.begin(), p.end());
-  }
-
-  template<typename K, typename V, typename H, typename E, typename Alloc>
-  auto operator()(const std::unordered_map<K, V, H, E, Alloc>& p) const
-  noexcept
-  -> std::size_t {
-    return (*this)(p.begin(), p.end());
+    return (*this)(collection.begin(), collection.end());
   }
 
   template<typename Iter>
@@ -92,6 +85,13 @@ struct tags::cache_eq_ {
         return false;
     }
     return true;
+  }
+
+  template<typename Collection>
+  auto operator()(const map_type& k, const Collection& collection) const
+  noexcept
+  -> bool {
+    return (*this)(k, collection.begin(), collection.end());
   }
 
   template<typename Iter>

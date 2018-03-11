@@ -81,7 +81,7 @@ class monsoon_intf_export_ tags {
   /**
    * \brief Construct a tag set using the given values.
    */
-  explicit tags(std::initializer_list<map_type::value_type>);
+  tags(std::initializer_list<std::pair<std::string_view, metric_value>>);
   ///@}
 
   /**
@@ -166,6 +166,7 @@ std::ostream& operator<<(std::ostream& out, const tags& t);
  * \param t The tag set to create a string representation of.
  * \return String representation of the tag set.
  */
+monsoon_intf_export_
 std::string to_string(const tags& t);
 
 

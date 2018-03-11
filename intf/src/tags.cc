@@ -30,7 +30,7 @@ tags::tags(map_type&& map)
 : map_(cache_()(std::move(map)))
 {}
 
-tags::tags(std::initializer_list<map_type::value_type> il)
+tags::tags(std::initializer_list<std::pair<std::string_view, metric_value>> il)
 : map_(cache_()(il.begin(), il.end()))
 {}
 
