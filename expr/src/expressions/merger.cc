@@ -958,7 +958,11 @@ auto scalar_sink::accept(expression::scalar_emit_type&& emt)
   const auto at_or_successor = std::lower_bound(data_.begin(), data_.end(),
       tp,
       tp_compare_());
-  if (at_or_successor->tp == tp) {
+  if (at_or_successor == data_.end()) {
+    data_.emplace_back(tp, std::move(mv), is_fact);
+    // Potentially invalidates at_or_successor.
+    ins_pos = data_.end();
+  } else if (at_or_successor->tp == tp) {
     assert(!at_or_successor->is_fact);
     at_or_successor->data = std::move(mv);
     at_or_successor->is_fact = is_fact;
