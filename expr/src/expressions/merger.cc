@@ -928,9 +928,12 @@ auto scalar_sink::forward_to_time(time_point tp, time_point expire_before)
   assert(std::none_of(
           data_.begin(), keep_begin,
           [this, expire_before](const value& x) {
-            return x.is_fact
-                && ((recent_.has_value() && x.tp > recent_->tp)
-                    || (x.tp >= expire_before && x.is_fact));
+            if (!x.is_fact)
+              return false;
+            else if (recent_.has_value())
+              return x.tp > recent_->tp;
+            else
+              return x.tp >= expire_before;
           }));
   data_.erase(data_.begin(), keep_begin);
 
