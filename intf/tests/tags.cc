@@ -172,6 +172,19 @@ TEST(equality) {
   CHECK_EQUAL(false, bar >= foo_bar);
 }
 
+TEST(find) {
+  CHECK_EQUAL(std::optional<metric_value>(), tags()["foo"]);
+  CHECK_EQUAL(
+      std::optional<metric_value>(metric_value(6)),
+      tags({{"foo", metric_value(6)}, {"bar", metric_value(7)}})["foo"]);
+  CHECK_EQUAL(
+      std::optional<metric_value>(metric_value(7)),
+      tags({{"foo", metric_value(6)}, {"bar", metric_value(7)}})["bar"]);
+  CHECK_EQUAL(
+      std::optional<metric_value>(),
+      tags({{"foo", metric_value(6)}, {"bar", metric_value(7)}})["barium"]);
+}
+
 int main() {
   return UnitTest::RunAllTests();
 }

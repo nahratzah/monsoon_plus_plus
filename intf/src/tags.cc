@@ -50,7 +50,8 @@ tags tags::parse(std::string_view s) {
 
 auto tags::operator[](std::string_view key) const noexcept
 ->  std::optional<metric_value> {
-  auto pos = map_->find(key);
+  assert(map_ != nullptr);
+  auto pos = find_(*map_, key);
   if (pos == map_->end()) return {};
   return pos->second;
 }
@@ -71,6 +72,30 @@ auto tags::operator<(const tags& other) const noexcept -> bool {
             if (std::get<0>(x) != std::get<0>(y)) return std::get<0>(x) < std::get<0>(y);
             return metric_value::before(std::get<1>(x), std::get<1>(y));
           });
+}
+
+auto tags::find_(const map_type& m, std::string_view v) noexcept
+-> const_iterator {
+  auto pos = std::lower_bound(m.begin(), m.end(), v, less_());
+  if (pos != m.end() && pos->first != v) pos = m.end();
+  return pos;
+}
+
+auto tags::fix_and_validate_(map_type& m)
+-> void {
+  std::sort(m.begin(), m.end(), less_());
+  if (std::unique(m.begin(), m.end(),
+          [](const map_type::value_type& x, const map_type::value_type& y) {
+            return x.first == y.first;
+          }) != m.end())
+    throw std::invalid_argument("duplicate key in tags");
+  if (std::any_of(m.begin(), m.end(),
+          [](const map_type::value_type& e) {
+            const auto& v = e.second.get();
+            return std::holds_alternative<metric_value::empty>(v)
+                || std::holds_alternative<histogram>(v);
+          }))
+    throw std::invalid_argument("empty or histogram metric value is not allowed in tags");
 }
 
 

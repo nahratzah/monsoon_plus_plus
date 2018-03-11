@@ -1,14 +1,36 @@
 #ifndef MONSOON_TAGS_INL_H
 #define MONSOON_TAGS_INL_H
 
+#include <algorithm>
 #include <cassert>
-#include <utility>
+#include <iterator>
 #include <map>
 #include <unordered_map>
-#include <algorithm>
+#include <utility>
 
 namespace monsoon {
 
+
+struct tags::less_ {
+ public:
+  template<typename X, typename Y>
+  auto operator()(const X& x, const Y& y) const
+  noexcept
+  -> bool {
+    return key(x) < key(y);
+  }
+
+ private:
+  static auto key(std::string_view s) noexcept
+  -> std::string_view {
+    return s;
+  }
+
+  static auto key(const map_type::value_type& p) noexcept
+  -> std::string_view {
+    return p.first;
+  }
+};
 
 struct tags::cache_hasher_ {
   constexpr auto operator()() const
@@ -67,7 +89,7 @@ struct tags::cache_eq_ {
   noexcept
   -> bool {
     for (const auto& e : search) {
-      auto k_pos = k.find(std::string_view(std::get<0>(e)));
+      auto k_pos = find_(k, std::string_view(std::get<0>(e)));
       if (k_pos == k.end()) return false;
       if (!elem_eq_predicate(e, *k_pos)) return false;
     }
@@ -79,7 +101,7 @@ struct tags::cache_eq_ {
   noexcept
   -> bool {
     for (const auto& e : search) {
-      const auto k_pos = k.find(std::string_view(std::get<0>(e)));
+      const auto k_pos = find_(k, std::string_view(std::get<0>(e)));
       if (k_pos == k.end()
           || !elem_eq_predicate(e, *k_pos))
         return false;
@@ -140,18 +162,37 @@ struct tags::cache_eq_ {
 };
 
 struct tags::cache_create_ {
-  template<typename Alloc, typename... Args>
-  auto operator()(const Alloc& alloc, Args&&... args) const
+  template<typename Alloc, typename Iter>
+  auto operator()(const Alloc& alloc, Iter b, Iter e) const
   -> std::shared_ptr<map_type> {
-    return std::allocate_shared<map_type>(alloc, std::forward<Args>(args)...);
+    std::shared_ptr<map_type> result = std::allocate_shared<map_type>(alloc);
+
+    if constexpr(std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>)
+      result->reserve(e - b);
+    std::for_each(b, e,
+        [&result](const auto& elem) {
+          result->emplace_back(
+              std::piecewise_construct,
+              std::forward_as_tuple(std::get<0>(elem).begin(), std::get<0>(elem).end()),
+              std::forward_as_tuple(std::get<1>(elem)));
+        });
+    if constexpr(!std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>)
+      result->shrink_to_fit();
+
+    fix_and_validate_(*result);
+    return result;
   }
 
   template<typename Alloc, typename Arg>
   auto operator()(const Alloc& alloc, Arg&& arg) const
-  -> std::enable_if_t<
-      !std::is_constructible_v<map_type, Arg>,
-      std::shared_ptr<map_type>> {
-    return std::allocate_shared<map_type>(alloc, arg.begin(), arg.end());
+  -> std::shared_ptr<map_type> {
+    return (*this)(alloc, arg.begin(), arg.end());
+  }
+
+  template<typename Alloc>
+  auto operator()(const Alloc& alloc) const
+  -> std::shared_ptr<map_type> {
+    return std::allocate_shared<map_type>(alloc);
   }
 };
 
@@ -168,7 +209,7 @@ tags::tags(const Collection& collection)
 
 template<typename Iter>
 tags::tags(Iter b, Iter e, [[maybe_unused]] std::input_iterator_tag tag)
-: tags(map_type(b, e))
+: tags(std::vector<typename std::iterator_traits<Iter>::value_type>(b, e))
 {}
 
 template<typename Iter>
@@ -186,12 +227,12 @@ inline auto tags::size() const noexcept -> std::size_t {
   return map_->size();
 }
 
-inline auto tags::begin() const noexcept -> iterator {
+inline auto tags::begin() const noexcept -> const_iterator {
   assert(map_ != nullptr);
   return map_->begin();
 }
 
-inline auto tags::end() const noexcept -> iterator {
+inline auto tags::end() const noexcept -> const_iterator {
   assert(map_ != nullptr);
   return map_->end();
 }
@@ -216,7 +257,7 @@ template<typename Iter>
 auto tags::has_keys(Iter b, Iter e) const -> bool {
   const map_type& map = *map_;
   return std::all_of(b, e,
-      [&map](std::string_view s) { return map.find(s) != map.end(); });
+      [&map](std::string_view s) { return find_(map, s) != map.end(); });
 }
 
 
