@@ -332,7 +332,7 @@ void dictionary_delta::decode_update(xdr::xdr_istream& in) {
             std::inserter(tag_map, tag_map.end()),
             [this](std::uint32_t str_ref, metric_value&& mv) {
               std::string_view sv = sdd.decode(str_ref);
-              return std::make_pair(std::string(sv.begin(), sv.end()), std::move(mv));
+              return std::make_pair(tags::string_type(sv.begin(), sv.end()), std::move(mv));
             });
         return tags(std::move(tag_map));
       });

@@ -12,6 +12,9 @@
 #include <iosfwd>
 #include <string>
 #include <map>
+#include <memory>
+#include <monsoon/cache/allocator.h>
+#include <monsoon/cache/cache.h>
 
 namespace monsoon {
 
@@ -27,13 +30,32 @@ namespace monsoon {
  */
 class monsoon_intf_export_ tags {
  public:
+  ///\brief Key type.
+  using string_type = std::basic_string<char, std::char_traits<char>, cache_allocator<std::allocator<char>>>;
   ///\brief Underlying map type.
-  using map_type = std::map<std::string, metric_value>;
+  using map_type = std::map<string_type, metric_value,
+        std::less<>,
+        cache_allocator<std::allocator<std::pair<const string_type, metric_value>>>>;
   ///\brief Iterator type.
   using iterator = map_type::const_iterator;
 
+ private:
+  struct cache_hasher_;
+  struct cache_eq_;
+  struct cache_create_;
+
+  using cache_type = cache::extended_cache<
+      void,
+      const map_type,
+      cache_hasher_,
+      cache_eq_,
+      cache_allocator<std::allocator<map_type>>,
+      cache_create_>;
+
+ public:
   ///@{
-  tags() = default;
+  ///\brief Create empty tag map.
+  tags();
 
   /**
    * \brief Construct a tag set using an iteration.
@@ -43,13 +65,23 @@ class monsoon_intf_export_ tags {
    */
   template<typename Iter> tags(Iter b, Iter e);
   /**
-   * \brief Construct a tag set using the given values.
+   * \brief Construct a tag set using the values in the given \p collection.
+   * \param[in] collection A list of key-value pairs from which to construct tags.
    */
-  explicit tags(map_type) noexcept;
+  template<typename Collection>
+  explicit tags(const Collection& collection);
   /**
    * \brief Construct a tag set using the given values.
    */
-  explicit tags(std::initializer_list<map_type::value_type>);
+  explicit tags(const map_type& map);
+  /**
+   * \brief Construct a tag set using the given values.
+   */
+  explicit tags(map_type&& map);
+  /**
+   * \brief Construct a tag set using the given values.
+   */
+  tags(std::initializer_list<std::pair<std::string_view, metric_value>>);
   ///@}
 
   /**
@@ -75,7 +107,7 @@ class monsoon_intf_export_ tags {
    *   the metric value for the given tag name,
    *   or an empty optional if it does not exist.
    */
-  auto operator[](const std::string& name) const noexcept
+  auto operator[](std::string_view name) const noexcept
       -> std::optional<metric_value>;
 
   ///@{
@@ -110,7 +142,11 @@ class monsoon_intf_export_ tags {
   template<typename Iter> bool has_keys(Iter b, Iter e) const;
 
  private:
-  map_type map_;
+  template<typename Iter> tags(Iter b, Iter e, std::input_iterator_tag tag);
+  template<typename Iter> tags(Iter b, Iter e, std::forward_iterator_tag tag);
+
+  static cache_type cache_();
+  std::shared_ptr<const map_type> map_;
 };
 
 /**
@@ -130,6 +166,7 @@ std::ostream& operator<<(std::ostream& out, const tags& t);
  * \param t The tag set to create a string representation of.
  * \return String representation of the tag set.
  */
+monsoon_intf_export_
 std::string to_string(const tags& t);
 
 

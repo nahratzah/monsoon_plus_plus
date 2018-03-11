@@ -1,6 +1,7 @@
 #include <monsoon/tags.h>
 #include <monsoon/hash_support.h>
 #include <monsoon/config_support.h>
+#include <monsoon/cache/impl.h>
 #include <monsoon/grammar/intf/rules.h>
 #include <algorithm>
 #include <utility>
@@ -9,6 +10,29 @@
 
 namespace monsoon {
 
+
+tags::cache_type tags::cache_() {
+  static cache_type impl = tags::cache_type::builder()
+      .access_expire(std::chrono::minutes(10))
+      .build(cache_create_());
+  return impl;
+}
+
+tags::tags()
+: map_(cache_()())
+{}
+
+tags::tags(const map_type& map)
+: map_(cache_()(map))
+{}
+
+tags::tags(map_type&& map)
+: map_(cache_()(std::move(map)))
+{}
+
+tags::tags(std::initializer_list<std::pair<std::string_view, metric_value>> il)
+: map_(cache_()(il.begin(), il.end()))
+{}
 
 tags tags::parse(std::string_view s) {
   std::string_view::iterator parse_end = s.begin();
@@ -24,25 +48,29 @@ tags tags::parse(std::string_view s) {
   throw std::invalid_argument("invalid expression");
 }
 
-auto tags::operator[](const std::string& key) const noexcept
+auto tags::operator[](std::string_view key) const noexcept
 ->  std::optional<metric_value> {
-  auto pos = map_.find(key);
-  if (pos == map_.end()) return {};
+  auto pos = map_->find(key);
+  if (pos == map_->end()) return {};
   return pos->second;
 }
 
 auto tags::operator==(const tags& other) const noexcept -> bool {
-  return map_ == other.map_;
+  assert(map_ != nullptr && other.map_ != nullptr);
+  return map_ == other.map_
+      || *map_ == *other.map_;
 }
 
 auto tags::operator<(const tags& other) const noexcept -> bool {
-  return std::lexicographical_compare(
-      map_.begin(), map_.end(),
-      other.map_.begin(), other.map_.end(),
-      [](map_type::const_reference x, map_type::const_reference y) {
-        if (std::get<0>(x) != std::get<0>(y)) return std::get<0>(x) < std::get<0>(y);
-        return metric_value::before(std::get<1>(x), std::get<1>(y));
-      });
+  assert(map_ != nullptr && other.map_ != nullptr);
+  return map_ != other.map_
+      && std::lexicographical_compare(
+          begin(), end(),
+          other.begin(), other.end(),
+          [](map_type::const_reference x, map_type::const_reference y) {
+            if (std::get<0>(x) != std::get<0>(y)) return std::get<0>(x) < std::get<0>(y);
+            return metric_value::before(std::get<1>(x), std::get<1>(y));
+          });
 }
 
 

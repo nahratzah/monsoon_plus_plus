@@ -504,7 +504,7 @@ tags decode_tags(monsoon::xdr::xdr_istream& in,
 
   return tags(in.template get_collection<tags::map_type>(
       [&dict](monsoon::xdr::xdr_istream& in) {
-        auto key = in.get_string();
+        auto key = in.get_string<tags::string_type::allocator_type>();
         auto value = decode_metric_value(in, dict);
         return std::make_pair(std::move(key), std::move(value));
       }));
