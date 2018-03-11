@@ -88,6 +88,7 @@ struct tags::cache_eq_ {
   auto operator()(const map_type& k, const std::map<K, V, Less, Alloc>& search) const
   noexcept
   -> bool {
+    if (k.size() != search.size()) return false;
     for (const auto& e : search) {
       auto k_pos = find_(k, std::string_view(std::get<0>(e)));
       if (k_pos == k.end()) return false;
@@ -100,6 +101,7 @@ struct tags::cache_eq_ {
   auto operator()(const map_type& k, const std::unordered_map<K, V, H, E, Alloc>& search) const
   noexcept
   -> bool {
+    if (k.size() != search.size()) return false;
     for (const auto& e : search) {
       const auto k_pos = find_(k, std::string_view(std::get<0>(e)));
       if (k_pos == k.end()
