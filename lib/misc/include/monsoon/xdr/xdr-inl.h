@@ -228,14 +228,36 @@ inline auto xdr_istream::get_collection_n(std::size_t len, SerFn fn, C& c)
   return c;
 }
 
+namespace {
+
+template<typename C, typename = void>
+struct can_reserve_
+: std::false_type
+{};
+template<typename C>
+struct can_reserve_<C, std::void_t<decltype(std::declval<C&>().reserve(std::declval<C&>().size() + std::declval<std::uint32_t>()))>>
+: std::true_type
+{};
+
+template<typename C>
+constexpr bool can_reserve = can_reserve_<C>::value;
+
+} /* namespace monsoon::xdr::<unnamed> */
+
 template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection(SerFn fn, C&& c) -> C&& {
-  return get_collection_n(get_uint32(), std::move(fn), std::forward<C>(c));
+  std::uint32_t len = get_uint32();
+  if constexpr(can_reserve<C>)
+    c.reserve(c.size() + len);
+  return get_collection_n(len, std::move(fn), std::forward<C>(c));
 }
 
 template<typename C, typename SerFn>
 inline auto xdr_istream::get_collection(SerFn fn, C& c) -> C& {
-  return get_collection_n(get_uint32(), std::move(fn), std::forward<C>(c));
+  std::uint32_t len = get_uint32();
+  if constexpr(can_reserve<C>)
+    c.reserve(c.size() + len);
+  return get_collection_n(len, std::move(fn), std::forward<C>(c));
 }
 
 template<typename SerFn, typename Acceptor>
