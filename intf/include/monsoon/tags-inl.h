@@ -135,13 +135,13 @@ struct tags::cache_eq_ {
           [](const auto& x, const auto& y) { return elem_eq_predicate(x, y); });
     }
 
-    std::vector<std::pair<std::string_view, metric_value>> tmp;
+    std::vector<std::tuple<std::string_view, metric_value>> tmp;
     if constexpr(std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>)
       tmp.reserve(e - b);
     std::copy(b, e, std::back_inserter(tmp));
     std::sort(
         tmp.begin(), tmp.end(),
-        [](const auto& x, const auto& y) { return x.first < y.first; });
+        [](const auto& x, const auto& y) { return std::get<0>(x) < std::get<0>(y); });
     return std::equal(
         p.begin(), p.end(),
         tmp.begin(), tmp.end(),
