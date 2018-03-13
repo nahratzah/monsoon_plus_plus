@@ -7,6 +7,7 @@
 #include <array>
 #include <type_traits>
 #include <monsoon/objpipe/detail/of_pipe.h>
+#include <monsoon/objpipe/detail/empty_pipe.h>
 #include <monsoon/objpipe/detail/adapter.h>
 
 namespace monsoon::objpipe {
@@ -50,6 +51,9 @@ noexcept(noexcept(
         of(std::array<std::conditional_t<std::is_same_v<void, T>, std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>...>, T>, sizeof...(Types)>{{ std::forward<Types>(values)... }})
         .iterate()))
 -> decltype(auto) {
+  static_assert(sizeof...(Types) > 0,
+      "When supplying no values, you must supply a type.");
+
   using type = std::conditional_t<
       std::is_same_v<void, T>,
       std::common_type_t<std::remove_cv_t<std::remove_reference_t<Types>>...>,
@@ -57,6 +61,21 @@ noexcept(noexcept(
 
   return of(std::array<type, sizeof...(Types)>{{ std::forward<Types>(values)... }})
       .iterate();
+}
+
+/**
+ * \brief Create an empty objpipe.
+ * \ingroup objpipe
+ *
+ * \tparam T The type of elements in the objpipe.
+ * \return An objpipe iterating over the argument values.
+ * \sa \ref monsoon::objpipe::detail::of_pipe
+ */
+template<typename T>
+constexpr auto of()
+noexcept
+-> decltype(auto) {
+  return detail::adapter(detail::empty_pipe<T>());
 }
 
 
