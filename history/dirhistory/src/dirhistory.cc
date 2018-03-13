@@ -118,6 +118,8 @@ class merge_emit_t {
   template<typename Callback>
   auto operator()(Callback cb) -> void {
     while (!unstarted_.empty() || !active_.empty()) {
+      assert(loop_invariant());
+
       // Ensure active has at least one element,
       // and load all unstarted that start at/before active_.front.
       while (active_.empty()
@@ -134,12 +136,18 @@ class merge_emit_t {
           std::push_heap(active_.begin(), active_.end(), greater());
       }
 
+      assert(unstarted_.empty()
+          || active_.empty()
+          || greater::tp(unstarted_.top()) > greater::tp(active_.front()));
+
       // Since empty queues are immediately popped, the loop invariant
       // may break. Compensate here.
       if (active_.empty()) {
         assert(unstarted_.empty());
         break;
       }
+
+      assert(loop_invariant());
 
       // Read head element of the head of active.
       std::pop_heap(active_.begin(), active_.end(), greater());
@@ -163,6 +171,8 @@ class merge_emit_t {
 
       // Emit merged element.
       cb(std::move(emit));
+
+      assert(loop_invariant());
     }
   }
 
@@ -172,6 +182,14 @@ class merge_emit_t {
   }
 
  private:
+  auto loop_invariant() const
+  noexcept
+  -> bool {
+    return std::all_of(
+        active_.begin(), active_.end(),
+        [](const auto& pipe) { return !pipe.empty(); });
+  }
+
   unstarted_queue unstarted_;
   ToObjpipeFunctor objpipe_fn_;
   std::vector<objpipe_type> active_;
