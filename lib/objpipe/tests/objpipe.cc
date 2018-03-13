@@ -12,6 +12,13 @@
 
 using monsoon::objpipe::objpipe_errc;
 
+TEST(iterate_empty) {
+  CHECK_EQUAL(
+      std::vector<int>(),
+      monsoon::objpipe::of<int>()
+          .to_vector());
+}
+
 TEST(callback) {
   auto reader = monsoon::objpipe::new_callback<int>(
       [](auto& cb) {

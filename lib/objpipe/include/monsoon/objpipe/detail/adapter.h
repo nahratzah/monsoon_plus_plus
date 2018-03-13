@@ -192,8 +192,6 @@ class adapter_iterator {
 
   auto operator++()
   -> adapter_iterator& {
-    if (src_->wait() == objpipe_errc::closed)
-      src_ = nullptr;
     return *this;
   }
 
@@ -206,7 +204,8 @@ class adapter_iterator {
   constexpr auto operator==(const adapter_iterator& other) const
   noexcept
   -> bool {
-    return src_ == nullptr && other.src_ == nullptr;
+    return (src_ == nullptr || src_->wait() == objpipe_errc::closed)
+        && (other.src_ == nullptr || other.src_->wait() == objpipe_errc::closed);
   }
 
   constexpr auto operator!=(const adapter_iterator& other) const
