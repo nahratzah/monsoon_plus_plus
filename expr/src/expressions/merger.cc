@@ -609,6 +609,7 @@ class vector_sink {
    * \details We need to record this separately, in order to handle empty facts.
    */
   std::optional<time_point> last_known_fact_tp_;
+  bool last_known_fact_emitted_ = false;
 };
 
 
@@ -1038,7 +1039,7 @@ noexcept
       .deref()
       .min();
 
-  if (!min.has_value())
+  if (!min.has_value() && !last_known_fact_emitted_)
     min = last_known_fact_tp_;
   return min;
 }
@@ -1052,6 +1053,8 @@ noexcept
       [tp](auto& data_elem) {
         data_elem.second.mark_emitted(tp);
       });
+  if (last_known_fact_tp_ == tp)
+    last_known_fact_emitted_ = true;
 
   assert(invariant());
 }
@@ -1166,6 +1169,7 @@ auto vector_sink::accept(expression::vector_emit_type&& emt)
             }
 
             last_known_fact_tp_.emplace(tp);
+            last_known_fact_emitted_ = false;
             return true;
           }),
       std::move(emt.data));

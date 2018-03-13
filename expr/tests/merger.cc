@@ -181,7 +181,6 @@ TEST(vector_vector) {
           empty_vector_objpipe())
           .to_vector());
 
-#if 0
   // Matching exact time points.
   CHECK_EQUAL(
       vector_objpipe(test_tags, out_mc, {{ time_point(1000), std::in_place_index<1>, 17 }})
@@ -194,7 +193,6 @@ TEST(vector_vector) {
           vector_objpipe(test_tags, in_mc, {{ time_point(1000), std::in_place_index<1>, 17 }}),
           vector_objpipe(test_tags, in_mc, {{ time_point(1000), std::in_place_index<1>, 17 }}))
           .to_vector());
-#endif
 }
 
 int main() {
