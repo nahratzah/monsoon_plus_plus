@@ -62,14 +62,15 @@ auto is_nonempty_fact(const expression::vector_emit_type& v) {
 // Binary operator that fails its invocation.
 auto dummy_binop(const metric_value& x, const metric_value& y)
 -> metric_value {
-  throw std::runtime_error("dummy_binop must not be invoked");
+  REQUIRE CHECK(false && "dummy_binop must not be invoked");
+  return {};
 }
 
 // Binary operator that emits value, if x == y.
 auto same_binop(const metric_value& x, const metric_value& y)
 -> metric_value {
-  if (x == y) return x;
-  throw std::runtime_error("same_binop: x == y -> false");
+  REQUIRE CHECK_EQUAL(x, y);
+  return x;
 }
 
 const tags test_tags = {{ "x", metric_value(5) }};
