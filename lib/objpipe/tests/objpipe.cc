@@ -57,6 +57,25 @@ TEST(callback) {
   CHECK_EQUAL(objpipe_errc::closed, e);
 }
 
+TEST(callback_empty_without_pulling) {
+  auto reader = monsoon::objpipe::new_callback<int>(
+      [](auto& cb) {
+        for (int i = 0; i < 2; ++i)
+          cb(i);
+      });
+
+  CHECK(!reader.empty());
+  CHECK(!reader.empty()); // Check that result is stable.
+  CHECK_EQUAL(0, reader.pull());
+
+  CHECK(!reader.empty());
+  CHECK(!reader.empty()); // Check that result is stable.
+  CHECK_EQUAL(1, reader.pull());
+
+  CHECK(reader.empty());
+  CHECK(reader.empty()); // Check that result is stable.
+}
+
 TEST(array_using_iterators) {
   std::vector<int> il = { 0, 1, 2, 3, 4 };
   auto reader = monsoon::objpipe::new_array(il.begin(), il.end());
