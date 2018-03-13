@@ -53,6 +53,12 @@ auto vector_objpipe(
           });
 }
 
+// Predicate that filters away empty facts.
+// Merger is allowed to optimize those away.
+auto is_nonempty_fact(const expression::vector_emit_type& v) {
+  return !std::get<1>(v.data).empty();
+}
+
 // Binary operator that fails its invocation.
 auto dummy_binop(const metric_value& x, const metric_value& y)
 -> metric_value {
@@ -67,8 +73,12 @@ auto same_binop(const metric_value& x, const metric_value& y)
 }
 
 const tags test_tags = {{ "x", metric_value(5) }};
+const std::shared_ptr<const match_clause> in_mc =
+    std::make_shared<default_match_clause>();
+const std::shared_ptr<const match_clause> out_mc =
+    std::make_shared<default_match_clause>();
 
-TEST(scalar_scalar) {
+TEST(scalar_scalar_empty) {
   // Empty pipe
   CHECK_EQUAL(
       empty_scalar_objpipe()
@@ -81,8 +91,9 @@ TEST(scalar_scalar) {
           empty_scalar_objpipe(),
           empty_scalar_objpipe())
           .to_vector());
+}
 
-  // Matching exact time points.
+TEST(scalar_scalar_exact_tp_facts) {
   CHECK_EQUAL(
       scalar_objpipe({{ time_point(1000), std::in_place_index<1>, 17 }})
           .to_vector(),
@@ -96,12 +107,45 @@ TEST(scalar_scalar) {
           .to_vector());
 }
 
-TEST(scalar_vector) {
-  const std::shared_ptr<const match_clause> in_mc =
-      std::make_shared<default_match_clause>();
-  const std::shared_ptr<const match_clause> out_mc =
-      std::make_shared<default_match_clause>();
+TEST(scalar_scalar_interpolate_facts_lhs) {
+  CHECK_EQUAL(
+      scalar_objpipe({{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          std::make_shared<default_match_clause>(),
+          std::make_shared<default_match_clause>(),
+          time_point::duration(5000),
+          scalar_objpipe({
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }),
+          scalar_objpipe({
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }))
+          .to_vector());
+}
 
+TEST(scalar_scalar_interpolate_facts_rhs) {
+  CHECK_EQUAL(
+      scalar_objpipe({{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          std::make_shared<default_match_clause>(),
+          std::make_shared<default_match_clause>(),
+          time_point::duration(5000),
+          scalar_objpipe({
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }),
+          scalar_objpipe({
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }))
+          .to_vector());
+}
+
+TEST(scalar_vector_empty) {
   // Empty pipe
   CHECK_EQUAL(
       empty_vector_objpipe()
@@ -114,7 +158,9 @@ TEST(scalar_vector) {
           empty_scalar_objpipe(),
           empty_vector_objpipe())
           .to_vector());
+}
 
+TEST(scalar_vector_exact_tp_facts) {
   // Matching exact time points.
   CHECK_EQUAL(
       vector_objpipe(test_tags, out_mc, {{ time_point(1000), std::in_place_index<1>, 17 }})
@@ -129,12 +175,49 @@ TEST(scalar_vector) {
           .to_vector());
 }
 
-TEST(vector_scalar) {
-  const std::shared_ptr<const match_clause> in_mc =
-      std::make_shared<default_match_clause>();
-  const std::shared_ptr<const match_clause> out_mc =
-      std::make_shared<default_match_clause>();
+TEST(scalar_vector_interpolate_facts_lhs) {
+  // Check interpolation.
+  CHECK_EQUAL(
+      vector_objpipe(test_tags, out_mc, {{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          in_mc,
+          out_mc,
+          time_point::duration(5000),
+          scalar_objpipe({
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }))
+          .filter(&is_nonempty_fact)
+          .to_vector());
+}
 
+TEST(scalar_vector_interpolate_facts_rhs) {
+  // Check interpolation.
+  CHECK_EQUAL(
+      vector_objpipe(test_tags, out_mc, {{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          in_mc,
+          out_mc,
+          time_point::duration(5000),
+          scalar_objpipe({
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }))
+          .filter(&is_nonempty_fact)
+          .to_vector());
+}
+
+TEST(vector_scalar_empty) {
   // Empty pipe
   CHECK_EQUAL(
       empty_vector_objpipe()
@@ -147,7 +230,9 @@ TEST(vector_scalar) {
           empty_vector_objpipe(),
           empty_scalar_objpipe())
           .to_vector());
+}
 
+TEST(vector_scalar_exact_tp_facts) {
   // Matching exact time points.
   CHECK_EQUAL(
       vector_objpipe(test_tags, out_mc, {{ time_point(1000), std::in_place_index<1>, 17 }})
@@ -162,12 +247,49 @@ TEST(vector_scalar) {
           .to_vector());
 }
 
-TEST(vector_vector) {
-  const std::shared_ptr<const match_clause> in_mc =
-      std::make_shared<default_match_clause>();
-  const std::shared_ptr<const match_clause> out_mc =
-      std::make_shared<default_match_clause>();
+TEST(vector_scalar_interpolate_facts_lhs) {
+  // Matching exact time points.
+  CHECK_EQUAL(
+      vector_objpipe(test_tags, out_mc, {{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          in_mc,
+          out_mc,
+          time_point::duration(5000),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }),
+          scalar_objpipe({
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }))
+          .filter(&is_nonempty_fact)
+          .to_vector());
+}
 
+TEST(vector_scalar_interpolate_facts_rhs) {
+  // Matching exact time points.
+  CHECK_EQUAL(
+      vector_objpipe(test_tags, out_mc, {{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          in_mc,
+          out_mc,
+          time_point::duration(5000),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }),
+          scalar_objpipe({
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }))
+          .filter(&is_nonempty_fact)
+          .to_vector());
+}
+
+TEST(vector_vector_empty) {
   // Empty pipe
   CHECK_EQUAL(
       empty_vector_objpipe()
@@ -180,7 +302,9 @@ TEST(vector_vector) {
           empty_vector_objpipe(),
           empty_vector_objpipe())
           .to_vector());
+}
 
+TEST(vector_vector_exact_tp_facts) {
   // Matching exact time points.
   CHECK_EQUAL(
       vector_objpipe(test_tags, out_mc, {{ time_point(1000), std::in_place_index<1>, 17 }})
@@ -192,6 +316,48 @@ TEST(vector_vector) {
           time_point::duration(5000),
           vector_objpipe(test_tags, in_mc, {{ time_point(1000), std::in_place_index<1>, 17 }}),
           vector_objpipe(test_tags, in_mc, {{ time_point(1000), std::in_place_index<1>, 17 }}))
+          .to_vector());
+}
+
+TEST(vector_vector_interpolate_facts_lhs) {
+  // Matching exact time points.
+  CHECK_EQUAL(
+      vector_objpipe(test_tags, out_mc, {{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          in_mc,
+          out_mc,
+          time_point::duration(5000),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }))
+          .filter(&is_nonempty_fact)
+          .to_vector());
+}
+
+TEST(vector_vector_interpolate_facts_rhs) {
+  // Matching exact time points.
+  CHECK_EQUAL(
+      vector_objpipe(test_tags, out_mc, {{ time_point(2000), std::in_place_index<1>, 17 }})
+          .to_vector(),
+      make_merger(
+          &same_binop,
+          in_mc,
+          out_mc,
+          time_point::duration(5000),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(2000), std::in_place_index<1>, 17 }
+              }),
+          vector_objpipe(test_tags, in_mc, {
+              { time_point(1000), std::in_place_index<1>, 16 },
+              { time_point(3000), std::in_place_index<1>, 18 }
+              }))
+          .filter(&is_nonempty_fact)
           .to_vector());
 }
 
