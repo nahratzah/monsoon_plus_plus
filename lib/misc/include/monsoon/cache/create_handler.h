@@ -86,7 +86,7 @@ auto future_as_pointer_future_(Alloc alloc, std::future<T> fut)
       [](Alloc alloc, std::future<T> fut) {
         return make_shared_ptr_(alloc, fut.get());
       },
-      std::forward<Alloc>(),
+      std::forward<Alloc>(alloc),
       std::move(fut));
 }
 
