@@ -34,6 +34,9 @@ auto quote(std::string_view s, std::u32string_view special)
     if (c < lo_escapes.size()) {
       result << lo_escapes[c];
       needs_quotes = true;
+    } else if (c == '\\') {
+      result << R"(\\)"sv;
+      needs_quotes = true;
     } else if (c > 65535) {
       result << "\\U" << std::setw(8) << std::hex << (unsigned long)c;
       needs_quotes = true;
