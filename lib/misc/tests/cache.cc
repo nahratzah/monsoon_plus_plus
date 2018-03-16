@@ -148,7 +148,8 @@ TEST(cache_async) {
 
   cache<int, int> c = cache<int, int>::builder()
       .async(true)
-      .build([&]([[maybe_unused]] auto alloc, int i) {
+      .build(
+          [&]([[maybe_unused]] auto alloc, int i) {
             REQUIRE CHECK_EQUAL(1, i);
             std::lock_guard<std::mutex> lck{ mtx };
             visits++;
@@ -161,7 +162,7 @@ TEST(cache_async) {
   auto f1 = std::async(std::launch::async, c, 1);
   auto f2 = std::async(std::launch::async, c, 1);
   // Wait until both threads have acquired the future of p.
-  signal.wait(lck, [&]() { return visits == 2; });
+  signal.wait(lck, [&]() { return visits != 0; });
 
   // Publish result, now that both cache access are blocked on future.
   auto result = std::make_shared<int>(17);
@@ -170,6 +171,7 @@ TEST(cache_async) {
   // Check that outcomes of async threads match up.
   CHECK_EQUAL(result, f1.get());
   CHECK_EQUAL(result, f2.get());
+  CHECK_EQUAL(1, visits);
 }
 
 int main() {
