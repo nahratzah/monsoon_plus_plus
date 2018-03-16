@@ -18,8 +18,8 @@ namespace create_ops {
 
 template<typename T>
 auto squash_future_(T v)
--> T&& {
-  return std::move(v);
+-> T {
+  return v;
 }
 
 template<typename T>
