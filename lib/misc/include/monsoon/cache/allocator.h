@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup cache
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <memory>

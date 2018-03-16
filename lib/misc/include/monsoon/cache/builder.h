@@ -387,8 +387,8 @@ constexpr cache_builder<T, U, Hash, Eq, Alloc>::cache_builder(
     const cache_builder_vars& other,
     Hash hash, Eq eq, Alloc alloc)
 : cache_builder_vars(other),
-  hash_(std::move(hash_)),
-  eq_(std::move(eq_)),
+  hash_(std::move(hash)),
+  eq_(std::move(eq)),
   alloc_(std::move(alloc))
 {}
 

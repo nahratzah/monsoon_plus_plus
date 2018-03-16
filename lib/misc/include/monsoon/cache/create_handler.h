@@ -18,8 +18,8 @@ namespace create_ops {
 
 template<typename T>
 auto squash_future_(T v)
--> T&& {
-  return std::move(v);
+-> T {
+  return v;
 }
 
 template<typename T>
@@ -79,26 +79,26 @@ struct async_invoke_wrapper_ {
 };
 
 template<typename Alloc, typename T>
-auto future_as_pointer_future_(Alloc alloc, std::future<T> fut)
+auto future_as_pointer_future_(Alloc&& alloc, std::future<T> fut)
 -> decltype(auto) {
   return std::async(
       std::launch::deferred,
-      [](Alloc alloc, std::future<T> fut) {
+      [](std::decay_t<Alloc> alloc, std::future<T> fut) {
         return make_shared_ptr_(alloc, fut.get());
       },
-      std::forward<Alloc>(),
+      std::forward<Alloc>(alloc),
       std::move(fut));
 }
 
 template<typename Alloc, typename T>
-auto future_as_pointer_future_(Alloc alloc, std::shared_future<T> fut)
+auto future_as_pointer_future_(Alloc&& alloc, std::shared_future<T> fut)
 -> decltype(auto) {
   return std::async(
       std::launch::deferred,
-      [](Alloc alloc, std::future<T> fut) {
+      [](std::decay_t<Alloc> alloc, std::shared_future<T> fut) {
         return make_shared_ptr_(alloc, fut.get());
       },
-      std::forward<Alloc>(),
+      std::forward<Alloc>(alloc),
       std::move(fut));
 }
 

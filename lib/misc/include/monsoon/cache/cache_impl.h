@@ -10,6 +10,7 @@
 #include <monsoon/cache/key_decorator.h>
 #include <monsoon/cache/cache_query.h>
 #include <monsoon/cache/store_delete_lock.h>
+#include <cassert>
 #include <cmath>
 #include <stdexcept>
 #include <utility>
@@ -345,6 +346,8 @@ class cache_impl
       store_type* created = nullptr)
   -> pointer;
 
+  ///\brief Compute number of target buckets that is needed.
+  auto compute_target_buckets_() const noexcept -> typename bucket_vector::size_type;
   ///\brief Perform rehashing, if load factor constraint requires it.
   auto maybe_rehash_() noexcept -> void;
 
@@ -550,30 +553,45 @@ auto cache_impl<T, A, D...>::resolve_(
     return std::move(l);
   } else {
     return std::visit(
-        overload(
-            [](pointer p) -> pointer { return std::move(p); },
-            [&lck, created](std::shared_future<pointer>&& fut) -> pointer {
-              lck.unlock(); // Don't hold the lock during future resolution!
-              if (created == nullptr)
-                return fut.get();
+        [&lck, created](auto&& arg) -> pointer {
+          if constexpr(std::is_same_v<pointer, std::decay_t<decltype(arg)>>) {
+            return std::move(arg);
+          } else {
+            std::shared_future<pointer> fut = std::move(arg);
 
-              // Resolve future with the cache unlocked.
-              // This allows:
-              // - other threads to access the cache without blocking on
-              //   our create function,
-              // - the create function to recurse into the cache,
-              // - the allocators involved in the create function,
-              //   to perform cache maintenance routines.
-              fut.wait();
+            lck.unlock(); // Don't hold the lock during future resolution!
+            if (created == nullptr)
+              return fut.get();
 
-              // Relock before calling resolve,
-              // because element mutation is not thread safe.
-              lck.lock();
+            // Resolve future with the cache unlocked.
+            // This allows:
+            // - other threads to access the cache without blocking on
+            //   our create function,
+            // - the create function to recurse into the cache,
+            // - the allocators involved in the create function,
+            //   to perform cache maintenance routines.
+            fut.wait();
 
-              return created->resolve(); // Installs result of future.
-            }),
+            // Relock before calling resolve,
+            // because element mutation is not thread safe.
+            lck.lock();
+
+            return created->resolve(); // Installs result of future.
+          }
+        },
         std::move(l));
   }
+}
+
+template<typename T, typename A, typename... D>
+auto cache_impl<T, A, D...>::compute_target_buckets_() const
+noexcept
+-> typename bucket_vector::size_type {
+  const std::double_t target_buckets_dbl = std::ceil(std::double_t(size_) / lf_);
+  typename bucket_vector::size_type target_buckets = buckets_.max_size();
+  if (target_buckets_dbl < target_buckets)
+    target_buckets = target_buckets_dbl;
+  return target_buckets;
 }
 
 template<typename T, typename A, typename... D>
@@ -581,10 +599,14 @@ auto cache_impl<T, A, D...>::maybe_rehash_()
 noexcept // Allocation exception is swallowed.
 -> void {
   // Check if we require rehashing.
-  const std::double_t target_buckets_dbl = std::ceil(std::double_t(size_) / lf_);
-  typename bucket_vector::size_type target_buckets = buckets_.max_size();
-  if (target_buckets_dbl < target_buckets)
-    target_buckets = target_buckets_dbl;
+  if (buckets_.size() >= compute_target_buckets_())
+    return; // No rehash required.
+
+  // Full maintenance: erasing all expired elements.
+  for (auto& i : buckets_) i.erase_all_expired(*this);
+
+  // Recheck if we require rehashing, as erase_all_expired() may have reduced number of elements.
+  auto target_buckets = compute_target_buckets_();
   if (buckets_.size() >= target_buckets) return; // No rehash required.
 
   // Compute new number of buckets.

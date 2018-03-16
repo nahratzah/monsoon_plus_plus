@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup cache_detail
 
+#include <cassert>
 #include <monsoon/cache/element.h>
 #include <monsoon/cache/store_delete_lock.h>
 
@@ -132,10 +133,10 @@ class bucket {
 
     // Create new store_type.
     store_type* new_store = create_fn(alloc_hint);
+    lookup_type new_ptr = new_store->ptr();
     created = store_delete_lock<store_type>(new_store); // Inform called of newly constructed store.
     owner.on_create(*created);
     *iter = new_store; // Link.
-    lookup_type new_ptr = new_store->ptr();
 
     assert(!store_type::is_nil(new_ptr)
         && new_store->hash() == hash_code);
@@ -176,6 +177,29 @@ class bucket {
       assert(s->use_count == 0u);
 
       on_delete(*s);
+    }
+  }
+
+  template<typename CacheImpl>
+  auto erase_all_expired(CacheImpl& owner)
+  noexcept
+  -> void {
+    store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
+
+    while (*iter != nullptr) {
+      store_type* s = *iter;
+
+      // Clean up expired entries as we traverse.
+      if (s->is_expired()) {
+        // Only delete if the use counter indicates the element is not referenced.
+        if (s->use_count.load(std::memory_order_acquire) == 0u) {
+          *iter = successor_ptr(*s); // Unlink s.
+          owner.on_delete(*s);
+          continue;
+        }
+      }
+
+      iter = &successor_ptr(*s); // Advance iter.
     }
   }
 

@@ -36,7 +36,7 @@ class mem_use
   noexcept
   -> void
   override {
-    mem_used_.fetch_add(n * sz, std::memory_order_relaxed);
+    mem_used_.fetch_sub(n * sz, std::memory_order_relaxed);
   }
 
   auto get() const

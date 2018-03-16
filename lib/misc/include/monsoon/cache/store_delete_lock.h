@@ -5,6 +5,7 @@
 ///\ingroup cache_detail
 
 #include <atomic>
+#include <cassert>
 #include <utility>
 
 namespace monsoon::cache {

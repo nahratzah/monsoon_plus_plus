@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup cache_detail
 
+#include <cassert>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -323,8 +324,8 @@ class base_expire_queue {
    * automatically released when they expire.
    * \param[in] new_size The new size of the queue.
    */
-  template<typename StoreType>
-  auto shrink_to_size_(std::uintptr_t new_size)
+  template<typename StoreType, typename Impl>
+  auto shrink_to_size_(Impl& impl, std::uintptr_t new_size)
   noexcept
   -> void {
     while (cold_qlen > 0 && cold_qlen + hot_qlen > new_size) {
@@ -335,6 +336,7 @@ class base_expire_queue {
       r->weaken();
       r_link->unlink();
       --cold_qlen;
+      impl.erase_if_expired(*r);
     }
 
     if (cold_qlen == 0) {
@@ -346,6 +348,7 @@ class base_expire_queue {
         r->weaken();
         r_link->unlink();
         --hot_qlen;
+        impl.erase_if_expired(*r);
       }
     }
 
@@ -362,8 +365,8 @@ class base_expire_queue {
    * returns false.
    * \param[in] predicate The predicate to test.
    */
-  template<typename StoreType, typename P>
-  auto shrink_while_(P predicate)
+  template<typename StoreType, typename Impl, typename P>
+  auto shrink_while_(Impl& impl, P predicate)
   noexcept
   -> void {
     bool stop = false;
@@ -377,6 +380,7 @@ class base_expire_queue {
         r->weaken();
         r_link->unlink();
         --cold_qlen;
+        impl.erase_if_expired(*r);
       }
     }
 
@@ -390,6 +394,7 @@ class base_expire_queue {
         r->weaken();
         r_link->unlink();
         --hot_qlen;
+        impl.erase_if_expired(*r);
       }
     }
 
@@ -447,7 +452,7 @@ class expire_queue
   auto shrink_to_size(std::uintptr_t new_size)
   noexcept
   -> void {
-    shrink_to_size_<typename ImplType::store_type>(new_size);
+    shrink_to_size_<typename ImplType::store_type>(static_cast<ImplType&>(*this), new_size);
   }
 
   ///\copydoc base_expire_queue::shrink_while_
@@ -455,7 +460,7 @@ class expire_queue
   auto shrink_while(P predicate)
   noexcept
   -> void {
-    shrink_while_<typename ImplType::store_type>(std::move(predicate));
+    shrink_while_<typename ImplType::store_type>(static_cast<ImplType&>(*this), std::move(predicate));
   }
 
   template<typename StoreType>

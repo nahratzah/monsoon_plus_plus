@@ -5,6 +5,7 @@
 ///\ingroup cache_detail
 
 #include <atomic>
+#include <cassert>
 #include <cstddef>
 #include <future>
 #include <memory>
