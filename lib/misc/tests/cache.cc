@@ -1,10 +1,21 @@
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/impl.h>
+#include <chrono>
 #include <memory>
 #include <vector>
+#include <thread>
 #include "UnitTest++/UnitTest++.h"
 
 using namespace monsoon::cache;
+
+struct mock_int_to_int_fn {
+  template<typename Alloc>
+  auto operator()([[maybe_unused]] Alloc alloc, int i) const
+  noexcept
+  -> int {
+    return 2 * i;
+  }
+};
 
 // HACKS
 namespace std {
@@ -57,10 +68,7 @@ TEST(cache_size) {
   cache<int, int> c = cache<int, int>::builder()
       .not_thread_safe()
       .max_size(4)
-      .build(
-          []([[maybe_unused]] const auto& alloc, int i) {
-            return 2 * i;
-          });
+      .build(mock_int_to_int_fn());
 
   c(1);
   c(2);
@@ -80,16 +88,26 @@ TEST(cache_memory) {
       .with_allocator(cache_allocator<std::allocator<int>>())
       .not_thread_safe()
       .max_memory(500 * sizeof(int))
-      .build(
-          [](auto alloc, int i) {
-            return std::allocate_shared<int>(alloc, 2 * i);
-          });
+      .build(mock_int_to_int_fn());
 
   for (int i = 0; i < 1000; ++i)
     c(i);
 
   CHECK(c.get_if_present(999) != nullptr);
   CHECK(c.get_if_present(0) == nullptr);
+}
+
+TEST(cache_max_age) {
+  cache<int, int> c = cache<int, int>::builder()
+      .not_thread_safe()
+      .max_age(std::chrono::seconds(1))
+      .build(mock_int_to_int_fn());
+
+  auto ptr = c(4);
+  REQUIRE CHECK_EQUAL(ptr, c(4));
+
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  CHECK(ptr != c(4)); // Reload must be performed.
 }
 
 int main() {
