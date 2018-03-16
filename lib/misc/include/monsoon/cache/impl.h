@@ -286,9 +286,8 @@ template<typename Cache, typename = void>
 struct has_set_mem_use_
 : std::false_type {};
 
-template<typename Cache,
-    typename = std::void_t<decltype(std::declval<Cache&>().set_mem_use(std::declval<std::shared_ptr<const mem_use>>()))>>
-struct hash_set_mem_use_
+template<typename Cache>
+struct has_set_mem_use_<Cache, std::void_t<decltype(std::declval<Cache&>().set_mem_use(std::declval<std::shared_ptr<const mem_use>>()))>>
 : std::true_type {};
 
 template<typename Cache>
@@ -301,7 +300,7 @@ constexpr bool has_set_mem_use = has_set_mem_use_<Cache>::value;
 template<typename K, typename V, typename Impl, typename Hash, typename Eq, typename Create>
 class wrapper final
 : public extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>,
-  private Impl
+  public Impl
 {
  public:
   using key_type = typename extended_cache_intf<K, V, Hash, Eq, typename Impl::alloc_t, Create>::key_type;
