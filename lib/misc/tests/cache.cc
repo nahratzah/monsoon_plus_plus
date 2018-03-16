@@ -54,14 +54,11 @@ TEST(base_case) {
 }
 
 TEST(cache_size) {
-  std::vector<int> invocations;
-
   cache<int, int> c = cache<int, int>::builder()
       .not_thread_safe()
       .max_size(4)
       .build(
-          [&invocations]([[maybe_unused]] const auto& alloc, int i) {
-            invocations.push_back(i);
+          []([[maybe_unused]] const auto& alloc, int i) {
             return 2 * i;
           });
 
@@ -70,13 +67,29 @@ TEST(cache_size) {
   c(3);
   c(4);
   c(5); // Expire '1' due to cache size limitation.
-  REQUIRE CHECK_EQUAL(std::vector<int>({ 1, 2, 3, 4, 5 }), invocations);
 
   CHECK_EQUAL(std::shared_ptr<int>(nullptr), c.get_if_present(1));
   CHECK(c.get_if_present(2) != nullptr);
   CHECK(c.get_if_present(3) != nullptr);
   CHECK(c.get_if_present(4) != nullptr);
   CHECK(c.get_if_present(5) != nullptr);
+}
+
+TEST(cache_memory) {
+  cache<int, int> c = cache<int, int>::builder()
+      .with_allocator(cache_allocator<std::allocator<int>>())
+      .not_thread_safe()
+      .max_memory(500 * sizeof(int))
+      .build(
+          [](auto alloc, int i) {
+            return std::allocate_shared<int>(alloc, 2 * i);
+          });
+
+  for (int i = 0; i < 1000; ++i)
+    c(i);
+
+  CHECK(c.get_if_present(999) != nullptr);
+  CHECK(c.get_if_present(0) == nullptr);
 }
 
 int main() {
