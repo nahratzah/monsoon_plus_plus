@@ -1,5 +1,6 @@
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/impl.h>
+#include <memory>
 #include <vector>
 #include "UnitTest++/UnitTest++.h"
 
@@ -23,6 +24,7 @@ TEST(base_case) {
   std::vector<int> invocations;
 
   cache<int, int> c = cache<int, int>::builder()
+      .not_thread_safe()
       .build(
           [&invocations]([[maybe_unused]] const auto& alloc, int i) {
             invocations.push_back(i);
@@ -49,6 +51,32 @@ TEST(base_case) {
   REQUIRE CHECK(third_ptr != nullptr);
   CHECK_EQUAL(8, *third_ptr);
   CHECK_EQUAL(std::vector<int>({ 4, 4 }), invocations);
+}
+
+TEST(cache_size) {
+  std::vector<int> invocations;
+
+  cache<int, int> c = cache<int, int>::builder()
+      .not_thread_safe()
+      .max_size(4)
+      .build(
+          [&invocations]([[maybe_unused]] const auto& alloc, int i) {
+            invocations.push_back(i);
+            return 2 * i;
+          });
+
+  c(1);
+  c(2);
+  c(3);
+  c(4);
+  c(5); // Expire '1' due to cache size limitation.
+  REQUIRE CHECK_EQUAL(std::vector<int>({ 1, 2, 3, 4, 5 }), invocations);
+
+  CHECK_EQUAL(std::shared_ptr<int>(nullptr), c.get_if_present(1));
+  CHECK(c.get_if_present(2) != nullptr);
+  CHECK(c.get_if_present(3) != nullptr);
+  CHECK(c.get_if_present(4) != nullptr);
+  CHECK(c.get_if_present(5) != nullptr);
 }
 
 int main() {
