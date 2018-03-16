@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup cache_detail
 
+#include <cassert>
 #include <monsoon/cache/element.h>
 #include <monsoon/cache/store_delete_lock.h>
 

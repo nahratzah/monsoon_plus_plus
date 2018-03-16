@@ -4,6 +4,7 @@
 ///\file
 ///\ingroup cache
 
+#include <cassert>
 #include <memory>
 #include <thread>
 #include <type_traits>
