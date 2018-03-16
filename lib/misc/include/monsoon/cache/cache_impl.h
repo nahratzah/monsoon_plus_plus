@@ -346,6 +346,8 @@ class cache_impl
       store_type* created = nullptr)
   -> pointer;
 
+  ///\brief Compute number of target buckets that is needed.
+  auto compute_target_buckets_() const noexcept -> typename bucket_vector::size_type;
   ///\brief Perform rehashing, if load factor constraint requires it.
   auto maybe_rehash_() noexcept -> void;
 
@@ -582,14 +584,29 @@ auto cache_impl<T, A, D...>::resolve_(
 }
 
 template<typename T, typename A, typename... D>
-auto cache_impl<T, A, D...>::maybe_rehash_()
-noexcept // Allocation exception is swallowed.
--> void {
-  // Check if we require rehashing.
+auto cache_impl<T, A, D...>::compute_target_buckets_() const
+noexcept
+-> typename bucket_vector::size_type {
   const std::double_t target_buckets_dbl = std::ceil(std::double_t(size_) / lf_);
   typename bucket_vector::size_type target_buckets = buckets_.max_size();
   if (target_buckets_dbl < target_buckets)
     target_buckets = target_buckets_dbl;
+  return target_buckets;
+}
+
+template<typename T, typename A, typename... D>
+auto cache_impl<T, A, D...>::maybe_rehash_()
+noexcept // Allocation exception is swallowed.
+-> void {
+  // Check if we require rehashing.
+  if (buckets_.size() >= compute_target_buckets_())
+    return; // No rehash required.
+
+  // Full maintenance: erasing all expired elements.
+  for (auto& i : buckets_) i.erase_all_expired(*this);
+
+  // Recheck if we require rehashing, as erase_all_expired() may have reduced number of elements.
+  auto target_buckets = compute_target_buckets_();
   if (buckets_.size() >= target_buckets) return; // No rehash required.
 
   // Compute new number of buckets.

@@ -180,6 +180,29 @@ class bucket {
     }
   }
 
+  template<typename CacheImpl>
+  auto erase_all_expired(CacheImpl& owner)
+  noexcept
+  -> void {
+    store_type** iter = &head_; // Essentially a before-iterator, like in std::forward_list.
+
+    while (*iter != nullptr) {
+      store_type* s = *iter;
+
+      // Clean up expired entries as we traverse.
+      if (s->is_expired()) {
+        // Only delete if the use counter indicates the element is not referenced.
+        if (s->use_count.load(std::memory_order_acquire) == 0u) {
+          *iter = successor_ptr(*s); // Unlink s.
+          owner.on_delete(*s);
+          continue;
+        }
+      }
+
+      iter = &successor_ptr(*s); // Advance iter.
+    }
+  }
+
   ///\brief Rehashes each element into the bucket found by bucket_lookup_fn.
   ///\params[in] bucket_lookup_fn A functor returning a reference to a destination bucket, based on a hash code.
   template<typename BucketLookupFn>
