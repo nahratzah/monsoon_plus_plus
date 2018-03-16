@@ -23,7 +23,7 @@ struct max_age_decorator {
   };
 
   max_age_decorator(const cache_builder_vars& b)
-  : duration(b.access_expire().value())
+  : duration(b.max_age().value())
   {}
 
   auto init_tuple() const
