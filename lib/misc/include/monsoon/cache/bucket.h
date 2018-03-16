@@ -133,10 +133,10 @@ class bucket {
 
     // Create new store_type.
     store_type* new_store = create_fn(alloc_hint);
+    lookup_type new_ptr = new_store->ptr();
     created = store_delete_lock<store_type>(new_store); // Inform called of newly constructed store.
     owner.on_create(*created);
     *iter = new_store; // Link.
-    lookup_type new_ptr = new_store->ptr();
 
     assert(!store_type::is_nil(new_ptr)
         && new_store->hash() == hash_code);
