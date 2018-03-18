@@ -1,0 +1,3 @@
+[submodule "contrib/monsoon_cache"]
+	path = contrib/monsoon_cache
+	url = https://github.com/nahratzah/monsoon_cache.git

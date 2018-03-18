@@ -81,6 +81,11 @@ if (RT_LIB)
 endif()
 
 
+find_package(monsoon_cache)
+if(NOT monsoon_cache_DIR)
+  add_subdirectory(contrib/monsoon_cache)
+endif()
+
 # Add module directories.
 add_subdirectory (lib)
 add_subdirectory (intf)
