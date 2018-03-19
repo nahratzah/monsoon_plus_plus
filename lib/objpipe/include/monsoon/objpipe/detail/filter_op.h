@@ -115,8 +115,9 @@ class filter_op {
   }
 
   template<bool Enable =
-      std::is_same_v<store_type, transport<adapt::try_pull_type<Source>>>
-      || std::is_same_v<transport<adapt::value_type<Source>>, transport<adapt::try_pull_type<Source>>>>
+      adapt::has_try_pull<Source>
+      && (std::is_same_v<store_type, transport<adapt::try_pull_type<Source>>>
+          || std::is_same_v<transport<adapt::value_type<Source>>, transport<adapt::try_pull_type<Source>>>)>
   constexpr auto try_pull()
   noexcept(
       std::is_nothrow_constructible_v<transport<adapt::try_pull_type<Source>>, store_type>
@@ -146,8 +147,9 @@ class filter_op {
   }
 
   template<bool Enable =
-      std::is_same_v<store_type, transport<adapt::pull_type<Source>>>
-      || std::is_same_v<transport<adapt::value_type<Source>>, transport<adapt::pull_type<Source>>>>
+      adapt::has_pull<Source>
+      && (std::is_same_v<store_type, transport<adapt::pull_type<Source>>>
+          || std::is_same_v<transport<adapt::value_type<Source>>, transport<adapt::pull_type<Source>>>)>
   constexpr auto pull()
   noexcept(
       std::is_nothrow_constructible_v<transport<adapt::pull_type<Source>>, store_type>
