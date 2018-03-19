@@ -131,6 +131,16 @@ class adapter_t {
   : src_(std::move(src))
   {}
 
+  ///\brief Swap objpipes.
+  friend auto swap(adapter_t& x, adapter_t& y)
+  noexcept(std::is_nothrow_swappable_v<Source>
+      && std::is_nothrow_swappable_v<store_type>)
+  -> void {
+    using std::swap;
+    swap(x.src_, y.src_);
+    swap(x.store_, y.store_);
+  }
+
   /**
    * \brief Tests if the objpipe is pullable.
    *
