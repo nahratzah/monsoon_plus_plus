@@ -46,13 +46,13 @@ class array_pipe {
     return !data_.empty();
   }
 
-  auto wait() const
+  auto wait()
   noexcept(noexcept(std::declval<const data_type&>().empty()))
   -> objpipe_errc {
     return (data_.empty() ? objpipe_errc::closed : objpipe_errc::success);
   }
 
-  auto front() const
+  auto front()
   noexcept(noexcept(std::declval<const data_type&>().empty())
       && noexcept(std::declval<const data_type&>().front()))
   -> transport<T&&> {
@@ -87,7 +87,7 @@ class array_pipe {
   }
 
  private:
-  mutable data_type data_;
+  data_type data_;
 };
 
 

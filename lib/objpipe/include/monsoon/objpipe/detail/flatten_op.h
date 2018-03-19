@@ -312,7 +312,7 @@ class flatten_op {
   }
 
  private:
-  auto ensure_avail_() const
+  auto ensure_avail_()
   noexcept(ensure_avail_noexcept)
   -> objpipe_errc {
     while (!active_.has_value() || active_->empty()) {
@@ -332,8 +332,8 @@ class flatten_op {
     return objpipe_errc::success;
   }
 
-  mutable Source src_;
-  mutable std::optional<store_type> active_;
+  Source src_;
+  std::optional<store_type> active_;
 };
 
 

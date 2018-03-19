@@ -55,7 +55,7 @@ class filter_store_copy_ {
     return objpipe_errc::success;
   }
 
-  constexpr auto get() const
+  constexpr auto get()
   noexcept
   -> T&& {
     assert(present_);
@@ -91,7 +91,7 @@ class filter_store_copy_ {
 
  private:
   bool present_ = false;
-  mutable std::optional<T> val_;
+  std::optional<T> val_;
 };
 
 template<typename T>

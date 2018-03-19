@@ -82,8 +82,8 @@ class of_pipe {
   }
 
  private:
-  mutable bool consumed_ = false;
-  mutable T val_;
+  bool consumed_ = false;
+  T val_;
 };
 
 template<typename T>

@@ -176,13 +176,13 @@ class callback_pipe {
     return bool(std::get<1>(src_));
   }
 
-  auto wait() const
+  auto wait()
   -> objpipe_errc {
     ensure_init_();
     return (std::get<1>(src_) ? objpipe_errc::success : objpipe_errc::closed);
   }
 
-  auto front() const
+  auto front()
   -> transport<result_type> {
     ensure_init_();
     auto& coro = std::get<1>(src_);
@@ -201,7 +201,7 @@ class callback_pipe {
     return objpipe_errc::success;
   }
 
-  auto pull() const
+  auto pull()
   -> transport<result_type> {
     ensure_init_();
     auto& coro = std::get<1>(src_);
@@ -211,7 +211,7 @@ class callback_pipe {
     return transport<result_type>(std::in_place_index<0>, get());
   }
 
-  auto try_pull() const
+  auto try_pull()
   -> transport<result_type> {
     ensure_init_();
     auto& coro = std::get<1>(src_);
@@ -222,7 +222,7 @@ class callback_pipe {
   }
 
  private:
-  void ensure_init_() const {
+  void ensure_init_() {
     if (src_.index() == 0) {
       assert(!must_advance_);
       fn_type fn = std::get<0>(std::move(src_));
@@ -234,7 +234,7 @@ class callback_pipe {
     if (std::exchange(must_advance_, false)) std::get<1>(src_)();
   }
 
-  auto get() const
+  auto get()
   -> result_type {
     assert(src_.index() == 1);
     assert(std::get<1>(src_));
@@ -244,8 +244,8 @@ class callback_pipe {
       return std::move(*std::get<1>(src_).get());
   }
 
-  mutable std::variant<fn_type, typename coro_t::pull_type> src_;
-  mutable bool must_advance_ = false;
+  std::variant<fn_type, typename coro_t::pull_type> src_;
+  bool must_advance_ = false;
 };
 
 
