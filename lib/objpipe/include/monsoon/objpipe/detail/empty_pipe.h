@@ -10,6 +10,11 @@ namespace monsoon::objpipe::detail {
 template<typename T>
 class empty_pipe {
  public:
+  friend auto swap(empty_pipe& x, empty_pipe& y)
+  noexcept
+  -> void
+  {}
+
   constexpr auto wait()
   noexcept
   -> objpipe_errc {

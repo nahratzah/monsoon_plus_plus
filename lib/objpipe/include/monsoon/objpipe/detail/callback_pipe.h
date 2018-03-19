@@ -76,8 +76,7 @@ class callback_fn_wrapper {
   {}
 
   friend auto swap(callback_fn_wrapper& x, callback_fn_wrapper& y)
-  noexcept(std::is_nothrow_swappable_v<Fn>)
-  -> void {
+  noexcept(std::is_nothrow_swappable_v<Fn>) {
     using std::swap;
     swap(x.fn_, y.fn_);
   }
@@ -179,8 +178,7 @@ class callback_pipe {
 
   friend auto swap(callback_pipe& x, callback_pipe& y)
   noexcept(std::is_nothrow_swappable_v<fn_type>
-      && std::is_nothrow_swappable_v<typename coro_t::pull_type>)
-  -> void {
+      && std::is_nothrow_swappable_v<typename coro_t::pull_type>) {
     using std::swap;
     swap(x.src_, y.src_);
     swap(x.must_advance_, y.must_advance_);

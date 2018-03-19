@@ -42,8 +42,7 @@ class merge_queue_elem_ {
 
   friend auto swap(merge_queue_elem_& x, merge_queue_elem_& y)
   noexcept(std::is_nothrow_swappable_v<transport_type>
-      && std::is_nothrow_swappable_v<Source>)
-  -> void {
+      && std::is_nothrow_swappable_v<Source>) {
     using std::swap;
     swap(x.front_val_, y.front_val_);
     swap(x.src_, y.src_);
