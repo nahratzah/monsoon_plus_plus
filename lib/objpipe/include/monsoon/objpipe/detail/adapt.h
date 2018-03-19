@@ -43,6 +43,13 @@
  * auto assertion(Fn&& fn) && -> ...
  * auto flatten() && -> ...
  * \endcode
+ *
+ * The Source type must meet Move Constructible and Swappable semantics.
+ * Furthermore, in order for the Swappable semantic to be met, the swap(x, y)
+ * function should be implemented in terms of swap for at least the sources
+ * used by this source.
+ * (Note that sources may not be Move Assignable, so std::swap will not be
+ * sufficient to implement Swappable semantics.)
  */
 namespace monsoon::objpipe::detail::adapt {
 

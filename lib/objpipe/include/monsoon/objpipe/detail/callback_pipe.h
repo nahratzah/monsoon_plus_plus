@@ -74,6 +74,13 @@ class callback_fn_wrapper {
   : fn_(fn)
   {}
 
+  friend auto swap(callback_fn_wrapper& x, callback_fn_wrapper& y)
+  noexcept(std::is_nothrow_swappable_v<Fn>)
+  -> void {
+    using std::swap;
+    swap(x.fn_, y.fn_);
+  }
+
   auto operator()(typename callback_push<T>::impl_type& push)
   -> void {
     callback_push<T> cb_push = callback_push<T>(push);
@@ -135,9 +142,13 @@ class callback_pipe {
         std::add_rvalue_reference_t<T>>;
 
   static_assert(std::is_move_constructible_v<typename coro_t::pull_type>,
-      "Coroutine object is not move constructible.");
-  static_assert(std::is_move_assignable_v<typename coro_t::pull_type>,
-      "Coroutine object is not move constructible.");
+      "Coroutine object must be move constructible.");
+  static_assert(std::is_swappable_v<typename coro_t::pull_type>,
+      "Coroutine object must be swappable.");
+  static_assert(std::is_move_constructible_v<Fn>,
+      "Callback functor must be move constructible.");
+  static_assert(std::is_swappable_v<Fn>,
+      "Callback functor must be swappable.");
 
  public:
   callback_pipe(callback_pipe&& other)
@@ -168,6 +179,15 @@ class callback_pipe {
   noexcept(std::is_nothrow_copy_constructible_v<Fn>)
   : src_(std::in_place_index<0>, fn)
   {}
+
+  friend auto swap(callback_pipe& x, callback_pipe& y)
+  noexcept(std::is_nothrow_swappable_v<fn_type>
+      && std::is_nothrow_swappable_v<typename coro_t::pull_type>)
+  -> void {
+    using std::swap;
+    swap(x.src_, y.src_);
+    swap(x.must_advance_, y.must_advance_);
+  }
 
   auto is_pullable()
   noexcept

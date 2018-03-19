@@ -206,6 +206,17 @@ class filter_op {
     pred_(std::forward<Init>(init)...)
   {}
 
+  friend auto swap(filter_op& x, filter_op& y)
+  noexcept(std::is_nothrow_swappable_v<Source>
+      && std::is_nothrow_swappable_v<store_type>
+      && std::is_nothrow_swappable_v<std::tuple<Pred...>>)
+  -> void {
+    using std::swap;
+    swap(x.src_, y.src_);
+    swap(x.store_, y.store_);
+    swap(x.pred_, y.pred_);
+  }
+
   constexpr auto is_pullable()
   noexcept
   -> bool {

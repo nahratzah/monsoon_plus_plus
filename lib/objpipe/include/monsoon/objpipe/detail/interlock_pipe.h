@@ -209,25 +209,18 @@ class interlock_pipe {
 
   interlock_pipe(const interlock_pipe& other) = delete;
   auto operator=(const interlock_pipe& other) -> interlock_pipe& = delete;
-#if 0 // Can't copy, due to front() and pop_front() combination not being multiple-reader proof.
-  interlock_pipe(const interlock_pipe& other)
-  noexcept
-  : ptr_(other.ptr_)
-  {
-    if (ptr_ != nullptr) ptr_->inc_reader();
-  }
-
-  auto operator=(const interlock_pipe& other)
-  noexcept
-  -> interlock_pipe& {
-    return *this = interlock_pipe(other);
-  }
-#endif
 
   ~interlock_pipe()
   noexcept {
     if (ptr_ != nullptr && ptr_->subtract_reader())
       delete ptr_;
+  }
+
+  friend auto swap(interlock_pipe& x, interlock_pipe& y)
+  noexcept
+  -> void {
+    using std::swap;
+    swap(x.ptr_, y.ptr_);
   }
 
   auto is_pullable()

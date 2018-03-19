@@ -45,32 +45,6 @@ noexcept(std::is_nothrow_constructible_v<adapter_t<std::decay_t<Source>>, Source
  */
 template<typename Source>
 class adapter_iterator {
-  // Validate requirements on Source.
-#if 0 // XXX some intermediate operations need fixing for this trait.
-  static_assert(std::is_swappable_v<Source>,
-      "Source implementation must be swappable.");
-#endif
-  static_assert(std::is_same_v<
-      adapt::value_type<Source>,
-      std::remove_cv_t<std::remove_reference_t<adapt::front_type<Source>>>>,
-      "front() must return a transport of value_type (with any const and reference qualifier).");
-  static_assert(std::is_same_v<
-      adapt::value_type<Source>,
-      std::remove_cv_t<std::remove_reference_t<adapt::pull_type<Source>>>>,
-      "pull() must return a transport of value_type (with any const and reference qualifier).");
-  static_assert(std::is_same_v<
-      adapt::value_type<Source>,
-      std::remove_cv_t<std::remove_reference_t<adapt::try_pull_type<Source>>>>,
-      "try_pull() must return a transport of value_type (with any const and reference qualifier).");
-  static_assert(std::is_same_v<
-      objpipe_errc,
-      decltype(std::declval<Source&>().wait())>,
-      "Source must implement wait() method, returning objpipe_errc.");
-  static_assert(std::is_same_v<
-      bool,
-      decltype(std::declval<Source&>().is_pullable())>,
-      "Source must implement is_pullable() method, returning bool.");
-
  public:
   using value_type = adapt::value_type<Source>;
   using reference = adapt::pull_type<Source>;
@@ -139,8 +113,32 @@ class adapter_iterator {
  */
 template<typename Source>
 class adapter_t {
+  // Validate requirements on Source.
   static_assert(std::is_move_constructible_v<Source>,
-      "Source must be move constructible.");
+      "Source implementation must be move constructible.");
+  static_assert(std::is_swappable_v<Source>,
+      "Source implementation must be swappable.");
+  static_assert(std::is_same_v<
+      adapt::value_type<Source>,
+      std::remove_cv_t<std::remove_reference_t<adapt::front_type<Source>>>>,
+      "front() must return a transport of value_type (with any const and reference qualifier).");
+  static_assert(std::is_same_v<
+      adapt::value_type<Source>,
+      std::remove_cv_t<std::remove_reference_t<adapt::pull_type<Source>>>>,
+      "pull() must return a transport of value_type (with any const and reference qualifier).");
+  static_assert(std::is_same_v<
+      adapt::value_type<Source>,
+      std::remove_cv_t<std::remove_reference_t<adapt::try_pull_type<Source>>>>,
+      "try_pull() must return a transport of value_type (with any const and reference qualifier).");
+  static_assert(std::is_same_v<
+      objpipe_errc,
+      decltype(std::declval<Source&>().wait())>,
+      "Source must implement wait() method, returning objpipe_errc.");
+  static_assert(std::is_same_v<
+      bool,
+      decltype(std::declval<Source&>().is_pullable())>,
+      "Source must implement is_pullable() method, returning bool.");
+
 
  private:
   using store_type = transport<adapt::front_type<Source>>;

@@ -760,20 +760,29 @@ class pair_merger_pipe {
       std::shared_ptr<const match_clause> out_mc,
       time_point::duration slack,
       FnArg&& fn);
-  auto wait() const -> objpipe_errc;
-  auto is_pullable() const noexcept -> bool;
-  auto front() const -> transport_type;
+  auto wait() -> objpipe_errc;
+  auto is_pullable() noexcept -> bool;
+  auto front() -> transport_type;
   auto pop_front() -> objpipe_errc;
   auto pull() -> transport_type;
   auto try_pull() -> transport_type;
 
+  friend auto swap(pair_merger_pipe& x, pair_merger_pipe& y)
+  noexcept(std::is_nothrow_swappable_v<pull_cycle<PipeX>>
+      && std::is_nothrow_swappable_v<pull_cycle<PipeY>>
+      && std::is_nothrow_swappable_v<std::shared_ptr<const match_clause>>
+      && std::is_nothrow_swappable_v<Fn>
+      && std::is_nothrow_swappable_v<time_point::duration>
+      && std::is_nothrow_swappable_v<time_point>)
+  -> void;
+
  private:
-  mutable pull_cycle<PipeX> x_;
-  mutable pull_cycle<PipeY> y_;
+  pull_cycle<PipeX> x_;
+  pull_cycle<PipeY> y_;
   std::shared_ptr<const match_clause> out_mc_;
   Fn fn_;
   time_point::duration slack_;
-  mutable std::optional<time_point> last_front_tp_;
+  std::optional<time_point> last_front_tp_;
 };
 
 
@@ -1339,7 +1348,7 @@ pair_merger_pipe<PipeX, PipeY, Fn>::pair_merger_pipe(PipeX&& x, PipeY&& y,
 {}
 
 template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() const -> objpipe_errc {
+auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() -> objpipe_errc {
   assert(!last_front_tp_.has_value());
 
   std::optional<time_point> x_tp = x_.suggest_emit_tp();
@@ -1363,7 +1372,7 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() const -> objpipe_errc {
 }
 
 template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::is_pullable() const
+auto pair_merger_pipe<PipeX, PipeY, Fn>::is_pullable()
 noexcept
 -> bool {
   return (x_.is_pullable() || x_.suggest_emit_tp().has_value())
@@ -1371,7 +1380,7 @@ noexcept
 }
 
 template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::front() const
+auto pair_merger_pipe<PipeX, PipeY, Fn>::front()
 -> transport_type {
   assert(!last_front_tp_.has_value());
 
@@ -1500,6 +1509,24 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::try_pull()
   x_.mark_emitted(tp);
   y_.mark_emitted(tp);
   return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+}
+
+template<typename PipeX, typename PipeY, typename Fn>
+auto swap(pair_merger_pipe<PipeX, PipeY, Fn>& x, pair_merger_pipe<PipeX, PipeY, Fn>& y)
+noexcept(std::is_nothrow_swappable_v<pull_cycle<PipeX>>
+    && std::is_nothrow_swappable_v<pull_cycle<PipeY>>
+    && std::is_nothrow_swappable_v<std::shared_ptr<const match_clause>>
+    && std::is_nothrow_swappable_v<Fn>
+    && std::is_nothrow_swappable_v<time_point::duration>
+    && std::is_nothrow_swappable_v<time_point>)
+-> void {
+  using std::swap;
+  swap(x.x_, y.x_);
+  swap(x.y_, y.y_);
+  swap(x.out_mc_, y.out_mc_);
+  swap(x.fn_, y.fn_);
+  swap(x.slack_, y.slack_);
+  swap(x.last_front_tp_, y.last_front_tp_);
 }
 
 

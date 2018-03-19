@@ -268,6 +268,15 @@ class transform_op {
     fn_(std::forward<FnAdapterArgs>(fn_adapter_args)...)
   {}
 
+  friend auto swap(transform_op& x, transform_op& y)
+  noexcept(std::is_nothrow_swappable_v<Source>
+      && std::is_nothrow_swappable_v<fn_type>)
+  -> void {
+    using std::swap;
+    swap(x.src_, y.src_);
+    swap(x.fn_, y.fn_);
+  }
+
   constexpr auto is_pullable()
   noexcept
   -> bool {
