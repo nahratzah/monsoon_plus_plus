@@ -50,6 +50,15 @@
  * used by this source.
  * (Note that sources may not be Move Assignable, so std::swap will not be
  * sufficient to implement Swappable semantics.)
+ *
+ * If front(), pull(), or try_pull() returns a transport reference, the
+ * reference must stay valid until:
+ * - the next call to pop_front() (in the case of pull),
+ * - the next call to front(), pull(), or try_pull(),
+ * - the next time the source is move constructed or swapped,
+ * - the source is destroyed.
+ *
+ * Whichever comes first.
  */
 namespace monsoon::objpipe::detail::adapt {
 
