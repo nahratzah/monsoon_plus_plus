@@ -69,6 +69,13 @@ class transport {
     return std::get<0>(std::move(data_));
   }
 
+  auto ref()
+  noexcept
+  -> std::add_lvalue_reference_t<value_type> {
+    assert(has_value());
+    return std::get<0>(data_);
+  }
+
   auto errc() const
   noexcept
   -> objpipe_errc {
@@ -135,6 +142,12 @@ class transport<T&> {
   -> T* {
     assert(has_value());
     return std::get<0>(data_);
+  }
+
+  auto ref()
+  noexcept
+  -> type {
+    return value();
   }
 
   auto errc() const
@@ -212,6 +225,13 @@ class transport<T&&> {
   -> T* {
     assert(has_value());
     return std::get<0>(data_);
+  }
+
+  auto ref()
+  noexcept
+  -> std::add_lvalue_reference_t<value_type> {
+    assert(has_value());
+    return *std::get<0>(data_);
   }
 
   auto errc() const

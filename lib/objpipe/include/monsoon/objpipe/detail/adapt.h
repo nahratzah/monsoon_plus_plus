@@ -194,51 +194,6 @@ noexcept(noexcept(std::declval<Source&>().wait()))
 }
 
 /**
- * \brief Adapter for the wait function.
- * \ingroup objpipe_detail
- *
- * \details Adapts a call to the wait() function.
- * \tparam Source Type of the objpipe source.
- * \return A transport containing the next value or an error code.
- * \throw std::system_error if the front() call fails.
- */
-template<typename Source>
-auto front(
-    Source& src ///< [in] Object pipe source that is to be adapted.
-    )
--> front_type<Source> {
-  transport<front_type<Source>> v = src.front();
-  if (v.has_value())
-    return std::move(v).value();
-
-  assert(v.errc() != objpipe_errc::success);
-  throw std::system_error(
-      static_cast<int>(v.errc()),
-      objpipe_category());
-}
-
-/**
- * \brief Adapter for the pop_front function.
- * \ingroup objpipe_detail
- *
- * \details Adapts a call to the pop_front() function.
- * \tparam Source Type of the objpipe source.
- * \throw std::system_error if the pop_front() call fails.
- */
-template<typename Source>
-auto pop_front(
-    Source& src ///< [in] Object pipe source that is to be adapted.
-    )
--> std::enable_if_t<!std::is_const_v<Source>, void> {
-  const objpipe_errc e = src.pop_front();
-  if (e != objpipe_errc::success) {
-    throw std::system_error(
-        static_cast<int>(e),
-        objpipe_category());
-  }
-}
-
-/**
  * \brief raw try_pull adapter.
  * \ingroup objpipe_detail
  *
@@ -292,35 +247,6 @@ noexcept(noexcept(std::declval<Source&>().front())
 }
 
 /**
- * \brief try_pull adapter.
- * \ingroup objpipe_detail
- *
- * \details Adapts a call to try_pull method.
- *
- * Handles the case of implemented try_pull method.
- *
- * \tparam Source Type of the objpipe source.
- * \return A optional containing the pulled value, if one was available.
- * \throw std::system_error if the try_pull() call fails.
- */
-template<typename Source>
-auto try_pull(
-    Source& src ///< [in] Object pipe source that is to be adapted.
-    )
--> std::optional<std::decay_t<try_pull_type<Source>>> {
-  transport<try_pull_type<Source>> v = raw_try_pull(src);
-  if (v.has_value())
-    return std::make_optional(std::move(v).value());
-
-  if (v.errc() != objpipe_errc::success && v.errc() != objpipe_errc::closed) {
-    throw std::system_error(
-        static_cast<int>(v.errc()),
-        objpipe_category());
-  }
-  return {};
-}
-
-/**
  * \brief raw pull adapter.
  * \ingroup objpipe_detail
  *
@@ -368,57 +294,6 @@ noexcept(noexcept(raw_try_pull(std::declval<Source&>()))
     if (v.errc() != objpipe_errc::success)
       return v;
   }
-}
-
-/**
- * \brief Adapter that maps the internal pull method to throw on error.
- * \ingroup objpipe_detail
- *
- * \details Adapts a call to Source pull() method, to throw an exception if
- * it fails.
- *
- * \tparam Source Type of the objpipe source.
- * \return The pulled value.
- * \throw std::system_error if the pull() call fails.
- */
-template<typename Source>
-auto pull(
-    Source& src ///< [in] Object pipe source that is to be adapted.
-    )
--> std::enable_if_t<!std::is_const_v<Source> && has_pull<Source>,
-    pull_type<Source>> {
-  transport<pull_type<Source>> v = raw_pull(src);
-  if (v.has_value()) return std::move(v).value();
-
-  assert(v.errc() != objpipe_errc::success);
-  throw std::system_error(static_cast<int>(v.errc()), objpipe_category());
-}
-
-/**
- * \brief Adapter that maps the internal pull method to throw on error.
- * \ingroup objpipe_detail
- *
- * \details Emulates a pull(objpipe_errc&) call on source.
- *
- * \tparam Source Type of the objpipe source.
- * \return Optional with the pulled value, iff e == objpipe_errc::success.
- * \throw std::system_error if the pull() call fails.
- */
-template<typename Source>
-auto pull(
-    Source& src, ///< [in] Object pipe source that is to be adapted.
-    objpipe_errc& e ///< [out] Error code.
-    )
-noexcept(std::is_nothrow_move_constructible_v<std::decay_t<pull_type<Source>>>
-    && noexcept(raw_pull(std::declval<Source&>())))
--> std::enable_if_t<!std::is_const_v<Source> && has_pull<Source>,
-    std::optional<std::decay_t<pull_type<Source>>>> {
-  transport<pull_type<Source>> v = raw_pull(src);
-  e = v.errc();
-  assert(v.has_value() || v.errc() != objpipe_errc::success);
-
-  if (v.has_value()) return std::make_optional(std::move(v).value());
-  return {};
 }
 
 /**
