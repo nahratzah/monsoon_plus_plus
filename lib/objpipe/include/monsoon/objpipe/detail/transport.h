@@ -35,6 +35,14 @@ class transport {
   : data_(std::in_place_index<1>, e)
   {}
 
+  friend auto swap(transport& x, transport& y)
+  noexcept(std::is_nothrow_move_constructible_v<value_type>
+      && std::is_nothrow_swappable_v<value_type>)
+  -> void {
+    using std::swap;
+    swap(x.data_, y.data_);
+  }
+
   auto has_value() const
   noexcept
   -> bool {
@@ -124,6 +132,13 @@ class transport<T&> {
   : data_(std::in_place_index<1>, e)
   {}
 
+  friend auto swap(transport& x, transport& y)
+  noexcept
+  -> void {
+    using std::swap;
+    swap(x.data_, y.data_);
+  }
+
   auto has_value() const
   noexcept
   -> bool {
@@ -206,6 +221,13 @@ class transport<T&&> {
   noexcept
   : data_(std::in_place_index<1>, e)
   {}
+
+  friend auto swap(transport& x, transport& y)
+  noexcept
+  -> void {
+    using std::swap;
+    swap(x.data_, y.data_);
+  }
 
   auto has_value() const
   noexcept
