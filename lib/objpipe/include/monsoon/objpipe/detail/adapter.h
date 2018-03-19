@@ -139,6 +139,15 @@ class adapter_t {
       decltype(std::declval<Source&>().is_pullable())>,
       "Source must implement is_pullable() method, returning bool.");
 
+  static inline auto check_swap_is_compilable_(Source& x, Source& y)
+  -> decltype(auto) /* Force evaluation of body. */ {
+    using std::swap;
+    swap(x, y);
+  }
+  static_assert(std::is_same_v<
+      void,
+      std::void_t<decltype(check_swap_is_compilable_(std::declval<Source&>(), std::declval<Source&>()))>>,
+      "Swap must correctly compile.");
 
  private:
   using store_type = transport<adapt::front_type<Source>>;

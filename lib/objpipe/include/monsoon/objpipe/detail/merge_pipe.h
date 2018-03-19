@@ -154,10 +154,9 @@ class merge_pipe_base {
         [](auto&& src) { return std::move(src).underlying(); });
   }
 
-  auto swap(merge_pipe_base& other)
+  auto swap_(merge_pipe_base& other)
   noexcept(std::is_nothrow_swappable_v<queue_container_type>
-      && std::is_nothrow_swappable_v<Less>)
-  -> void {
+      && std::is_nothrow_swappable_v<Less>) {
     using std::swap;
     swap(data_, other.data_);
     swap(less_, other.less_);
@@ -236,15 +235,15 @@ class merge_pipe_base {
   -> queue_elem* {
     // Make data_ be heap sorted in its entirety.
     if (need_init_) {
-      std::make_heap(data_.begin(), data_.end(), greater(less_));
+      std::make_heap(data_.begin(), data_.end(), greater(*less_));
       need_init_ = false;
     } else if (!data_.empty()) {
-      std::push_heap(data_.begin(), data_.end(), greater(less_));
+      std::push_heap(data_.begin(), data_.end(), greater(*less_));
     }
 
     // Pop one element from the heap.
     while (!data_.empty()) {
-      std::pop_heap(data_.begin(), data_.end(), greater(less_));
+      std::pop_heap(data_.begin(), data_.end(), greater(*less_));
       if (data_.back().get().errc() == objpipe_errc::closed)
         data_.pop_back();
       else
@@ -273,7 +272,7 @@ class merge_pipe_base {
    * \endcode
    */
   queue_container_type data_;
-  Less less_;
+  functor<Less> less_;
   bool need_init_ = true;
 };
 
@@ -292,12 +291,11 @@ class merge_pipe
   using merge_pipe_base<Source, Less>::is_pullable;
   using merge_pipe_base<Source, Less>::wait;
 
-  auto swap(merge_pipe& other)
+  auto swap_(merge_pipe& other)
   noexcept(noexcept(std::declval<merge_pipe_base<Source, Less>&>()
-          .swap(std::declval<merge_pipe_base<Source, Less>&>())))
-  -> void {
+          .swap_(std::declval<merge_pipe_base<Source, Less>&>()))) {
     using std::swap;
-    this->merge_pipe_base<Source, Less>::swap(other);
+    this->merge_pipe_base<Source, Less>::swap_(other);
     swap(recent, other.recent);
   }
 
@@ -353,13 +351,12 @@ class merge_reduce_pipe
   using merge_pipe_base<Source, Less>::is_pullable;
   using merge_pipe_base<Source, Less>::wait;
 
-  auto swap(merge_reduce_pipe& other)
+  auto swap_(merge_reduce_pipe& other)
   noexcept(noexcept(std::declval<merge_pipe_base<Source, Less>&>()
-          .swap(std::declval<merge_pipe_base<Source, Less>&>()))
-      && std::is_nothrow_swappable_v<do_merge_t<value_type, ReduceOp>>)
-  -> void {
+          .swap_(std::declval<merge_pipe_base<Source, Less>&>()))
+      && std::is_nothrow_swappable_v<do_merge_t<value_type, ReduceOp>>) {
     using std::swap;
-    this->merge_pipe_base<Source, Less>::swap(other);
+    this->merge_pipe_base<Source, Less>::swap_(other);
     swap(pending_pop, other.pending_pop);
     swap(do_merge_, other.do_merge_);
   }
@@ -467,6 +464,12 @@ class do_merge_t {
   : op_(op)
   {}
 
+  friend auto swap(do_merge_t& x, do_merge_t& y)
+  noexcept(std::is_nothrow_swappable_v<functor<ReduceOp>>) {
+    using std::swap;
+    swap(x.op_, y.op_);
+  }
+
   auto operator()(transport<value_type>& x, transport<value_type>&& y) const
   -> void {
     if constexpr(is_rr_invocable)
@@ -527,22 +530,20 @@ class do_merge_t {
       x.emplace(std::in_place_index<0>, std::forward<V>(v));
   }
 
-  ReduceOp op_;
+  functor<ReduceOp> op_;
 };
 
 
 template<typename Source, typename Less>
 auto swap(merge_pipe<Source, Less>& x, merge_pipe<Source, Less>& y)
-noexcept(noexcept(x.swap(y)))
--> void {
-  x.swap(y);
+noexcept(noexcept(x.swap_(y))) {
+  x.swap_(y);
 }
 
 template<typename Source, typename Less, typename ReduceOp>
 auto swap(merge_reduce_pipe<Source, Less, ReduceOp>& x, merge_reduce_pipe<Source, Less, ReduceOp>& y)
-noexcept(noexcept(x.swap(y)))
--> void {
-  x.swap(y);
+noexcept(noexcept(x.swap_(y))) {
+  x.swap_(y);
 }
 
 
