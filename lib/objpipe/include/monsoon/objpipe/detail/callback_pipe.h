@@ -11,7 +11,7 @@
 #include <boost/coroutine2/coroutine.hpp>
 #include <monsoon/objpipe/detail/transport.h>
 #include <monsoon/objpipe/detail/invocable_.h>
-#include <monsoon/objpipe/detail/functor.h>
+#include <monsoon/objpipe/detail/swappable.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -92,7 +92,7 @@ class callback_fn_wrapper {
   }
 
  private:
-  functor<Fn> fn_;
+  swappable<Fn> fn_;
 };
 
 /**

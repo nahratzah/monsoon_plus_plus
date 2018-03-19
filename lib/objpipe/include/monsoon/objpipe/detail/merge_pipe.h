@@ -6,6 +6,7 @@
 #include <iterator>
 #include <type_traits>
 #include <monsoon/objpipe/detail/invocable_.h>
+#include <monsoon/objpipe/detail/swappable.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -271,7 +272,7 @@ class merge_pipe_base {
    * \endcode
    */
   queue_container_type data_;
-  functor<Less> less_;
+  swappable<Less> less_;
   bool need_init_ = true;
 };
 
@@ -464,7 +465,7 @@ class do_merge_t {
   {}
 
   friend auto swap(do_merge_t& x, do_merge_t& y)
-  noexcept(std::is_nothrow_swappable_v<functor<ReduceOp>>) {
+  noexcept(std::is_nothrow_swappable_v<swappable<ReduceOp>>) {
     using std::swap;
     swap(x.op_, y.op_);
   }
@@ -529,7 +530,7 @@ class do_merge_t {
       x.emplace(std::in_place_index<0>, std::forward<V>(v));
   }
 
-  functor<ReduceOp> op_;
+  swappable<ReduceOp> op_;
 };
 
 
