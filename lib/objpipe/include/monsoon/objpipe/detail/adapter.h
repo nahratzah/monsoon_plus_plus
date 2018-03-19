@@ -116,8 +116,12 @@ class adapter_t {
   // Validate requirements on Source.
   static_assert(std::is_move_constructible_v<Source>,
       "Source implementation must be move constructible.");
-  static_assert(std::is_swappable_v<Source>,
-      "Source implementation must be swappable.");
+  static_assert(!std::is_swappable_v<Source>
+      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>,
+      "Source implementation must not be swappable.");
+  static_assert((!std::is_move_assignable_v<Source> && !std::is_copy_assignable_v<Source>)
+      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>,
+      "Source implementation must not be assignable.");
   static_assert(std::is_same_v<
       adapt::value_type<Source>,
       std::remove_cv_t<std::remove_reference_t<adapt::front_type<Source>>>>,
@@ -138,16 +142,6 @@ class adapter_t {
       bool,
       decltype(std::declval<Source&>().is_pullable())>,
       "Source must implement is_pullable() method, returning bool.");
-
-  static inline auto check_swap_is_compilable_(Source& x, Source& y)
-  -> decltype(auto) /* Force evaluation of body. */ {
-    using std::swap;
-    swap(x, y);
-  }
-  static_assert(std::is_same_v<
-      void,
-      std::void_t<decltype(check_swap_is_compilable_(std::declval<Source&>(), std::declval<Source&>()))>>,
-      "Swap must correctly compile.");
 
  private:
   using store_type = transport<adapt::front_type<Source>>;

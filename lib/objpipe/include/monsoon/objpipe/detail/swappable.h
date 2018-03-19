@@ -15,7 +15,7 @@ namespace monsoon::objpipe::detail {
 
 ///\brief Default case of a swappable: move constructible and swappable.
 template<typename T>
-class dfl_swappable {
+class [[deprecated("Swappable is not that good an idea, in hindsight.")]] dfl_swappable {
   static_assert(std::is_move_constructible_v<T>,
       "This swappable requires T to be move constructible.");
   static_assert(std::is_swappable_v<T>,
@@ -79,7 +79,7 @@ class dfl_swappable {
 
 ///\brief Empty-member-optimization of a swappable.
 template<typename T>
-class emo_swappable
+class [[deprecated("Swappable is not that good an idea, in hindsight.")]] emo_swappable
 : public T
 {
   static_assert(std::is_move_constructible_v<T>,
@@ -147,7 +147,7 @@ class emo_swappable
 ///\brief Functor that is swappable, by being implemented in terms of move semantics.
 ///\details Internally, placement new is used to construct the type during swap.
 template<typename T>
-class lambda_swappable_with_nothrow_move {
+class [[deprecated("Swappable is not that good an idea, in hindsight.")]] lambda_swappable_with_nothrow_move {
   static_assert(std::is_move_constructible_v<T>,
       "This swappable requires T to be move constructible.");
   static_assert(!std::is_swappable_v<T>,
@@ -255,7 +255,7 @@ class lambda_swappable_with_nothrow_move {
  * (like lambda_swappable_with_nothrow_move has to do).
  */
 template<typename T>
-class lambda_swappable_with_throwing_move {
+class [[deprecated("Swappable is not that good an idea, in hindsight.")]] lambda_swappable_with_throwing_move {
   static_assert(std::is_move_constructible_v<T>,
       "This swappable requires T to be move constructible.");
   static_assert(!std::is_swappable_v<T>,

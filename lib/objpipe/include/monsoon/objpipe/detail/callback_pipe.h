@@ -75,12 +75,6 @@ class callback_fn_wrapper {
   : fn_(fn)
   {}
 
-  friend auto swap(callback_fn_wrapper& x, callback_fn_wrapper& y)
-  noexcept(std::is_nothrow_swappable_v<Fn>) {
-    using std::swap;
-    swap(x.fn_, y.fn_);
-  }
-
   auto operator()(typename callback_push<T>::impl_type& push)
   -> void {
     callback_push<T> cb_push = callback_push<T>(push);
@@ -154,17 +148,9 @@ class callback_pipe {
     must_advance_(std::exchange(other.must_advance_, false))
   {}
 
-  auto operator=(callback_pipe&& other)
-  noexcept(std::is_nothrow_move_assignable_v<fn_type>
-      && std::is_nothrow_move_assignable_v<typename coro_t::pull_type>)
-  -> callback_pipe& {
-    if (other.src_.index() == 0)
-      src_.template emplace<0>(std::get<0>(std::move(other.src_)));
-    else
-      src_.template emplace<1>(std::get<1>(std::move(other.src_)));
-    must_advance_ = std::exchange(other.must_advance_, false);
-    return *this;
-  }
+  callback_pipe(const callback_pipe&) = delete;
+  callback_pipe& operator=(const callback_pipe&) = delete;
+  callback_pipe& operator=(callback_pipe&&) = delete;
 
   constexpr callback_pipe(Fn&& fn)
   noexcept(std::is_nothrow_move_constructible_v<Fn>)
@@ -175,14 +161,6 @@ class callback_pipe {
   noexcept(std::is_nothrow_copy_constructible_v<Fn>)
   : src_(std::in_place_index<0>, fn)
   {}
-
-  friend auto swap(callback_pipe& x, callback_pipe& y)
-  noexcept(std::is_nothrow_swappable_v<fn_type>
-      && std::is_nothrow_swappable_v<typename coro_t::pull_type>) {
-    using std::swap;
-    swap(x.src_, y.src_);
-    swap(x.must_advance_, y.must_advance_);
-  }
 
   auto is_pullable()
   noexcept

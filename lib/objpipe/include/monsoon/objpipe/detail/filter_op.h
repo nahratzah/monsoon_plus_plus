@@ -65,15 +65,13 @@ class filter_op {
     pred_(std::forward<Init>(init)...)
   {}
 
-  friend auto swap(filter_op& x, filter_op& y)
-  noexcept(std::is_nothrow_swappable_v<Source>
-      && std::is_nothrow_swappable_v<store_type>
-      && std::is_nothrow_swappable_v<std::tuple<Pred...>>) {
-    using std::swap;
-    swap(x.src_, y.src_);
-    swap(x.store_, y.store_);
-    swap(x.pred_, y.pred_);
-  }
+  filter_op(const filter_op&) = delete;
+
+  constexpr filter_op(filter_op&&)
+  noexcept(std::conjunction_v<std::is_nothrow_move_constructible<Source>, std::is_nothrow_move_constructible<Pred>...>) = default;
+
+  filter_op& operator=(const filter_op&) = delete;
+  filter_op& operator=(filter_op&&) = delete;
 
   constexpr auto is_pullable()
   noexcept

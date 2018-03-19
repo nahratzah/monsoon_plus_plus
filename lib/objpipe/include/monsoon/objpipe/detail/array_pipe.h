@@ -40,11 +40,10 @@ class array_pipe {
   : data_(init, alloc)
   {}
 
-  friend auto swap(array_pipe& x, array_pipe& y)
-  noexcept(std::is_nothrow_swappable_v<data_type>) {
-    using std::swap;
-    swap(x.data_, y.data_);
-  }
+  array_pipe(array_pipe&&) = default;
+  array_pipe(const array_pipe&) = delete;
+  array_pipe& operator=(array_pipe&&) = delete;
+  array_pipe& operator=(const array_pipe&) = delete;
 
   auto is_pullable()
   noexcept

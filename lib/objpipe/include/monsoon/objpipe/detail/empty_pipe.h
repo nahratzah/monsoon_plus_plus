@@ -10,10 +10,11 @@ namespace monsoon::objpipe::detail {
 template<typename T>
 class empty_pipe {
  public:
-  friend auto swap(empty_pipe& x, empty_pipe& y)
-  noexcept
-  -> void
-  {}
+  constexpr empty_pipe() noexcept = default;
+  empty_pipe(const empty_pipe&) = delete;
+  constexpr empty_pipe(empty_pipe&&) noexcept = default;
+  empty_pipe& operator=(const empty_pipe&) = delete;
+  empty_pipe& operator=(empty_pipe&&) = delete;
 
   constexpr auto wait()
   noexcept

@@ -37,12 +37,10 @@ class of_pipe {
   : val_(v)
   {}
 
-  friend auto swap(of_pipe& x, of_pipe& y)
-  noexcept(std::is_nothrow_swappable_v<T>) {
-    using std::swap;
-    swap(x.consumed_, y.consumed_);
-    swap(x.val_, y.val_);
-  }
+  constexpr of_pipe(of_pipe&&) noexcept(std::is_nothrow_move_constructible_v<T>) = default;
+  of_pipe(const of_pipe&) = delete;
+  of_pipe& operator=(const of_pipe&) = delete;
+  of_pipe& operator=(of_pipe&&) = delete;
 
   constexpr auto is_pullable()
   noexcept
@@ -105,11 +103,11 @@ class of_pipe<std::reference_wrapper<T>> {
   : val_(&ref.get())
   {}
 
-  friend auto swap(of_pipe& x, of_pipe& y)
-  noexcept {
-    using std::swap;
-    swap(x.val_, y.val_);
-  }
+  constexpr of_pipe(of_pipe&&) noexcept = default;
+
+  of_pipe(const of_pipe&) = delete;
+  of_pipe& operator=(const of_pipe&) = delete;
+  of_pipe& operator=(of_pipe&&) = delete;
 
   constexpr auto is_pullable()
   noexcept

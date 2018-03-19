@@ -248,13 +248,10 @@ class flatten_op {
     active_()
   {}
 
-  friend auto swap(flatten_op& x, flatten_op& y)
-  noexcept(std::is_nothrow_swappable_v<Source>
-      && std::is_nothrow_swappable_v<store_type>) {
-    using std::swap;
-    swap(x.src_, y.src_);
-    swap(x.active_, y.active_);
-  }
+  flatten_op(const flatten_op&) = delete;
+  constexpr flatten_op(flatten_op&&) = default;
+  flatten_op& operator=(const flatten_op&) = delete;
+  flatten_op& operator=(flatten_op&&) = delete;
 
   auto is_pullable()
   noexcept(noexcept(std::declval<Source&>().is_pullable())

@@ -185,7 +185,7 @@ class interlock_impl {
 template<typename T>
 class interlock_pipe {
  public:
-  interlock_pipe() = default;
+  constexpr interlock_pipe() = default;
 
   explicit interlock_pipe(interlock_impl<T>* ptr)
   noexcept
