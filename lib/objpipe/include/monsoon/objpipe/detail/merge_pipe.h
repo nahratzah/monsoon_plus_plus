@@ -17,7 +17,9 @@ template<typename Source>
 class merge_queue_elem_ {
  public:
   ///\brief Transport type for get().
-  using transport_type = transport<adapt::front_type<Source>>;
+  ///\note We use value type, since this needs to be swappable
+  ///without invalidating references.
+  using transport_type = transport<adapt::value_type<Source>>;
   ///\brief Value type of the source.
   using value_type = adapt::value_type<Source>;
 
