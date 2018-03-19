@@ -22,6 +22,9 @@ class flatten_op;
 template<typename Source>
 class adapter_t;
 
+template<typename T>
+class interlock_pipe;
+
 
 } /* namespace monsoon::objpipe::detail */
 

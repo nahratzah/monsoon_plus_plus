@@ -272,8 +272,9 @@ class transform_op {
   transform_op(const transform_op&) = delete;
 
   constexpr transform_op(transform_op&&)
-  noexcept(std::is_nothrow_move_constructible_v<Source>
-      && std::is_nothrow_move_constructible_v<Fn...>) = default;
+  noexcept(std::conjunction_v<
+      std::is_nothrow_move_constructible<Source>,
+      std::is_nothrow_move_constructible<Fn>...>) = default;
 
   transform_op& operator=(const transform_op&) = delete;
   transform_op& operator=(transform_op&&) = delete;

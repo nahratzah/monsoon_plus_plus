@@ -17,9 +17,7 @@ template<typename Source>
 class merge_queue_elem_ {
  public:
   ///\brief Transport type for get().
-  ///\note We use value type, since this needs to be swappable
-  ///without invalidating references.
-  using transport_type = transport<adapt::value_type<Source>>;
+  using transport_type = transport<adapt::front_type<Source>>;
   ///\brief Value type of the source.
   using value_type = adapt::value_type<Source>;
 
@@ -30,26 +28,15 @@ class merge_queue_elem_ {
     src_(std::move(other.src_))
   {}
 
-  auto operator=(merge_queue_elem_&& other) noexcept
-  -> merge_queue_elem_& {
-    front_val_ = std::move(front_val_);
-    src_ = std::move(src_);
-    return *this;
-  }
+  merge_queue_elem_(const merge_queue_elem_&) = delete;
+  auto operator=(merge_queue_elem_&&) = delete;
+  auto operator=(const merge_queue_elem_&) = delete;
 
   ///\brief Construct a new source.
   constexpr merge_queue_elem_(Source&& src)
   noexcept(std::is_nothrow_move_constructible_v<Source>)
   : src_(std::move(src))
   {}
-
-  friend auto swap(merge_queue_elem_& x, merge_queue_elem_& y)
-  noexcept(std::is_nothrow_swappable_v<transport_type>
-      && std::is_nothrow_swappable_v<Source>) {
-    using std::swap;
-    swap(x.front_val_, y.front_val_);
-    swap(x.src_, y.src_);
-  }
 
   auto is_pullable() noexcept
   -> bool {
@@ -156,14 +143,10 @@ class merge_pipe_base {
         [](auto&& src) { return std::move(src).underlying(); });
   }
 
-  auto swap_(merge_pipe_base& other)
-  noexcept(std::is_nothrow_swappable_v<queue_container_type>
-      && std::is_nothrow_swappable_v<Less>) {
-    using std::swap;
-    swap(data_, other.data_);
-    swap(less_, other.less_);
-    swap(need_init_, other.need_init_);
-  }
+  merge_pipe_base(merge_pipe_base&&) = default;
+  merge_pipe_base(const merge_pipe_base&) = delete;
+  merge_pipe_base& operator=(const merge_pipe_base&) = delete;
+  merge_pipe_base& operator=(merge_pipe_base&&) = delete;
 
   auto is_pullable() noexcept {
     if (need_init_) {
@@ -293,14 +276,6 @@ class merge_pipe
   using merge_pipe_base<Source, Less>::is_pullable;
   using merge_pipe_base<Source, Less>::wait;
 
-  auto swap_(merge_pipe& other)
-  noexcept(noexcept(std::declval<merge_pipe_base<Source, Less>&>()
-          .swap_(std::declval<merge_pipe_base<Source, Less>&>()))) {
-    using std::swap;
-    this->merge_pipe_base<Source, Less>::swap_(other);
-    swap(recent, other.recent);
-  }
-
   auto front()
   -> transport_type {
     assert(recent == nullptr);
@@ -352,16 +327,6 @@ class merge_reduce_pipe
 
   using merge_pipe_base<Source, Less>::is_pullable;
   using merge_pipe_base<Source, Less>::wait;
-
-  auto swap_(merge_reduce_pipe& other)
-  noexcept(noexcept(std::declval<merge_pipe_base<Source, Less>&>()
-          .swap_(std::declval<merge_pipe_base<Source, Less>&>()))
-      && std::is_nothrow_swappable_v<do_merge_t<value_type, ReduceOp>>) {
-    using std::swap;
-    this->merge_pipe_base<Source, Less>::swap_(other);
-    swap(pending_pop, other.pending_pop);
-    swap(do_merge_, other.do_merge_);
-  }
 
   auto front()
   -> transport_type {
@@ -466,12 +431,6 @@ class do_merge_t {
   : op_(op)
   {}
 
-  friend auto swap(do_merge_t& x, do_merge_t& y)
-  noexcept(std::is_nothrow_swappable_v<swappable<ReduceOp>>) {
-    using std::swap;
-    swap(x.op_, y.op_);
-  }
-
   auto operator()(transport<value_type>& x, transport<value_type>&& y) const
   -> void {
     if constexpr(is_rr_invocable)
@@ -534,19 +493,6 @@ class do_merge_t {
 
   swappable<ReduceOp> op_;
 };
-
-
-template<typename Source, typename Less>
-auto swap(merge_pipe<Source, Less>& x, merge_pipe<Source, Less>& y)
-noexcept(noexcept(x.swap_(y))) {
-  x.swap_(y);
-}
-
-template<typename Source, typename Less, typename ReduceOp>
-auto swap(merge_reduce_pipe<Source, Less, ReduceOp>& x, merge_reduce_pipe<Source, Less, ReduceOp>& y)
-noexcept(noexcept(x.swap_(y))) {
-  x.swap_(y);
-}
 
 
 } /* namespace monsoon::objpipe::detail */

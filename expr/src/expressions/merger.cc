@@ -419,14 +419,6 @@ class scalar_sink {
   scalar_sink();
   ~scalar_sink() noexcept;
 
-  friend auto swap(scalar_sink& x, scalar_sink& y)
-  noexcept(std::is_nothrow_swappable_v<data_type>
-      && std::is_nothrow_swappable_v<recent_type>) {
-    using std::swap;
-    swap(x.data_, y.data_);
-    swap(x.recent_, y.recent_);
-  }
-
   /**
    * \brief Suggest the next emit time point for emit.
    *
@@ -539,17 +531,6 @@ class vector_sink {
   vector_sink(vector_sink&&) noexcept = default;
   vector_sink(const std::shared_ptr<const match_clause>& mc);
   ~vector_sink() noexcept;
-
-  friend auto swap(vector_sink& x, vector_sink& y)
-  noexcept(
-      std::is_nothrow_swappable_v<
-          std::unordered_map<tags, scalar_sink, class match_clause::hash, match_clause::equal_to>>
-      && std::is_nothrow_swappable_v<time_point>) {
-    using std::swap;
-    swap(x.data_, y.data_);
-    swap(x.last_known_fact_tp_, y.last_known_fact_tp_);
-    swap(x.last_known_fact_emitted_, y.last_known_fact_emitted_);
-  }
 
   /**
    * \brief Suggest the next emit time point for emit.
@@ -675,16 +656,6 @@ class pull_cycle {
     source_(std::move(source))
   {}
 
-  friend auto swap(pull_cycle& x, pull_cycle& y)
-  noexcept(std::is_nothrow_swappable_v<sink_type>
-      && std::is_nothrow_swappable_v<Pipe>
-      && std::is_nothrow_swappable_v<time_point>) {
-    using std::swap;
-    swap(x.sink_, y.sink_);
-    swap(x.source_, y.source_);
-    swap(x.next_tp_, y.next_tp_);
-  }
-
   /**
    * \brief Suggest the next emit time point for emit.
    *
@@ -789,36 +760,20 @@ class pair_merger_pipe {
       std::shared_ptr<const match_clause> out_mc,
       time_point::duration slack,
       FnArg&& fn);
-  auto wait() -> objpipe_errc;
-  auto is_pullable() noexcept -> bool;
-  auto front() -> transport_type;
+  auto wait() const -> objpipe_errc;
+  auto is_pullable() const noexcept -> bool;
+  auto front() const -> transport_type;
   auto pop_front() -> objpipe_errc;
   auto pull() -> transport_type;
   auto try_pull() -> transport_type;
 
-  friend auto swap(pair_merger_pipe& x, pair_merger_pipe& y)
-  noexcept(std::is_nothrow_swappable_v<pull_cycle<PipeX>>
-      && std::is_nothrow_swappable_v<pull_cycle<PipeY>>
-      && std::is_nothrow_swappable_v<std::shared_ptr<const match_clause>>
-      && std::is_nothrow_swappable_v<Fn>
-      && std::is_nothrow_swappable_v<time_point::duration>
-      && std::is_nothrow_swappable_v<time_point>) {
-    using std::swap;
-    swap(x.x_, y.x_);
-    swap(x.y_, y.y_);
-    swap(x.out_mc_, y.out_mc_);
-    swap(x.fn_, y.fn_);
-    swap(x.slack_, y.slack_);
-    swap(x.last_front_tp_, y.last_front_tp_);
-  }
-
  private:
-  pull_cycle<PipeX> x_;
-  pull_cycle<PipeY> y_;
+  mutable pull_cycle<PipeX> x_;
+  mutable pull_cycle<PipeY> y_;
   std::shared_ptr<const match_clause> out_mc_;
   Fn fn_;
   time_point::duration slack_;
-  std::optional<time_point> last_front_tp_;
+  mutable std::optional<time_point> last_front_tp_;
 };
 
 
@@ -1384,7 +1339,7 @@ pair_merger_pipe<PipeX, PipeY, Fn>::pair_merger_pipe(PipeX&& x, PipeY&& y,
 {}
 
 template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() -> objpipe_errc {
+auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() const -> objpipe_errc {
   assert(!last_front_tp_.has_value());
 
   std::optional<time_point> x_tp = x_.suggest_emit_tp();
@@ -1408,7 +1363,7 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() -> objpipe_errc {
 }
 
 template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::is_pullable()
+auto pair_merger_pipe<PipeX, PipeY, Fn>::is_pullable() const
 noexcept
 -> bool {
   return (x_.is_pullable() || x_.suggest_emit_tp().has_value())
@@ -1416,7 +1371,7 @@ noexcept
 }
 
 template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::front()
+auto pair_merger_pipe<PipeX, PipeY, Fn>::front() const
 -> transport_type {
   assert(!last_front_tp_.has_value());
 

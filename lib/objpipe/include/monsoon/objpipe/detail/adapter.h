@@ -117,10 +117,12 @@ class adapter_t {
   static_assert(std::is_move_constructible_v<Source>,
       "Source implementation must be move constructible.");
   static_assert(!std::is_swappable_v<Source>
-      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>,
+      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>
+      || std::is_same_v<interlock_pipe<std::remove_reference_t<adapt::front_type<Source>>>, Source>,
       "Source implementation must not be swappable.");
   static_assert((!std::is_move_assignable_v<Source> && !std::is_copy_assignable_v<Source>)
-      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>,
+      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>
+      || std::is_same_v<interlock_pipe<std::remove_reference_t<adapt::front_type<Source>>>, Source>,
       "Source implementation must not be assignable.");
   static_assert(std::is_same_v<
       adapt::value_type<Source>,
