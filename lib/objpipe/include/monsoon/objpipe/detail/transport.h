@@ -17,6 +17,7 @@ class transport {
       "Programmer error: one of the reference specializations is to be selected.");
 
  public:
+  using value_type = T;
   using type = T;
 
   constexpr transport(std::in_place_index_t<0>, type&& arg)
@@ -87,6 +88,12 @@ class transport {
     data_.template emplace<1>(e);
   }
 
+  auto by_value() &&
+  noexcept(std::is_nothrow_copy_constructible_v<value_type>)
+  -> transport {
+    return std::move(*this);
+  }
+
  private:
   std::variant<T, objpipe_errc> data_;
 };
@@ -97,6 +104,7 @@ class transport<T&> {
       "Transport-by-reference must be const.");
 
  public:
+  using value_type = std::remove_cv_t<T>;
   using type = T&;
 
   constexpr transport(std::in_place_index_t<0>, T& v)
@@ -147,13 +155,20 @@ class transport<T&> {
     data_.template emplace<1>(e);
   }
 
-  operator transport<std::remove_cv_t<std::remove_reference_t<type>>>() && {
+  operator transport<std::remove_cv_t<std::remove_reference_t<type>>>() &&
+  noexcept(std::is_nothrow_copy_constructible_v<value_type>) {
     using rv_type = transport<std::remove_cv_t<std::remove_reference_t<T>>>;
 
     if (has_value())
       return rv_type(std::in_place_index<0>, std::move(*this).value());
     else
       return rv_type(std::in_place_index<1>, errc());
+  }
+
+  auto by_value() &&
+  noexcept(std::is_nothrow_copy_constructible_v<value_type>)
+  -> transport<value_type> {
+    return std::move(*this);
   }
 
  private:
@@ -166,6 +181,7 @@ class transport<T&&> {
       "Transport-by-rvalue-reference may not be const.");
 
  public:
+  using value_type = T;
   using type = T&&;
 
   constexpr transport(std::in_place_index_t<0>, T&& v)
@@ -216,13 +232,20 @@ class transport<T&&> {
     data_.template emplace<1>(e);
   }
 
-  operator transport<std::remove_cv_t<std::remove_reference_t<type>>>() && {
+  operator transport<std::remove_cv_t<std::remove_reference_t<type>>>() &&
+  noexcept(std::is_nothrow_move_constructible_v<value_type>) {
     using rv_type = transport<std::remove_cv_t<std::remove_reference_t<type>>>;
 
     if (has_value())
       return rv_type(std::in_place_index<0>, std::move(*this).value());
     else
       return rv_type(std::in_place_index<1>, errc());
+  }
+
+  auto by_value() &&
+  noexcept(std::is_nothrow_move_constructible_v<value_type>)
+  -> transport<value_type> {
+    return std::move(*this);
   }
 
  private:
