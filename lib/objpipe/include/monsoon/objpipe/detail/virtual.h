@@ -21,9 +21,9 @@ class virtual_intf {
  public:
   virtual ~virtual_intf() noexcept {}
 
-  virtual auto is_pullable() const noexcept -> bool = 0;
-  virtual auto wait() const -> objpipe_errc = 0;
-  virtual auto front() const -> transport<T> = 0;
+  virtual auto is_pullable() noexcept -> bool = 0;
+  virtual auto wait() -> objpipe_errc = 0;
+  virtual auto front() -> transport<T> = 0;
   virtual auto pop_front() -> objpipe_errc = 0;
   virtual auto pull() -> transport<T> = 0;
   virtual auto try_pull() -> transport<T> = 0;
@@ -43,18 +43,18 @@ class virtual_impl
 
   ~virtual_impl() noexcept override {}
 
-  auto is_pullable() const
+  auto is_pullable()
   noexcept
   -> bool override {
     return src_.is_pullable();
   }
 
-  auto wait() const
+  auto wait()
   -> objpipe_errc override {
     return src_.wait();
   }
 
-  auto front() const
+  auto front()
   -> transport<adapt::value_type<Source>> override {
     return src_.front();
   }
@@ -98,19 +98,19 @@ class virtual_pipe {
   : pimpl_(std::make_unique<virtual_impl<std::decay_t<Source>>>(std::forward<Source>(src)))
   {}
 
-  auto is_pullable() const noexcept
+  auto is_pullable() noexcept
   -> bool {
     assert(pimpl_ != nullptr);
     return pimpl_->is_pullable();
   }
 
-  auto wait() const
+  auto wait()
   -> objpipe_errc {
     assert(pimpl_ != nullptr);
     return pimpl_->wait();
   }
 
-  auto front() const
+  auto front()
   -> transport<T> {
     assert(pimpl_ != nullptr);
     return pimpl_->front();

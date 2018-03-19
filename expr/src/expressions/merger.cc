@@ -728,7 +728,7 @@ class pull_cycle {
   auto try_forward_to_(time_point tp) const -> void;
 
   sink_type sink_;
-  Pipe source_;
+  mutable Pipe source_;
   std::optional<time_point> next_tp_;
 };
 

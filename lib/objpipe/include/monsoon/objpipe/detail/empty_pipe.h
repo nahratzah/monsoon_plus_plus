@@ -10,19 +10,19 @@ namespace monsoon::objpipe::detail {
 template<typename T>
 class empty_pipe {
  public:
-  constexpr auto wait() const
+  constexpr auto wait()
   noexcept
   -> objpipe_errc {
     return objpipe_errc::closed;
   }
 
-  constexpr auto is_pullable() const
+  constexpr auto is_pullable()
   noexcept
   -> bool {
     return false;
   }
 
-  constexpr auto front() const
+  constexpr auto front()
   noexcept
   -> transport<T> {
     return transport<T>(std::in_place_index<1>, objpipe_errc::closed);

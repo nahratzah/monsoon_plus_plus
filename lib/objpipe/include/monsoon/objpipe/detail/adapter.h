@@ -51,7 +51,7 @@ class front_store_handler_data_<T, true> {
   }
 
   template<typename Source>
-  auto get_or_assign(const Source& src) const
+  auto get_or_assign(Source& src) const
   -> std::add_lvalue_reference_t<T> {
     if (ptr_ == nullptr) {
       static_assert(std::is_reference_v<decltype(adapt::front(src))>,
@@ -106,7 +106,7 @@ class front_store_handler_data_<T, false> {
   }
 
   template<typename Source>
-  auto get_or_assign(const Source& src) const
+  auto get_or_assign(Source& src) const
   -> std::add_lvalue_reference_t<T> {
     if (!val_.has_value())
       val_.emplace(adapt::front(src));
@@ -143,14 +143,14 @@ class front_store_handler_data_<T, false> {
 template<typename Source>
 struct front_store_handler_ {
  private:
-  using src_front_type = decltype(adapt::front(std::declval<const Source>()));
+  using src_front_type = adapt::front_type<Source>;
 
   static constexpr bool use_ref = !std::is_const_v<src_front_type>
       && !std::is_volatile_v<src_front_type>
       && (std::is_lvalue_reference_v<src_front_type>
           || std::is_rvalue_reference_v<src_front_type>);
 
-  using store_type = std::remove_cv_t<std::remove_reference_t<src_front_type>>;
+  using store_type = adapt::value_type<Source>;
 
  public:
   using type = front_store_handler_data_<store_type, use_ref>;
@@ -265,10 +265,10 @@ class adapter_t {
    *
    * \return False if the objpipe is empty and has no writers. True otherwise.
    */
-  auto is_pullable() const
+  auto is_pullable()
   noexcept
   -> bool {
-    return adapt::is_pullable(src_);
+    return adapt::is_pullable(const_cast<Source&>(src_));
   }
 
   /**
@@ -280,9 +280,9 @@ class adapter_t {
    * \return An \ref monsoon::ojbpipe::errc "objpipe_errc" indicating if the call succeeded.
    */
   auto wait() const
-  noexcept(noexcept(adapt::wait(std::declval<const Source&>())))
+  noexcept(noexcept(adapt::wait(std::declval<Source&>())))
   -> objpipe_errc {
-    return adapt::wait(src_);
+    return adapt::wait(const_cast<Source&>(src_));
   }
 
   /**
@@ -291,9 +291,9 @@ class adapter_t {
    * \return True if the objpipe is empty, false if the objpipe has a pending value.
    */
   auto empty() const
-  noexcept(noexcept(std::declval<const Source&>().wait()))
+  noexcept(noexcept(std::declval<Source&>().wait()))
   -> bool {
-    const objpipe_errc e = src_.wait();
+    const objpipe_errc e = const_cast<Source&>(src_).wait();
     return e == objpipe_errc::closed;
   }
 
@@ -310,7 +310,7 @@ class adapter_t {
    */
   auto front() const
   -> std::add_lvalue_reference_t<value_type> {
-    return store_.get_or_assign(src_);
+    return store_.get_or_assign(const_cast<Source&>(src_));
   }
 
   /**

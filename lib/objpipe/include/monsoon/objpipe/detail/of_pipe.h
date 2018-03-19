@@ -37,20 +37,20 @@ class of_pipe {
   : val_(v)
   {}
 
-  constexpr auto is_pullable() const
+  constexpr auto is_pullable()
   noexcept
   -> bool {
     return !consumed_;
   }
 
-  constexpr auto wait() const
+  constexpr auto wait()
   noexcept
   -> objpipe_errc {
     return (!consumed_ ? objpipe_errc::success : objpipe_errc::closed);
   }
 
   ///\note An rvalue reference is returned, since front() is only allowed to be called at most once before pop_front() or pull().
-  constexpr auto front() const
+  constexpr auto front()
   noexcept
   -> transport_type {
     if (consumed_)
@@ -98,7 +98,7 @@ class of_pipe<std::reference_wrapper<T>> {
   : val_(&ref.get())
   {}
 
-  constexpr auto is_pullable() const
+  constexpr auto is_pullable()
   noexcept
   -> bool {
     return val_ != nullptr;

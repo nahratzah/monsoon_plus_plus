@@ -40,7 +40,7 @@ class array_pipe {
   : data_(init, alloc)
   {}
 
-  auto is_pullable() const
+  auto is_pullable()
   noexcept
   -> bool {
     return !data_.empty();

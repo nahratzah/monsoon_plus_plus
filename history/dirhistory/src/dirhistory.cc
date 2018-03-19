@@ -342,12 +342,12 @@ class transformation {
     slack(slack)
   {}
 
-  auto is_pullable() const noexcept
+  auto is_pullable() noexcept
   -> bool {
     return !last_ && (emit_valid || !read_ahead.empty() || src_.is_pullable());
   }
 
-  auto wait() const
+  auto wait()
   -> objpipe_errc {
     return (is_pullable()
         ? objpipe_errc::success
@@ -370,11 +370,6 @@ class transformation {
 
     assert(emit_valid);
     return transport_type(std::in_place_index<0>, std::move(out_value));
-  }
-
-  auto front() const
-  -> transport_type {
-    return const_cast<transformation&>(*this).front();
   }
 
   auto pull()

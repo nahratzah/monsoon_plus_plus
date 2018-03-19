@@ -24,9 +24,9 @@
  *
  * Source must implement:
  * \code
- * auto is_pullable() const noexcept -> bool
- * auto wait() const -> objpipe_errc;
- * auto front() const -> transport<T>;
+ * auto is_pullable() noexcept -> bool
+ * auto wait() -> objpipe_errc;
+ * auto front() -> transport<T>;
  * auto pop_front() -> objpipe_errc;
  * \endcode
  *
@@ -127,7 +127,7 @@ constexpr bool has_flatten = has_flatten_<Source>::value;
 
 ///\brief Trait containing the value type of Source::front() const.
 template<typename Source>
-using front_type = typename decltype(std::declval<const Source&>().front())::type;
+using front_type = typename decltype(std::declval<Source&>().front())::type;
 
 ///\brief Trait containing the value type of Source.
 template<typename Source>
@@ -170,9 +170,9 @@ using pull_type = typename pull_type_<Source>::type;
  */
 template<typename Source>
 auto is_pullable(
-    const Source& src ///< [in] Object pipe source that is to be adapted.
+    Source& src ///< [in] Object pipe source that is to be adapted.
     )
-noexcept(noexcept(std::declval<const Source&>().is_pullable()))
+noexcept(noexcept(std::declval<Source&>().is_pullable()))
 -> bool {
   return src.is_pullable();
 }
@@ -186,9 +186,9 @@ noexcept(noexcept(std::declval<const Source&>().is_pullable()))
  */
 template<typename Source>
 auto wait(
-    const Source& src ///< [in] Object pipe source that is to be adapted.
+    Source& src ///< [in] Object pipe source that is to be adapted.
     )
-noexcept(noexcept(std::declval<const Source&>().wait()))
+noexcept(noexcept(std::declval<Source&>().wait()))
 -> objpipe_errc {
   return src.wait();
 }
@@ -204,7 +204,7 @@ noexcept(noexcept(std::declval<const Source&>().wait()))
  */
 template<typename Source>
 auto front(
-    const Source& src ///< [in] Object pipe source that is to be adapted.
+    Source& src ///< [in] Object pipe source that is to be adapted.
     )
 -> front_type<Source> {
   transport<front_type<Source>> v = src.front();
@@ -275,7 +275,7 @@ template<typename Source>
 auto raw_try_pull(
     Source& src ///< [in] Object pipe source that is to be adapted.
     )
-noexcept(noexcept(std::declval<const Source&>().front())
+noexcept(noexcept(std::declval<Source&>().front())
     && noexcept(std::declval<Source&>().pop_front())
     && (std::is_reference_v<try_pull_type<Source>>
         || (std::is_nothrow_move_constructible_v<std::decay_t<try_pull_type<Source>>>
@@ -355,7 +355,7 @@ auto raw_pull(
     Source& src ///< [in] Object pipe source that is to be adapted.
     )
 noexcept(noexcept(raw_try_pull(std::declval<Source&>()))
-    && noexcept(std::declval<const Source&>().wait()))
+    && noexcept(std::declval<Source&>().wait()))
 -> std::enable_if_t<!std::is_const_v<Source> && !has_pull<Source>,
     transport<pull_type<Source>>> {
   for (;;) {

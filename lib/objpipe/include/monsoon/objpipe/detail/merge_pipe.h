@@ -40,7 +40,7 @@ class merge_queue_elem_ {
   : src_(std::move(src))
   {}
 
-  auto is_pullable() const noexcept
+  auto is_pullable() noexcept
   -> bool {
     if (front_val_.has_value())
       return front_val_->errc() != objpipe_errc::closed;
@@ -145,7 +145,7 @@ class merge_pipe_base {
         [](auto&& src) { return std::move(src).underlying(); });
   }
 
-  auto is_pullable() const noexcept {
+  auto is_pullable() noexcept {
     if (need_init_) {
       return std::any_of(
           data_.begin(),
@@ -197,12 +197,6 @@ class merge_pipe_base {
     if (e == objpipe_errc::closed && data_.size() >= 2)
       e = data_.front().get().errc();
     return e;
-  }
-
-  auto wait() const
-  noexcept(noexcept(std::declval<queue_elem&>().get()))
-  -> objpipe_errc {
-    return const_cast<merge_pipe_base&>(*this).wait();
   }
 
   /**
@@ -300,11 +294,6 @@ class merge_pipe
     return objpipe_errc::success;
   }
 
-  auto front() const
-  -> transport_type {
-    return const_cast<merge_pipe&>(*this).front();
-  }
-
  private:
   queue_elem* recent = nullptr;
 };
@@ -379,11 +368,6 @@ class merge_reduce_pipe
 
     pending_pop = false;
     return objpipe_errc::success;
-  }
-
-  auto front() const
-  -> transport_type {
-    return const_cast<merge_reduce_pipe&>(*this).front();
   }
 
  private:

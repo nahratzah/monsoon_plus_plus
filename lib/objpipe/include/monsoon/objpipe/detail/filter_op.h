@@ -43,7 +43,7 @@ class filter_store_copy_ {
   }
 
   template<typename Source>
-  constexpr auto load(const Source& src)
+  constexpr auto load(Source& src)
   noexcept(noexcept(src.front()))
   -> objpipe_errc {
     assert(!present());
@@ -106,7 +106,7 @@ class filter_store_ref_ {
   }
 
   template<typename Source>
-  constexpr auto load(const Source& src)
+  constexpr auto load(Source& src)
   noexcept(noexcept(src.front()))
   -> objpipe_errc {
     static_assert(std::is_lvalue_reference_v<adapt::front_type<Source>>
@@ -206,19 +206,19 @@ class filter_op {
     pred_(std::forward<Init>(init)...)
   {}
 
-  constexpr auto is_pullable() const
+  constexpr auto is_pullable()
   noexcept
   -> bool {
     return store_.present() || src_.is_pullable();
   }
 
-  constexpr auto wait() const
+  constexpr auto wait()
   noexcept(noexcept_load)
   -> objpipe_errc {
     return load_();
   }
 
-  constexpr auto front() const
+  constexpr auto front()
   noexcept(noexcept_load
       && noexcept(std::declval<store_type&>().get()))
   -> transport<adapt::front_type<Source>> {
@@ -279,7 +279,7 @@ class filter_op {
   }
 
  private:
-  constexpr auto load_() const
+  constexpr auto load_()
   noexcept(noexcept_load)
   -> objpipe_errc {
     while (!store_.present()) {
@@ -328,8 +328,8 @@ class filter_op {
     return filter_test_(v, std::get<Idx>(pred_)...);
   }
 
-  mutable Source src_;
-  mutable store_type store_;
+  Source src_;
+  store_type store_;
   std::tuple<Pred...> pred_;
 };
 

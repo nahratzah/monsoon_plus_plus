@@ -230,37 +230,37 @@ class interlock_pipe {
       delete ptr_;
   }
 
-  auto is_pullable() const
+  auto is_pullable()
   -> bool {
     assert(ptr_ != nullptr);
     return ptr_->is_pullable();
   }
 
-  auto wait() const
+  auto wait()
   -> objpipe_errc {
     assert(ptr_ != nullptr);
     return ptr_->wait();
   }
 
-  auto front() const
+  auto front()
   -> decltype(auto) {
     assert(ptr_ != nullptr);
     return ptr_->front();
   }
 
-  auto pop_front() const
+  auto pop_front()
   -> decltype(auto) {
     assert(ptr_ != nullptr);
     return ptr_->pop_front();
   }
 
-  auto pull() const
+  auto pull()
   -> decltype(auto) {
     assert(ptr_ != nullptr);
     return ptr_->pull();
   }
 
-  auto try_pull() const
+  auto try_pull()
   -> decltype(auto) {
     assert(ptr_ != nullptr);
     return ptr_->try_pull();

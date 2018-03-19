@@ -169,7 +169,7 @@ class callback_pipe {
   : src_(std::in_place_index<0>, fn)
   {}
 
-  auto is_pullable() const
+  auto is_pullable()
   noexcept
   -> bool {
     ensure_init_();

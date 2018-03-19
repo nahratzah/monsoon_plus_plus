@@ -232,7 +232,7 @@ class flatten_op {
   using item_type = decltype(std::declval<const store_type&>().deref());
 
   static constexpr bool ensure_avail_noexcept =
-      noexcept(std::declval<const Source&>().front())
+      noexcept(std::declval<Source&>().front())
       && noexcept(std::declval<Source&>().pop_front())
       && noexcept(std::declval<store_type>().empty())
       && std::is_nothrow_constructible_v<store_type, raw_collection_type>
@@ -248,20 +248,20 @@ class flatten_op {
     active_()
   {}
 
-  auto is_pullable() const
-  noexcept(noexcept(std::declval<const Source&>().is_pullable())
+  auto is_pullable()
+  noexcept(noexcept(std::declval<Source&>().is_pullable())
       && ensure_avail_noexcept)
   -> bool {
     return src_.is_pullable() || ensure_avail_() == objpipe_errc::success;
   }
 
-  auto wait() const
+  auto wait()
   noexcept(ensure_avail_noexcept)
   -> objpipe_errc {
     return ensure_avail_();
   }
 
-  auto front() const
+  auto front()
   noexcept(ensure_avail_noexcept
       && noexcept(std::declval<store_type&>().deref())
       && (std::is_lvalue_reference_v<item_type>

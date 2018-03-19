@@ -268,19 +268,19 @@ class transform_op {
     fn_(std::forward<FnAdapterArgs>(fn_adapter_args)...)
   {}
 
-  constexpr auto is_pullable() const
+  constexpr auto is_pullable()
   noexcept
   -> bool {
     return src_.is_pullable();
   }
 
-  constexpr auto wait() const
+  constexpr auto wait()
   noexcept(noexcept(src_.wait()))
   -> objpipe_errc {
     return src_.wait();
   }
 
-  constexpr auto front() const
+  constexpr auto front()
   noexcept(noexcept(invoke_fn_(src_.front()))
       && (std::is_lvalue_reference_v<front_type>
           || std::is_rvalue_reference_v<front_type>
