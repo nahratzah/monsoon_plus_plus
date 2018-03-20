@@ -72,6 +72,12 @@ struct merge_emit_greater_ {
   -> time_point {
     return tp(pipe.front());
   }
+
+  template<typename Iter>
+  static auto tp(const Iter& iter)
+  -> std::enable_if_t<std::is_base_of_v<std::input_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>, time_point> {
+    return tp(*iter);
+  }
 };
 
 void merge(time_point& dst, time_point&& src) {
@@ -105,6 +111,7 @@ class merge_emit_t {
       greater>;
   using objpipe_type = std::decay_t<decltype(std::declval<const ToObjpipeFunctor&>()(std::declval<const tsdata&>()))>;
   using value_type = typename objpipe_type::value_type;
+  using active_store_t = std::list<objpipe_type>;
 
  public:
   template<typename Iter>
@@ -124,16 +131,19 @@ class merge_emit_t {
       // and load all unstarted that start at/before active_.front.
       while (active_.empty()
           || (!unstarted_.empty()
-              && !greater()(unstarted_.top(), active_.front().front()))) {
+              && !greater()(unstarted_.top(), active_.front()->front()))) {
         // Convert tsdata to objpipe.
-        active_.push_back(objpipe_fn_(*unstarted_.top()));
+        active_store_.push_back(objpipe_fn_(*unstarted_.top()));
+        active_.push_back(--active_store_.end());
         unstarted_.pop();
 
         // Sort new objpipe into active.
-        if (active_.back().empty())
+        if (active_.back()->empty()) {
+          active_store_.erase(active_.back());
           active_.pop_back(); // Discard empty objpipe.
-        else
+        } else {
           std::push_heap(active_.begin(), active_.end(), greater());
+        }
       }
 
       assert(unstarted_.empty()
@@ -151,22 +161,26 @@ class merge_emit_t {
 
       // Read head element of the head of active.
       std::pop_heap(active_.begin(), active_.end(), greater());
-      value_type emit = active_.back().pull();
-      if (active_.back().empty())
+      value_type emit = active_.back()->pull();
+      if (active_.back()->empty()) {
+        active_store_.erase(active_.back());
         active_.pop_back();
-      else
+      } else {
         std::push_heap(active_.begin(), active_.end(), greater());
+      }
 
       // Merge in all other elements with the same time stamp.
       while (!active_.empty()
           && !greater()(active_.front(), emit)
           && !greater()(emit, active_.front())) {
         std::pop_heap(active_.begin(), active_.end(), greater());
-        merge(emit, active_.back().pull());
-        if (active_.back().empty())
+        merge(emit, active_.back()->pull());
+        if (active_.back()->empty()) {
+          active_store_.erase(active_.back());
           active_.pop_back();
-        else
+        } else {
           std::push_heap(active_.begin(), active_.end(), greater());
+        }
       }
 
       // Emit merged element.
@@ -185,14 +199,16 @@ class merge_emit_t {
   auto loop_invariant() const
   noexcept
   -> bool {
-    return std::all_of(
-        active_.begin(), active_.end(),
-        [](const auto& pipe) { return !pipe.empty(); });
+    return active_.size() == active_store_.size()
+        && std::all_of(
+            active_.begin(), active_.end(),
+            [](const auto& pipe) { return !pipe->empty(); });
   }
 
   unstarted_queue unstarted_;
   ToObjpipeFunctor objpipe_fn_;
-  std::vector<objpipe_type> active_;
+  active_store_t active_store_;
+  std::vector<typename active_store_t::iterator> active_;
 };
 
 template<typename Iter, typename ToObjpipeFunctor>
