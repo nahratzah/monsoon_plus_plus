@@ -361,8 +361,10 @@ class merge_reduce_pipe
     transport_type val = head->release();
     if (val.errc() != objpipe_errc::success) return val;
     objpipe_errc e = head->reset();
-    if (e != objpipe_errc::success)
-      return transport_type(std::in_place_index<1>, e);
+    if (e != objpipe_errc::success) {
+      val.emplace(std::in_place_index<1>, e);
+      return val;
+    }
     assert(val.has_value());
 
     // Keep merging in successive values, until less comparison holds.
@@ -370,13 +372,18 @@ class merge_reduce_pipe
       head = this->get_front_source();
       if (head == nullptr) break;
       auto& head_val = head->get();
-      if (head_val.errc() != objpipe_errc::success) break;
+      if (head_val.errc() != objpipe_errc::success) {
+        val.emplace(std::in_place_index<1>, head_val.errc());
+        return val;
+      }
       if (this->is_less(val.value(), head_val.value())) break;
 
       do_merge_(val, head->release());
       e = head->reset();
-      if (e != objpipe_errc::success)
-        return transport_type(std::in_place_index<1>, e);
+      if (e != objpipe_errc::success) {
+        val.emplace(std::in_place_index<1>, e);
+        return val;
+      }
     }
 
     pending_pop = true;
