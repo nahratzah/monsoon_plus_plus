@@ -42,6 +42,7 @@ enum class match_clause_keep {
  * \brief A match clause.
  * \ingroup expr
  *
+ * \details
  * Match clauses test if a pair of \ref monsoon::tags "tag sets" match.
  * Matched tag sets are used to match values together in binary operations.
  */
