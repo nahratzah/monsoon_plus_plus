@@ -135,9 +135,7 @@ class callback_pipe {
         std::add_rvalue_reference_t<T>>;
 
   static_assert(std::is_move_constructible_v<typename coro_t::pull_type>,
-      "Coroutine object is not move constructible.");
-  static_assert(std::is_move_assignable_v<typename coro_t::pull_type>,
-      "Coroutine object is not move constructible.");
+      "Coroutine object must be move constructible.");
 
  public:
   callback_pipe(callback_pipe&& other)
@@ -147,17 +145,9 @@ class callback_pipe {
     must_advance_(std::exchange(other.must_advance_, false))
   {}
 
-  auto operator=(callback_pipe&& other)
-  noexcept(std::is_nothrow_move_assignable_v<fn_type>
-      && std::is_nothrow_move_assignable_v<typename coro_t::pull_type>)
-  -> callback_pipe& {
-    if (other.src_.index() == 0)
-      src_.template emplace<0>(std::get<0>(std::move(other.src_)));
-    else
-      src_.template emplace<1>(std::get<1>(std::move(other.src_)));
-    must_advance_ = std::exchange(other.must_advance_, false);
-    return *this;
-  }
+  callback_pipe(const callback_pipe&) = delete;
+  callback_pipe& operator=(const callback_pipe&) = delete;
+  callback_pipe& operator=(callback_pipe&&) = delete;
 
   constexpr callback_pipe(Fn&& fn)
   noexcept(std::is_nothrow_move_constructible_v<Fn>)

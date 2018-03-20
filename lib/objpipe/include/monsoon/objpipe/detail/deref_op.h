@@ -10,6 +10,7 @@ namespace monsoon::objpipe::detail {
 
 ///\brief Implements the dereference operator for T.
 ///\details Simply invokes operator* on an instance of T.
+///\bug Deref operation should mark its returned reference as const, if the input reference is const.
 struct deref_op {
   template<typename T>
   static constexpr bool is_valid = is_invocable_v<deref_op, const T&>

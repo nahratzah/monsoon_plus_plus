@@ -10,6 +10,12 @@ namespace monsoon::objpipe::detail {
 template<typename T>
 class empty_pipe {
  public:
+  constexpr empty_pipe() noexcept = default;
+  empty_pipe(const empty_pipe&) = delete;
+  constexpr empty_pipe(empty_pipe&&) noexcept = default;
+  empty_pipe& operator=(const empty_pipe&) = delete;
+  empty_pipe& operator=(empty_pipe&&) = delete;
+
   constexpr auto wait()
   noexcept
   -> objpipe_errc {

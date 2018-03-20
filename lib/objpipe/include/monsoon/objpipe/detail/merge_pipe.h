@@ -27,12 +27,9 @@ class merge_queue_elem_ {
     src_(std::move(other.src_))
   {}
 
-  auto operator=(merge_queue_elem_&& other) noexcept
-  -> merge_queue_elem_& {
-    front_val_ = std::move(front_val_);
-    src_ = std::move(src_);
-    return *this;
-  }
+  merge_queue_elem_(const merge_queue_elem_&) = delete;
+  auto operator=(merge_queue_elem_&&) = delete;
+  auto operator=(const merge_queue_elem_&) = delete;
 
   ///\brief Construct a new source.
   constexpr merge_queue_elem_(Source&& src)
@@ -91,6 +88,8 @@ class merge_pipe_base {
   using value_type = typename queue_elem::value_type;
 
  private:
+  using queue_container_type = std::vector<queue_elem>;
+
   ///\brief Comparator for queue_elem, using the greater() comparison.
   ///\details Intended for heap sorting.
   ///\note This comparator sorts errors to the front, allowing for early bail out.
@@ -102,10 +101,12 @@ class merge_pipe_base {
     : less_(less)
     {}
 
-    auto operator()(queue_elem& x, queue_elem& y) const
+    auto operator()(
+        typename queue_container_type::iterator& x,
+        typename queue_container_type::iterator& y) const
     -> bool {
-      transport_type x_front = x.get(),
-                     y_front = y.get();
+      transport_type x_front = x->get(),
+                     y_front = y->get();
 
       // Sort errors to the front.
       if (x_front.errc() != objpipe_errc::success
@@ -124,32 +125,49 @@ class merge_pipe_base {
     const Less& less_;
   };
 
-  using queue_container_type = std::vector<queue_elem>;
-
  public:
   template<typename Iter>
   merge_pipe_base(Iter src_begin, Iter src_end, Less&& less)
   : less_(std::move(less))
   {
+    if constexpr(std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>)
+      data_store_.reserve(src_end - src_begin);
+
     std::transform(src_begin, src_end,
-        std::back_inserter(data_),
+        std::back_inserter(data_store_),
         [](auto&& src) { return std::move(src).underlying(); });
+
+    data_.reserve(data_store_.size());
+    for (auto i = data_store_.begin(); i != data_store_.end(); ++i)
+      data_.emplace_back(i);
   }
 
   template<typename Iter>
   merge_pipe_base(Iter src_begin, Iter src_end, const Less& less)
   : less_(less)
   {
+    if constexpr(std::is_base_of_v<std::random_access_iterator_tag, typename std::iterator_traits<Iter>::iterator_category>)
+      data_store_.reserve(src_end - src_begin);
+
     std::transform(src_begin, src_end,
-        std::back_inserter(data_),
+        std::back_inserter(data_store_),
         [](auto&& src) { return std::move(src).underlying(); });
+
+    data_.reserve(data_store_.size());
+    for (auto i = data_store_.begin(); i != data_store_.end(); ++i)
+      data_.emplace_back(i);
   }
+
+  merge_pipe_base(merge_pipe_base&&) = default;
+  merge_pipe_base(const merge_pipe_base&) = delete;
+  merge_pipe_base& operator=(const merge_pipe_base&) = delete;
+  merge_pipe_base& operator=(merge_pipe_base&&) = delete;
 
   auto is_pullable() noexcept {
     if (need_init_) {
       return std::any_of(
-          data_.begin(),
-          data_.end(),
+          data_store_.begin(),
+          data_store_.end(),
           std::mem_fn(&queue_elem::is_pullable));
     }
 
@@ -161,10 +179,10 @@ class merge_pipe_base {
         assert(std::all_of(
                 data_.begin(),
                 data_.end() - 1,
-                std::mem_fn(&queue_elem::is_pullable)));
+                [](const auto& ptr) { return ptr->is_pullable(); }));
         return true;
       case 1:
-        if (data_.back().is_pullable()) return true;
+        if (data_.back()->is_pullable()) return true;
         break;
     }
     return false;
@@ -176,7 +194,7 @@ class merge_pipe_base {
     if (need_init_) { // Need to traverse all elements.
       bool all_closed = true;
       objpipe_errc e = objpipe_errc::success;
-      for (queue_elem& elem : data_) {
+      for (queue_elem& elem : data_store_) {
         objpipe_errc elem_e = elem.get().errc();
         if (elem_e != objpipe_errc::closed) {
           all_closed = false;
@@ -193,9 +211,9 @@ class merge_pipe_base {
     // - front element is next and may compare higher in next get_front_source() call, if it has an error.
     objpipe_errc e = (data_.empty()
         ? objpipe_errc::closed
-        : data_.back().get().errc());
+        : data_.back()->get().errc());
     if (e == objpipe_errc::closed && data_.size() >= 2)
-      e = data_.front().get().errc();
+      e = data_.front()->get().errc();
     return e;
   }
 
@@ -226,10 +244,10 @@ class merge_pipe_base {
     // Pop one element from the heap.
     while (!data_.empty()) {
       std::pop_heap(data_.begin(), data_.end(), greater(less_));
-      if (data_.back().get().errc() == objpipe_errc::closed)
+      if (data_.back()->get().errc() == objpipe_errc::closed)
         data_.pop_back();
       else
-        return &data_.back();
+        return &*data_.back();
     }
     return nullptr;
   }
@@ -253,7 +271,14 @@ class merge_pipe_base {
    * || is_heap_sorted(data_.begin(), data_.end() - 1)
    * \endcode
    */
-  queue_container_type data_;
+  queue_container_type data_store_;
+  /**
+   * \brief Indices into data_store_.
+   * \details Since objpipe are not move-assignable or swappable, we can't
+   * use heap operations on them directly.
+   */
+  std::vector<typename queue_container_type::iterator> data_;
+
   Less less_;
   bool need_init_ = true;
 };
@@ -336,8 +361,10 @@ class merge_reduce_pipe
     transport_type val = head->release();
     if (val.errc() != objpipe_errc::success) return val;
     objpipe_errc e = head->reset();
-    if (e != objpipe_errc::success)
-      return transport_type(std::in_place_index<1>, e);
+    if (e != objpipe_errc::success) {
+      val.emplace(std::in_place_index<1>, e);
+      return val;
+    }
     assert(val.has_value());
 
     // Keep merging in successive values, until less comparison holds.
@@ -345,13 +372,18 @@ class merge_reduce_pipe
       head = this->get_front_source();
       if (head == nullptr) break;
       auto& head_val = head->get();
-      if (head_val.errc() != objpipe_errc::success) break;
+      if (head_val.errc() != objpipe_errc::success) {
+        val.emplace(std::in_place_index<1>, head_val.errc());
+        return val;
+      }
       if (this->is_less(val.value(), head_val.value())) break;
 
       do_merge_(val, head->release());
       e = head->reset();
-      if (e != objpipe_errc::success)
-        return transport_type(std::in_place_index<1>, e);
+      if (e != objpipe_errc::success) {
+        val.emplace(std::in_place_index<1>, e);
+        return val;
+      }
     }
 
     pending_pop = true;

@@ -37,6 +37,11 @@ class of_pipe {
   : val_(v)
   {}
 
+  constexpr of_pipe(of_pipe&&) noexcept(std::is_nothrow_move_constructible_v<T>) = default;
+  of_pipe(const of_pipe&) = delete;
+  of_pipe& operator=(const of_pipe&) = delete;
+  of_pipe& operator=(of_pipe&&) = delete;
+
   constexpr auto is_pullable()
   noexcept
   -> bool {
@@ -97,6 +102,12 @@ class of_pipe<std::reference_wrapper<T>> {
   noexcept
   : val_(&ref.get())
   {}
+
+  constexpr of_pipe(of_pipe&&) noexcept = default;
+
+  of_pipe(const of_pipe&) = delete;
+  of_pipe& operator=(const of_pipe&) = delete;
+  of_pipe& operator=(of_pipe&&) = delete;
 
   constexpr auto is_pullable()
   noexcept

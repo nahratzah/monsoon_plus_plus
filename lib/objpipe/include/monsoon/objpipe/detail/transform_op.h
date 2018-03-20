@@ -268,6 +268,16 @@ class transform_op {
     fn_(std::forward<FnAdapterArgs>(fn_adapter_args)...)
   {}
 
+  transform_op(const transform_op&) = delete;
+
+  constexpr transform_op(transform_op&&)
+  noexcept(std::conjunction_v<
+      std::is_nothrow_move_constructible<Source>,
+      std::is_nothrow_move_constructible<Fn>...>) = default;
+
+  transform_op& operator=(const transform_op&) = delete;
+  transform_op& operator=(transform_op&&) = delete;
+
   constexpr auto is_pullable()
   noexcept
   -> bool {

@@ -35,132 +35,6 @@ noexcept(std::is_nothrow_constructible_v<adapter_t<std::decay_t<Source>>, Source
   return adapter_t<std::decay_t<Source>>(std::forward<Source>(src));
 }
 
-///\brief Store a value of T, using either a copy or a pointer.
-///\ingroup objpipe_detail
-template<typename T, bool UsePointer>
-class front_store_handler_data_;
-
-template<typename T>
-class front_store_handler_data_<T, true> {
- public:
-  auto get() const
-  noexcept
-  -> std::add_lvalue_reference_t<T> {
-    assert(ptr_ != nullptr);
-    return *ptr_;
-  }
-
-  template<typename Source>
-  auto get_or_assign(Source& src) const
-  -> std::add_lvalue_reference_t<T> {
-    if (ptr_ == nullptr) {
-      static_assert(std::is_reference_v<decltype(adapt::front(src))>,
-          "Programmer error: front() returns a temporary, instead of a reference.");
-
-      ptr_ = addressof_(adapt::front(src));
-    }
-    return *ptr_;
-  }
-
-  auto release() const
-  noexcept
-  -> std::add_rvalue_reference_t<T> {
-    assert(ptr_ != nullptr);
-    return std::move(*std::exchange(ptr_, nullptr));
-  }
-
-  auto present() const
-  noexcept
-  -> bool {
-    return ptr_ != nullptr;
-  }
-
-  auto reset() const
-  noexcept
-  -> bool {
-    return std::exchange(ptr_, nullptr) != nullptr;
-  }
-
- private:
-  static auto addressof_(T&& arg)
-  -> std::add_pointer_t<T> {
-    return std::addressof(arg);
-  }
-
-  static auto addressof_(T& arg)
-  -> std::add_pointer_t<T> {
-    return std::addressof(arg);
-  }
-
-  mutable std::add_pointer_t<T> ptr_ = nullptr;
-};
-
-template<typename T>
-class front_store_handler_data_<T, false> {
- public:
-  auto get() const
-  noexcept
-  -> std::add_lvalue_reference_t<T> {
-    assert(val_.has_value());
-    return *val_;
-  }
-
-  template<typename Source>
-  auto get_or_assign(Source& src) const
-  -> std::add_lvalue_reference_t<T> {
-    if (!val_.has_value())
-      val_.emplace(adapt::front(src));
-    return *val_;
-  }
-
-  auto release() const
-  noexcept(std::is_nothrow_move_constructible_v<T>)
-  -> T {
-    assert(val_.has_value());
-    T rv = *std::move(val_);
-    val_.reset();
-    return rv;
-  }
-
-  auto present() const
-  noexcept
-  -> bool {
-    return val_.has_value();
-  }
-
-  auto reset() const
-  noexcept(noexcept(val_.reset()))
-  -> bool {
-    bool rv = val_.has_value();
-    val_.reset();
-    return rv;
-  }
-
- private:
-  mutable std::optional<T> val_{};
-};
-
-template<typename Source>
-struct front_store_handler_ {
- private:
-  using src_front_type = adapt::front_type<Source>;
-
-  static constexpr bool use_ref = !std::is_const_v<src_front_type>
-      && !std::is_volatile_v<src_front_type>
-      && (std::is_lvalue_reference_v<src_front_type>
-          || std::is_rvalue_reference_v<src_front_type>);
-
-  using store_type = adapt::value_type<Source>;
-
- public:
-  using type = front_store_handler_data_<store_type, use_ref>;
-};
-
-///\brief Decide on which store handler (copy or pointer) to use, based on Source.
-///\ingroup objpipe_detail
-template<typename Source>
-using front_store_handler = typename front_store_handler_<Source>::type;
-
 
 /**
  * \brief Iterator for source.
@@ -178,7 +52,7 @@ class adapter_iterator {
   using pointer = void;
   using iterator_category = std::input_iterator_tag;
 
-  adapter_iterator() = default;
+  constexpr adapter_iterator() = default;
 
   constexpr adapter_iterator(Source& src)
   noexcept
@@ -187,7 +61,14 @@ class adapter_iterator {
 
   auto operator*() const
   -> reference {
-    return adapt::pull(*src_);
+    auto t = adapt::raw_pull(*src_);
+    if (!t.has_value()) {
+      assert(t.errc() != objpipe_errc::success);
+      throw std::system_error(
+          static_cast<int>(t.errc()),
+          objpipe_category());
+    }
+    return std::move(t).value();
   }
 
   auto operator++()
@@ -202,14 +83,14 @@ class adapter_iterator {
   }
 
   constexpr auto operator==(const adapter_iterator& other) const
-  noexcept
+  noexcept(noexcept(std::declval<Source&>().wait()))
   -> bool {
     return (src_ == nullptr || src_->wait() == objpipe_errc::closed)
         && (other.src_ == nullptr || other.src_->wait() == objpipe_errc::closed);
   }
 
   constexpr auto operator!=(const adapter_iterator& other) const
-  noexcept
+  noexcept(noexcept(std::declval<Source&>().wait()))
   -> bool {
     return !(*this == other);
   }
@@ -232,8 +113,40 @@ class adapter_iterator {
  */
 template<typename Source>
 class adapter_t {
+  // Validate requirements on Source.
   static_assert(std::is_move_constructible_v<Source>,
-      "Source must be move constructible.");
+      "Source implementation must be move constructible.");
+  static_assert(!std::is_swappable_v<Source>
+      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>
+      || std::is_same_v<interlock_pipe<std::remove_reference_t<adapt::front_type<Source>>>, Source>,
+      "Source implementation must not be swappable.");
+  static_assert((!std::is_move_assignable_v<Source> && !std::is_copy_assignable_v<Source>)
+      || std::is_same_v<virtual_pipe<adapt::value_type<Source>>, Source>
+      || std::is_same_v<interlock_pipe<std::remove_reference_t<adapt::front_type<Source>>>, Source>,
+      "Source implementation must not be assignable.");
+  static_assert(std::is_same_v<
+      adapt::value_type<Source>,
+      std::remove_cv_t<std::remove_reference_t<adapt::front_type<Source>>>>,
+      "front() must return a transport of value_type (with any const and reference qualifier).");
+  static_assert(std::is_same_v<
+      adapt::value_type<Source>,
+      std::remove_cv_t<std::remove_reference_t<adapt::pull_type<Source>>>>,
+      "pull() must return a transport of value_type (with any const and reference qualifier).");
+  static_assert(std::is_same_v<
+      adapt::value_type<Source>,
+      std::remove_cv_t<std::remove_reference_t<adapt::try_pull_type<Source>>>>,
+      "try_pull() must return a transport of value_type (with any const and reference qualifier).");
+  static_assert(std::is_same_v<
+      objpipe_errc,
+      decltype(std::declval<Source&>().wait())>,
+      "Source must implement wait() method, returning objpipe_errc.");
+  static_assert(std::is_same_v<
+      bool,
+      decltype(std::declval<Source&>().is_pullable())>,
+      "Source must implement is_pullable() method, returning bool.");
+
+ private:
+  using store_type = transport<adapt::front_type<Source>>;
 
  public:
   using value_type = adapt::value_type<Source>;
@@ -246,6 +159,16 @@ class adapter_t {
   noexcept(std::is_nothrow_move_constructible_v<Source>)
   : src_(std::move(src))
   {}
+
+  ///\brief Swap objpipes.
+  friend auto swap(adapter_t& x, adapter_t& y)
+  noexcept(std::is_nothrow_swappable_v<Source>
+      && std::is_nothrow_swappable_v<store_type>)
+  -> void {
+    using std::swap;
+    swap(x.src_, y.src_);
+    swap(x.store_, y.store_);
+  }
 
   /**
    * \brief Tests if the objpipe is pullable.
@@ -268,7 +191,7 @@ class adapter_t {
   auto is_pullable()
   noexcept
   -> bool {
-    return adapt::is_pullable(const_cast<Source&>(src_));
+    return adapt::is_pullable(src_);
   }
 
   /**
@@ -282,7 +205,9 @@ class adapter_t {
   auto wait() const
   noexcept(noexcept(adapt::wait(std::declval<Source&>())))
   -> objpipe_errc {
-    return adapt::wait(const_cast<Source&>(src_));
+    if (store_.errc() != objpipe_errc::success)
+      return store_.errc();
+    return adapt::wait(src_);
   }
 
   /**
@@ -293,7 +218,10 @@ class adapter_t {
   auto empty() const
   noexcept(noexcept(std::declval<Source&>().wait()))
   -> bool {
-    const objpipe_errc e = const_cast<Source&>(src_).wait();
+    if (store_.has_value()) return false;
+    if (store_.errc() != objpipe_errc::success)
+      return store_.errc() == objpipe_errc::closed;
+    const objpipe_errc e = src_.wait();
     return e == objpipe_errc::closed;
   }
 
@@ -309,8 +237,17 @@ class adapter_t {
    * \throw std::system_error if the objpipe has no values.
    */
   auto front() const
-  -> std::add_lvalue_reference_t<value_type> {
-    return store_.get_or_assign(const_cast<Source&>(src_));
+  -> std::add_lvalue_reference_t<std::remove_reference_t<typename store_type::type>> {
+    if (!store_.has_value() && store_.errc() == objpipe_errc::success)
+      store_ = src_.front();
+    assert(store_.has_value() || store_.errc() != objpipe_errc::success);
+
+    if (store_.errc() != objpipe_errc::success) {
+      throw std::system_error(
+          static_cast<int>(store_.errc()),
+          objpipe_category());
+    }
+    return store_.ref();
   }
 
   /**
@@ -321,8 +258,14 @@ class adapter_t {
    */
   auto pop_front()
   -> void {
-    adapt::pop_front(src_);
-    store_.reset();
+    if (store_.errc() == objpipe_errc::success)
+      store_.emplace(std::in_place_index<1>, src_.pop_front());
+
+    if (store_.errc() != objpipe_errc::success) {
+      throw std::system_error(
+          static_cast<int>(store_.errc()),
+          objpipe_category());
+    }
   }
 
   /**
@@ -335,12 +278,36 @@ class adapter_t {
    */
   auto try_pull()
   -> std::optional<value_type> {
-    if (store_.present()) {
-      auto rv = std::optional<value_type>(store_.release());
-      adapt::pop_front(src_);
+    if (store_.errc() != objpipe_errc::success) {
+      if (store_.errc() == objpipe_errc::closed) return {};
+      throw std::system_error(
+          static_cast<int>(store_.errc()),
+          objpipe_category());
+    }
+
+    if (store_.has_value()) {
+      std::optional<value_type> rv = std::optional<value_type>(std::move(store_).value());
+      store_.emplace(std::in_place_index<1>, src_.pop_front());
+      if (store_.errc() != objpipe_errc::success) {
+        assert(store_.errc() != objpipe_errc::closed);
+        throw std::system_error(
+            static_cast<int>(store_.errc()),
+            objpipe_category());
+      }
       return rv;
     } else {
-      return adapt::try_pull(src_);
+      auto t = adapt::raw_try_pull(src_);
+      store_.emplace(std::in_place_index<1>, t.errc());
+      if (store_.errc() != objpipe_errc::success && store_.errc() != objpipe_errc::closed) {
+        throw std::system_error(
+            static_cast<int>(store_.errc()),
+            objpipe_category());
+      }
+
+      if (t.has_value())
+        return std::move(t).value();
+      else
+        return {};
     }
   }
 
@@ -355,12 +322,32 @@ class adapter_t {
    */
   auto pull()
   -> value_type {
-    if (store_.present()) {
-      value_type rv = store_.release();
-      adapt::pop_front(src_);
+    if (store_.errc() != objpipe_errc::success) {
+      throw std::system_error(
+          static_cast<int>(store_.errc()),
+          objpipe_category());
+    }
+
+    if (store_.has_value()) {
+      value_type rv = std::move(store_).value();
+      store_.emplace(std::in_place_index<1>, src_.pop_front());
+      if (store_.errc() != objpipe_errc::success) {
+        throw std::system_error(
+            static_cast<int>(store_.errc()),
+            objpipe_category());
+      }
       return rv;
     } else {
-      return adapt::pull(src_);
+      auto t = adapt::raw_pull(src_);
+      assert(t.has_value() || t.errc() != objpipe_errc::success);
+      store_.emplace(std::in_place_index<1>, t.errc());
+      if (store_.errc() != objpipe_errc::success) {
+        throw std::system_error(
+            static_cast<int>(store_.errc()),
+            objpipe_category());
+      }
+
+      return std::move(t).value();
     }
   }
 
@@ -377,20 +364,30 @@ class adapter_t {
    */
   auto pull(objpipe_errc& e)
   noexcept(std::is_nothrow_move_constructible_v<value_type>
-      && std::is_nothrow_destructible_v<value_type>
-      && noexcept(std::declval<front_store_handler<Source>&>().present())
-      && noexcept(std::declval<front_store_handler<Source>&>().release())
-      && noexcept(adapt::pull(std::declval<Source&>(), std::declval<objpipe_errc&>())))
+      && std::is_nothrow_destructible_v<value_type>)
   -> std::optional<value_type> {
-    if (store_.present()) {
-      auto rv = std::optional<value_type>(store_.release());
-      e = src_.pop_front();
-      if (e != objpipe_errc::success)
-        rv.reset();
-      return rv;
+    if (store_.errc() != objpipe_errc::success) {
+      e = store_.errc();
+      return {};
     }
 
-    return adapt::pull(src_, e);
+    if (store_.has_value()) {
+      std::optional<value_type> rv = std::move(store_).value();
+      store_.emplace(std::in_place_index<1>, src_.pop_front());
+      e = store_.errc();
+      if (store_.errc() != objpipe_errc::success) rv.reset();
+      return rv;
+    } else {
+      auto t = adapt::raw_pull(src_);
+      assert(t.has_value() || t.errc() != objpipe_errc::success);
+      e = t.errc();
+      store_.emplace(std::in_place_index<1>, t.errc());
+
+      if (t.has_value() && store_.errc() == objpipe_errc::success)
+        return std::move(t).value();
+      else
+        return {};
+    }
   }
 
   /**
@@ -883,8 +880,8 @@ class adapter_t {
   }
 
  private:
-  Source src_;
-  front_store_handler<Source> store_;
+  mutable Source src_;
+  mutable store_type store_{ std::in_place_index<1>, objpipe_errc::success };
 };
 
 namespace {

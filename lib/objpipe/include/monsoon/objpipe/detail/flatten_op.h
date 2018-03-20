@@ -193,7 +193,6 @@ class flatten_op_store_rref_ {
   auto advance()
   noexcept(noexcept(++std::declval<begin_iterator&>()))
   -> void {
-    assert(begin_ != end_);
     ++begin_;
   }
 
@@ -248,6 +247,11 @@ class flatten_op {
     active_()
   {}
 
+  flatten_op(const flatten_op&) = delete;
+  constexpr flatten_op(flatten_op&&) = default;
+  flatten_op& operator=(const flatten_op&) = delete;
+  flatten_op& operator=(flatten_op&&) = delete;
+
   auto is_pullable()
   noexcept(noexcept(std::declval<Source&>().is_pullable())
       && ensure_avail_noexcept)
@@ -269,8 +273,10 @@ class flatten_op {
           || std::is_nothrow_move_constructible_v<item_type>))
   -> transport<item_type> {
     const objpipe_errc e = ensure_avail_();
-    if (e == objpipe_errc::success)
+    if (e == objpipe_errc::success) {
+      pending_pop_ = true;
       return transport<item_type>(std::in_place_index<0>, active_->deref());
+    }
     return transport<item_type>(std::in_place_index<1>, e);
   }
 
@@ -278,9 +284,13 @@ class flatten_op {
   noexcept(ensure_avail_noexcept
       && noexcept(std::declval<store_type&>().advance()))
   -> objpipe_errc {
-    const objpipe_errc e = ensure_avail_();
-    if (e == objpipe_errc::success) active_->advance();
-    return e;
+    if (!std::exchange(pending_pop_, false)) {
+      objpipe_errc e = ensure_avail_();
+      if (e != objpipe_errc::success) return e;
+    }
+
+    active_->advance();
+    return objpipe_errc::success;
   }
 
   auto pull()
@@ -291,6 +301,7 @@ class flatten_op {
           || std::is_nothrow_move_constructible_v<item_type>)
       && noexcept(std::declval<store_type&>().advance()))
   -> transport<item_type> {
+    assert(!pending_pop_);
     const objpipe_errc e = ensure_avail_();
     if (e == objpipe_errc::success) {
       auto result = transport<item_type>(std::in_place_index<0>, active_->deref());
@@ -316,7 +327,8 @@ class flatten_op {
   noexcept(ensure_avail_noexcept)
   -> objpipe_errc {
     while (!active_.has_value() || active_->empty()) {
-      if (active_.has_value() && active_->empty()) {
+      if (active_.has_value()) {
+        assert(active_->empty());
         objpipe_errc e = src_.pop_front();
         if (e != objpipe_errc::success)
           return e;
@@ -334,6 +346,7 @@ class flatten_op {
 
   Source src_;
   std::optional<store_type> active_;
+  bool pending_pop_ = false;
 };
 
 
