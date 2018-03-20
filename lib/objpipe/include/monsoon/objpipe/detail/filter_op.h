@@ -14,7 +14,6 @@
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/invocable_.h>
 #include <monsoon/objpipe/detail/transport.h>
-#include <monsoon/objpipe/detail/swappable.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -206,7 +205,7 @@ class filter_op {
 
   Source src_;
   store_type store_ = store_type(std::in_place_index<1>, objpipe_errc::success);
-  std::tuple<swappable<Pred>...> pred_;
+  std::tuple<Pred...> pred_;
 };
 
 

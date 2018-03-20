@@ -6,7 +6,6 @@
 #include <iterator>
 #include <type_traits>
 #include <monsoon/objpipe/detail/invocable_.h>
-#include <monsoon/objpipe/detail/swappable.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -236,15 +235,15 @@ class merge_pipe_base {
   -> queue_elem* {
     // Make data_ be heap sorted in its entirety.
     if (need_init_) {
-      std::make_heap(data_.begin(), data_.end(), greater(*less_));
+      std::make_heap(data_.begin(), data_.end(), greater(less_));
       need_init_ = false;
     } else if (!data_.empty()) {
-      std::push_heap(data_.begin(), data_.end(), greater(*less_));
+      std::push_heap(data_.begin(), data_.end(), greater(less_));
     }
 
     // Pop one element from the heap.
     while (!data_.empty()) {
-      std::pop_heap(data_.begin(), data_.end(), greater(*less_));
+      std::pop_heap(data_.begin(), data_.end(), greater(less_));
       if (data_.back()->get().errc() == objpipe_errc::closed)
         data_.pop_back();
       else
@@ -280,7 +279,7 @@ class merge_pipe_base {
    */
   std::vector<typename queue_container_type::iterator> data_;
 
-  swappable<Less> less_;
+  Less less_;
   bool need_init_ = true;
 };
 
@@ -514,7 +513,7 @@ class do_merge_t {
       x.emplace(std::in_place_index<0>, std::forward<V>(v));
   }
 
-  swappable<ReduceOp> op_;
+  ReduceOp op_;
 };
 
 

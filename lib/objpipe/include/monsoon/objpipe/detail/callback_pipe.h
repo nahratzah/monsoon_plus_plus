@@ -11,7 +11,6 @@
 #include <boost/coroutine2/coroutine.hpp>
 #include <monsoon/objpipe/detail/transport.h>
 #include <monsoon/objpipe/detail/invocable_.h>
-#include <monsoon/objpipe/detail/swappable.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -86,7 +85,7 @@ class callback_fn_wrapper {
   }
 
  private:
-  swappable<Fn> fn_;
+  Fn fn_;
 };
 
 /**
@@ -137,8 +136,6 @@ class callback_pipe {
 
   static_assert(std::is_move_constructible_v<typename coro_t::pull_type>,
       "Coroutine object must be move constructible.");
-  static_assert(std::is_swappable_v<typename coro_t::pull_type>,
-      "Coroutine object must be swappable.");
 
  public:
   callback_pipe(callback_pipe&& other)

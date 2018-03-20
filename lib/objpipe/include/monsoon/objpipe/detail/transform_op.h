@@ -11,7 +11,6 @@
 #include <monsoon/objpipe/detail/adapt.h>
 #include <monsoon/objpipe/detail/invocable_.h>
 #include <monsoon/objpipe/detail/transport.h>
-#include <monsoon/objpipe/detail/swappable.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -225,7 +224,7 @@ class transform_fn_adapter<Arg, Fn> {
   }
 
  private:
-  swappable<functor_type> fn_;
+  functor_type fn_;
 };
 
 /**
