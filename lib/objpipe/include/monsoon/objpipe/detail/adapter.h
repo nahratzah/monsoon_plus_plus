@@ -83,14 +83,14 @@ class adapter_iterator {
   }
 
   constexpr auto operator==(const adapter_iterator& other) const
-  noexcept
+  noexcept(noexcept(std::declval<Source&>().wait()))
   -> bool {
     return (src_ == nullptr || src_->wait() == objpipe_errc::closed)
         && (other.src_ == nullptr || other.src_->wait() == objpipe_errc::closed);
   }
 
   constexpr auto operator!=(const adapter_iterator& other) const
-  noexcept
+  noexcept(noexcept(std::declval<Source&>().wait()))
   -> bool {
     return !(*this == other);
   }
