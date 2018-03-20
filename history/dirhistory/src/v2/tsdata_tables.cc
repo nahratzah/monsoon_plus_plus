@@ -175,7 +175,7 @@ auto emit_fdtblock(
     const path_matcher& group_filter,
     const tag_matcher& tag_filter,
     const path_matcher& metric_filter)
--> objpipe::reader<tsdata_v2_tables::emit_type> {
+-> decltype(auto) {
   using emit_type = tsdata_v2_tables::emit_type;
 
   auto time_points_ptr = std::shared_ptr<const std::vector<time_point>>(block, &std::get<0>(*block));
