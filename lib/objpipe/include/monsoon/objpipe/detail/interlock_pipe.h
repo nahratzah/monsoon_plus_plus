@@ -312,11 +312,8 @@ class interlock_writer {
   -> void {
     assert(ptr_ != nullptr);
     objpipe_errc e = ptr_->publish(std::forward<Arg>(arg));
-    if (e != objpipe_errc::success) {
-      throw std::system_error(
-          static_cast<int>(e),
-          objpipe_category());
-    }
+    if (e != objpipe_errc::success)
+      throw objpipe_error(e);
   }
 
   template<typename Arg>

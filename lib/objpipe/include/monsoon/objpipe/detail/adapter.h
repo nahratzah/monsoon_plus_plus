@@ -64,9 +64,7 @@ class adapter_iterator {
     auto t = adapt::raw_pull(*src_);
     if (!t.has_value()) {
       assert(t.errc() != objpipe_errc::success);
-      throw std::system_error(
-          static_cast<int>(t.errc()),
-          objpipe_category());
+      throw objpipe_error(t.errc());
     }
     return std::move(t).value();
   }
@@ -234,7 +232,7 @@ class adapter_t {
    * Front will yield the same element, until \ref pop_front() or \ref pull() has been invoked.
    *
    * \return The next value in the objpipe.
-   * \throw std::system_error if the objpipe has no values.
+   * \throw objpipe_error if the objpipe has no values.
    */
   auto front() const
   -> std::add_lvalue_reference_t<std::remove_reference_t<typename store_type::type>> {
@@ -242,11 +240,8 @@ class adapter_t {
       store_ = src_.front();
     assert(store_.has_value() || store_.errc() != objpipe_errc::success);
 
-    if (store_.errc() != objpipe_errc::success) {
-      throw std::system_error(
-          static_cast<int>(store_.errc()),
-          objpipe_category());
-    }
+    if (store_.errc() != objpipe_errc::success)
+      throw objpipe_error(store_.errc());
     return store_.ref();
   }
 
@@ -255,17 +250,15 @@ class adapter_t {
    *
    * \details
    * This function advances the objpipe without returning the value.
+   * \throw objpipe_error if the objpipe has no values.
    */
   auto pop_front()
   -> void {
     if (store_.errc() == objpipe_errc::success)
       store_.emplace(std::in_place_index<1>, src_.pop_front());
 
-    if (store_.errc() != objpipe_errc::success) {
-      throw std::system_error(
-          static_cast<int>(store_.errc()),
-          objpipe_category());
-    }
+    if (store_.errc() != objpipe_errc::success)
+      throw objpipe_error(store_.errc());
   }
 
   /**
@@ -275,14 +268,16 @@ class adapter_t {
    * Pulling removes a value from the objpipe, returning it.
    *
    * \return The next value in the objpipe, or an empty optional if the value is not (yet) available.
+   * \throw objpipe_error if the objpipe is in an error state.
+   *
+   * \note If the objpipe is closed, try_pull will not throw an objpipe_error,
+   * but instead return an empty optional.
    */
   auto try_pull()
   -> std::optional<value_type> {
     if (store_.errc() != objpipe_errc::success) {
       if (store_.errc() == objpipe_errc::closed) return {};
-      throw std::system_error(
-          static_cast<int>(store_.errc()),
-          objpipe_category());
+      throw objpipe_error(store_.errc());
     }
 
     if (store_.has_value()) {
@@ -290,18 +285,15 @@ class adapter_t {
       store_.emplace(std::in_place_index<1>, src_.pop_front());
       if (store_.errc() != objpipe_errc::success) {
         assert(store_.errc() != objpipe_errc::closed);
-        throw std::system_error(
-            static_cast<int>(store_.errc()),
-            objpipe_category());
+        throw objpipe_error(store_.errc());
       }
       return rv;
     } else {
       auto t = adapt::raw_try_pull(src_);
       store_.emplace(std::in_place_index<1>, t.errc());
-      if (store_.errc() != objpipe_errc::success && store_.errc() != objpipe_errc::closed) {
-        throw std::system_error(
-            static_cast<int>(store_.errc()),
-            objpipe_category());
+      if (store_.errc() != objpipe_errc::success
+          && store_.errc() != objpipe_errc::closed) {
+        throw objpipe_error(store_.errc());
       }
 
       if (t.has_value())
@@ -318,34 +310,25 @@ class adapter_t {
    * Pulling removes a value from the objpipe, returning it.
    *
    * \return The next value in the objpipe.
-   * \throw std::system_error if the objpipe has no remaining values.
+   * \throw objpipe_error if the objpipe has no remaining values.
    */
   auto pull()
   -> value_type {
-    if (store_.errc() != objpipe_errc::success) {
-      throw std::system_error(
-          static_cast<int>(store_.errc()),
-          objpipe_category());
-    }
+    if (store_.errc() != objpipe_errc::success)
+      throw objpipe_error(store_.errc());
 
     if (store_.has_value()) {
       value_type rv = std::move(store_).value();
       store_.emplace(std::in_place_index<1>, src_.pop_front());
-      if (store_.errc() != objpipe_errc::success) {
-        throw std::system_error(
-            static_cast<int>(store_.errc()),
-            objpipe_category());
-      }
+      if (store_.errc() != objpipe_errc::success)
+        throw objpipe_error(store_.errc());
       return rv;
     } else {
       auto t = adapt::raw_pull(src_);
       assert(t.has_value() || t.errc() != objpipe_errc::success);
       store_.emplace(std::in_place_index<1>, t.errc());
-      if (store_.errc() != objpipe_errc::success) {
-        throw std::system_error(
-            static_cast<int>(store_.errc()),
-            objpipe_category());
-      }
+      if (store_.errc() != objpipe_errc::success)
+        throw objpipe_error(store_.errc());
 
       return std::move(t).value();
     }
@@ -611,11 +594,8 @@ class adapter_t {
         result.emplace(std::invoke(fn, *std::move(result), std::move(v).value()));
     }
 
-    if (e != objpipe_errc::success && e != objpipe_errc::closed) {
-      throw std::system_error(
-          static_cast<int>(e),
-          objpipe_category());
-    }
+    if (e != objpipe_errc::success && e != objpipe_errc::closed)
+      throw objpipe_error(e);
     return result;
   }
 
@@ -641,11 +621,8 @@ class adapter_t {
         init = std::invoke(fn, std::move(init), std::move(v).value());
     }
 
-    if (e != objpipe_errc::success && e != objpipe_errc::closed) {
-      throw std::system_error(
-          static_cast<int>(e),
-          objpipe_category());
-    }
+    if (e != objpipe_errc::success && e != objpipe_errc::closed)
+      throw objpipe_error(e);
     return init;
   }
 
@@ -690,11 +667,8 @@ class adapter_t {
       e = src_.pop_front();
     }
 
-    if (e != objpipe_errc::closed) {
-      throw std::system_error(
-          static_cast<int>(e),
-          objpipe_category());
-    }
+    if (e != objpipe_errc::closed)
+      throw objpipe_error(e);
     return result;
   }
 
@@ -727,9 +701,7 @@ class adapter_t {
       if (!v.has_value()) {
         assert(v.errc() != objpipe_errc::success);
         if (v.errc() == objpipe_errc::closed) break;
-        throw std::system_error(
-            static_cast<int>(v.errc()),
-            objpipe_category());
+        throw objpipe_error(v.errc());
       }
 
       if (!result.has_value()) {
@@ -761,9 +733,7 @@ class adapter_t {
       if (!v.has_value()) {
         assert(v.errc() != objpipe_errc::success);
         if (v.errc() == objpipe_errc::closed) break;
-        throw std::system_error(
-            static_cast<int>(v.errc()),
-            objpipe_category());
+        throw objpipe_error(v.errc());
       }
 
       if (!result.has_value()) {

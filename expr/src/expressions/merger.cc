@@ -1249,7 +1249,7 @@ auto pull_cycle<Pipe>::read_more(bool block)
     if (!next_tp_.has_value() && block) {
       try {
         next = source_.pull();
-      } catch (const std::system_error& e) {
+      } catch (const objpipe::objpipe_error& e) {
         if (e.code() != objpipe::objpipe_errc::closed)
           throw;
       }

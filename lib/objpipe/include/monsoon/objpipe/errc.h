@@ -46,6 +46,28 @@ std::error_condition make_error_condition(objpipe_errc e);
 monsoon_objpipe_export_
 std::ostream& operator<<(std::ostream& out, objpipe_errc e);
 
+/**
+ * \brief Objpipe exception class.
+ */
+class objpipe_error
+: public std::system_error
+{
+ public:
+  objpipe_error(objpipe_errc e)
+  : std::system_error(static_cast<int>(e), objpipe_category())
+  {}
+
+  objpipe_error(objpipe_errc e, const std::string& what_arg)
+  : std::system_error(static_cast<int>(e), objpipe_category(), what_arg)
+  {}
+
+  objpipe_error(objpipe_errc e, const char* what_arg)
+  : std::system_error(static_cast<int>(e), objpipe_category(), what_arg)
+  {}
+
+  ~objpipe_error() override {};
+};
+
 
 }} /* namespace monsoon::objpipe */
 
