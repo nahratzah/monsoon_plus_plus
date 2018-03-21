@@ -240,7 +240,6 @@ noexcept(noexcept(std::declval<Source&>().try_pull()))
  *
  * \tparam Source Type of the objpipe source.
  * \return A transport containing the pulled value or an error code.
- * \throw std::system_error if the try_pull() call fails.
  */
 template<typename Source>
 auto raw_try_pull(
