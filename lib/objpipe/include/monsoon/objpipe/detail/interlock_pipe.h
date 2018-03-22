@@ -26,15 +26,19 @@ class interlock_impl {
   auto is_pullable()
   -> bool {
     std::lock_guard<std::mutex> lck_{ guard_ };
-    return offered_ != nullptr || writer_count_ > 0;
+    return offered_ != nullptr || exptr_ != nullptr || writer_count_ > 0;
   }
 
   auto wait()
   -> objpipe_errc {
     std::unique_lock<std::mutex> lck_{ guard_ };
     for (;;) {
-      if (offered_ != nullptr) return objpipe_errc::success;
-      if (writer_count_ == 0) return objpipe_errc::closed;
+      if (exptr_ != nullptr)
+        std::rethrow_exception(exptr_);
+      if (offered_ != nullptr)
+        return objpipe_errc::success;
+      if (writer_count_ == 0)
+        return objpipe_errc::closed;
       read_ready_.wait(lck_);
     }
   }
@@ -43,6 +47,8 @@ class interlock_impl {
   -> transport<front_type> {
     std::unique_lock<std::mutex> lck_{ guard_ };
     for (;;) {
+      if (exptr_ != nullptr)
+        std::rethrow_exception(exptr_);
       if (offered_ != nullptr)
         return transport<front_type>(std::in_place_index<0>, get(lck_));
       if (writer_count_ == 0)
@@ -54,10 +60,13 @@ class interlock_impl {
   auto pop_front()
   -> objpipe_errc {
     std::unique_lock<std::mutex> lck_{ guard_ };
-    while (offered_ == nullptr) {
+    while (offered_ == nullptr && exptr_ == nullptr) {
       if (writer_count_ == 0) return objpipe_errc::closed;
       read_ready_.wait(lck_);
     }
+
+    if (exptr_ != nullptr)
+      std::rethrow_exception(exptr_);
 
     offered_ = nullptr;
     lck_.unlock();
@@ -68,11 +77,14 @@ class interlock_impl {
   auto pull()
   -> transport<pull_type> {
     std::unique_lock<std::mutex> lck_{ guard_ };
-    while (offered_ == nullptr) {
+    while (offered_ == nullptr && exptr_ == nullptr) {
       if (writer_count_ == 0)
         return transport<pull_type>(std::in_place_index<1>, objpipe_errc::closed);
       read_ready_.wait(lck_);
     }
+
+    if (exptr_ != nullptr)
+      std::rethrow_exception(exptr_);
 
     auto result = transport<pull_type>(std::in_place_index<0>, get(lck_));
     offered_ = nullptr;
@@ -84,6 +96,9 @@ class interlock_impl {
   auto try_pull()
   -> transport<pull_type> {
     std::unique_lock<std::mutex> lck_{ guard_ };
+    if (exptr_ != nullptr)
+      std::rethrow_exception(exptr_);
+
     if (offered_ == nullptr) {
       if (writer_count_ == 0)
         return transport<pull_type>(std::in_place_index<1>, objpipe_errc::closed);
@@ -106,9 +121,11 @@ class interlock_impl {
     std::unique_lock<std::mutex> lck_{ guard_ };
     write_ready_.wait(lck_,
         [this]() {
-          return offered_ == nullptr || reader_count_ == 0;
+          return offered_ == nullptr || exptr_ != nullptr || reader_count_ == 0;
         });
+    if (exptr_ != nullptr) return objpipe_errc::bad;
     if (reader_count_ == 0) return objpipe_errc::closed;
+    if (exptr_ != nullptr) return objpipe_errc::closed;
 
     std::add_pointer_t<T> v_ptr = nullptr;
     if constexpr(std::is_const_v<T>)
@@ -119,11 +136,12 @@ class interlock_impl {
     read_ready_.notify_one();
     write_ready_.wait(lck_,
         [this, v_ptr]() {
-          return offered_ != v_ptr || reader_count_ == 0;
+          return offered_ != v_ptr || exptr_ != nullptr || reader_count_ == 0;
         });
 
     if (offered_ != v_ptr) return objpipe_errc::success;
     offered_ = nullptr;
+    if (exptr_ != nullptr) return objpipe_errc::bad;
     assert(reader_count_ == 0);
     return objpipe_errc::closed;
   }
@@ -132,6 +150,21 @@ class interlock_impl {
   auto publish(std::add_lvalue_reference_t<std::add_const_t<value_type>> v)
   -> std::enable_if_t<Enable, objpipe_errc> {
     return publish(T(v));
+  }
+
+  auto publish_exception(std::exception_ptr exptr)
+  -> objpipe_errc {
+    assert(exptr != nullptr);
+
+    std::unique_lock<std::mutex> lck_{ guard_ };
+    if (reader_count_ == 0) return objpipe_errc::closed;
+    if (exptr_ != nullptr) return objpipe_errc::bad;
+    exptr_ = std::move(exptr);
+
+    lck_.unlock();
+    read_ready_.notify_all();
+    write_ready_.notify_all(); // Notify all writers that objpipe went bad.
+    return objpipe_errc::success;
   }
 
   auto inc_reader() -> void {
@@ -178,6 +211,7 @@ class interlock_impl {
   std::condition_variable read_ready_;
   std::condition_variable write_ready_;
   std::add_pointer_t<T> offered_ = nullptr;
+  std::exception_ptr exptr_ = nullptr;
   std::uintptr_t writer_count_ = 0;
   std::uintptr_t reader_count_ = 0;
 };
@@ -307,6 +341,13 @@ class interlock_writer {
       delete ptr_;
   }
 
+  friend auto swap(interlock_writer& x, interlock_writer& y)
+  noexcept
+  -> void {
+    using std::swap;
+    swap(x.ptr_, y.ptr_);
+  }
+
   template<typename Arg>
   auto operator()(Arg&& arg)
   -> void {
@@ -321,6 +362,22 @@ class interlock_writer {
   -> void {
     assert(ptr_ != nullptr);
     e = ptr_->publish(std::forward<Arg>(arg));
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  -> void {
+    assert(ptr_ != nullptr);
+    if (exptr == nullptr) throw std::invalid_argument("nullptr exception_ptr");
+    objpipe_errc e = ptr_->publish_exception(std::move(exptr));
+    if (e != objpipe_errc::success)
+      throw objpipe_error(e);
+  }
+
+  auto push_exception(std::exception_ptr exptr, objpipe_errc& e)
+  -> void {
+    assert(ptr_ != nullptr);
+    if (exptr == nullptr) throw std::invalid_argument("nullptr exception_ptr");
+    e = ptr_->publish_exception(std::move(exptr));
   }
 
  private:

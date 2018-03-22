@@ -40,6 +40,8 @@ std::string objpipe_category_t::message(int e) const {
       return "success";
     case objpipe_errc::closed:
       return "objpipe closed";
+    case objpipe_errc::bad:
+      return "objpipe bad";
   }
 }
 
@@ -61,6 +63,8 @@ std::ostream& operator<<(std::ostream& out, objpipe_errc e) {
       e_txt = "objpipe_errc[success]"sv;
     case objpipe_errc::closed:
       e_txt = "objpipe_errc[closed]"sv;
+    case objpipe_errc::bad:
+      e_txt = "objpipe_errc[bad]"sv;
   }
   return out << e_txt;
 }

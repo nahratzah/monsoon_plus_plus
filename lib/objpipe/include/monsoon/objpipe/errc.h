@@ -20,7 +20,8 @@ namespace objpipe {
  */
 enum class objpipe_errc {
   success=0, ///< Status code indicating successful completion.
-  closed ///< Status code indicating failure, due to a closed object pipe.
+  closed, ///< Status code indicating failure, due to a closed object pipe.
+  bad ///< Status code indicating the objpipe went bad.
 };
 
 /**
