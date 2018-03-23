@@ -369,7 +369,11 @@ class interlock_writer {
     assert(ptr_ != nullptr);
     if (exptr == nullptr) throw std::invalid_argument("nullptr exception_ptr");
     objpipe_errc e = ptr_->publish_exception(std::move(exptr));
-    if (e != objpipe_errc::success)
+
+    // We don't throw if objpipe went bad, which would indicate another
+    // exception having been pushed.
+    // Instead, we silently drop the exception.
+    if (e != objpipe_errc::success && e != objpipe_errc::bad)
       throw objpipe_error(e);
   }
 
