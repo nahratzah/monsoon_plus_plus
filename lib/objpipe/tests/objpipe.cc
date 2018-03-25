@@ -11,12 +11,53 @@
 #include <functional>
 
 using monsoon::objpipe::objpipe_errc;
+using monsoon::objpipe::existingthread_push;
+using monsoon::objpipe::singlethread_push;
+using monsoon::objpipe::multithread_push;
+using monsoon::objpipe::multithread_unordered_push;
 
 TEST(iterate_empty) {
   CHECK_EQUAL(
       std::vector<int>(),
       monsoon::objpipe::of<int>()
           .to_vector());
+}
+
+TEST(push_empty) {
+  CHECK_EQUAL(
+      std::vector<int>(),
+      monsoon::objpipe::of<int>()
+          .async()
+          .to_vector()
+          .get());
+
+  CHECK_EQUAL(
+      std::vector<int>(),
+      monsoon::objpipe::of<int>()
+          .async(existingthread_push())
+          .to_vector()
+          .get());
+
+  CHECK_EQUAL(
+      std::vector<int>(),
+      monsoon::objpipe::of<int>()
+          .async(singlethread_push())
+          .to_vector()
+          .get());
+
+  CHECK_EQUAL(
+      std::vector<int>(),
+      monsoon::objpipe::of<int>()
+          .async(multithread_push())
+          .to_vector()
+          .get());
+
+  CHECK_EQUAL(
+      std::vector<int>(),
+      monsoon::objpipe::of<int>()
+          .async(multithread_unordered_push())
+          .to_vector()
+          .get());
 }
 
 TEST(callback) {

@@ -65,8 +65,9 @@ class promise_reducer {
   using value_type = std::remove_cv_t<std::remove_reference_t<decltype(std::declval<Extractor>()(std::declval<state_type>()))>>;
 
   template<typename InitArg, typename AcceptorArg, typename MergerArg, typename ExtractorArg>
-  promise_reducer(InitArg&& init, AcceptorArg&& acceptor, MergerArg&& merger, ExtractorArg&& extractor)
-  : init_(std::forward<InitArg>(init)),
+  promise_reducer(std::promise<value_type>&& prom, InitArg&& init, AcceptorArg&& acceptor, MergerArg&& merger, ExtractorArg&& extractor)
+  : prom_(std::move(prom)),
+    init_(std::forward<InitArg>(init)),
     acceptor_(std::forward<AcceptorArg>(acceptor)),
     merger_(std::forward<MergerArg>(merger)),
     extractor_(std::forward<ExtractorArg>(extractor))
@@ -124,7 +125,8 @@ class promise_reducer {
     auto push_exception(std::exception_ptr exptr)
     noexcept
     -> void {
-      if (bad_.compare_exchange_strong(false, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
+      bool expect_bad = false;
+      if (bad_.compare_exchange_strong(expect_bad, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
         try {
           prom_.set_exception(std::move(exptr));
         } catch (const std::future_error& e) {
@@ -229,6 +231,11 @@ class promise_reducer {
       bool ready = false;
     };
 
+    using internal_state_list = std::list<internal_state>;
+
+   public:
+    using state_type = typename internal_state_list::iterator;
+
     class acceptor_type {
      public:
       acceptor_type(Acceptor&& impl)
@@ -246,11 +253,6 @@ class promise_reducer {
      private:
       Acceptor impl_;
     };
-
-    using internal_state_list = std::list<internal_state>;
-
-   public:
-    using state_type = typename internal_state_list::iterator;
 
     ordered_shared_state(std::promise<value_type>&& prom, Init&& init, Acceptor&& acceptor, Merger&& merger, Extractor&& extractor)
     noexcept(std::is_nothrow_copy_constructible_v<std::promise<value_type>>
@@ -272,12 +274,12 @@ class promise_reducer {
     ~ordered_shared_state() noexcept {
       if (!bad_.load(std::memory_order_acquire)) {
         try {
-          if (pstate_.size() == 1u && pstate_->front().ready) { // Should only fail to hold, if constructors fail.
+          if (pstate_.size() == 1u && pstate_.front().ready) { // Should only fail to hold, if constructors fail.
             if constexpr(std::is_same_v<void, value_type>) {
-              std::invoke(std::move(extractor_), std::move(pstate_.front()));
+              std::invoke(std::move(extractor_), std::move(pstate_.front().state));
               prom_.set_value();
             } else {
-              prom_.set_value(std::invoke(std::move(extractor_), std::move(pstate_.front())));
+              prom_.set_value(std::invoke(std::move(extractor_), std::move(pstate_.front().state)));
             }
           }
         } catch (...) {
@@ -293,7 +295,8 @@ class promise_reducer {
     auto push_exception(std::exception_ptr exptr)
     noexcept
     -> void {
-      if (bad_.compare_exchange_strong(false, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
+      bool expect_bad = false;
+      if (bad_.compare_exchange_strong(expect_bad, true, std::memory_order_acq_rel, std::memory_order_acquire)) {
         try {
           prom_.set_exception(std::move(exptr));
         } catch (const std::future_error& e) {
@@ -317,13 +320,13 @@ class promise_reducer {
         for (;;) { // Note: state is an iterator in pstate_.
           assert(!state->ready);
 
-          if (state != pstate_.begin() && std::prev(state).ready) {
+          if (state != pstate_.begin() && std::prev(state)->ready) {
             state_type predecessor = std::prev(state);
             predecessor->ready = false;
 
             // Perform merge with lock released.
             lck.unlock();
-            std::invoke(merger(), *predecessor, std::move(*state));
+            std::invoke(merger(), predecessor->state, std::move(state->state));
             if (is_bad()) return; // Discard if objpipe went bad.
             lck.lock();
 
@@ -331,13 +334,13 @@ class promise_reducer {
             // Continue by trying to further merge predecessor.
             pstate_.erase(state);
             state = predecessor;
-          } else if (std::next(state) != pstate_.end() && std::next(state).ready) {
+          } else if (std::next(state) != pstate_.end() && std::next(state)->ready) {
             state_type successor = std::next(state);
             successor->ready = false;
 
             // Perform merge with lock released.
             lck.unlock();
-            std::invoke(merger(), *state, std::move(*successor));
+            std::invoke(merger(), state->state, std::move(successor->state));
             if (is_bad()) return; // Discard if objpipe went bad.
             lck.lock();
 
@@ -898,7 +901,21 @@ class async_adapter_t {
   template<typename Init, typename Acceptor, typename Merger, typename Extractor>
   auto reduce(Init&& init, Acceptor&& acceptor, [[maybe_unused]] Merger&& merger, Extractor&& extractor)
   -> std::future<std::remove_cv_t<std::remove_reference_t<decltype(std::declval<Extractor&>()(std::declval<Init>()()))>>> {
-    using result_type = std::remove_cv_t<std::remove_reference_t<decltype(std::declval<Extractor&>()(std::declval<Init>()()))>>;
+    static_assert(is_invocable_v<const std::decay_t<Init>&>,
+        "Init must be invocable, returning a reducer state.");
+
+    using state_type = std::remove_cv_t<std::remove_reference_t<invoke_result_t<Init>>>;
+
+    static_assert(is_invocable_v<std::decay_t<const Acceptor&>, state_type&, value_type&&>
+        || is_invocable_v<std::decay_t<Acceptor>, state_type&, const value_type&>
+        || is_invocable_v<std::decay_t<Acceptor>, state_type&, value_type&>,
+        "Acceptor must be invocable with reducer-state reference and value_type (rref/lref/cref).");
+    static_assert(is_invocable_v<const std::decay_t<Merger>&, state_type&, state_type&&>,
+        "Merger must be invocable with lref reducer-state and rref reducer-state.");
+    static_assert(is_invocable_v<std::decay_t<Extractor>&&, state_type&&>,
+        "Extractor must be invocable with rref reducer-state.");
+
+    using result_type = std::remove_cv_t<std::remove_reference_t<decltype(std::declval<Extractor&>()(std::declval<state_type>()))>>;
 
     // Default case: use ioc_push to perform push operation.
     // Note the double if:
@@ -912,7 +929,7 @@ class async_adapter_t {
         adapt::ioc_push(
             std::move(src_),
             std::move(push_tag_),
-            adapt_async::promise_reducer<std::decay_t<Init>, std::decay_t<Acceptor>, std::decay_t<Merger>, std::decay_t<Extractor>>(std::move(p), std::forward<Init>(init), std::forward<Acceptor>(acceptor), std::forward<Merger>(merger), std::forward<Extractor>(extractor)));
+            adapt_async::promise_reducer<std::decay_t<Init>, std::decay_t<Acceptor>, std::decay_t<Merger>, std::decay_t<Extractor>>(std::move(p), std::forward<Init>(init), std::forward<Acceptor>(acceptor), std::forward<Merger>(merger), std::forward<Extractor>(extractor)).new_state(push_tag_));
 
         return f;
       }
