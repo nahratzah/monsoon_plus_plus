@@ -1,12 +1,11 @@
 project (monsoon_lib)
 
 include_directories (include)
-add_library (monsoon_lib
-  src/empty_file.cc
-)
-target_include_directories(monsoon_lib PUBLIC include)
-set_property (TARGET monsoon_lib PROPERTY VERSION "0.0")
-set_property (TARGET monsoon_lib PROPERTY SOVERSION "0.0")
+add_library (monsoon_lib INTERFACE)
+target_include_directories(monsoon_lib INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    )
 
 install (TARGETS monsoon_lib DESTINATION lib)
 install (FILES
