@@ -14,8 +14,10 @@
 #include <utility>
 #include <vector>
 #include <monsoon/objpipe/reader.h>
+#include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/adapt.h>
+#include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/filter_op.h>
 #include <monsoon/objpipe/detail/flatten_op.h>
 #include <monsoon/objpipe/detail/peek_op.h>
