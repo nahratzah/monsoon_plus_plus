@@ -42,6 +42,8 @@ std::string objpipe_category_t::message(int e) const {
       return "objpipe closed";
     case objpipe_errc::bad:
       return "objpipe bad";
+    case objpipe_errc::no_thread:
+      return "objpipe source has no emitting thread";
   }
 }
 
@@ -61,10 +63,16 @@ std::ostream& operator<<(std::ostream& out, objpipe_errc e) {
   switch (e) {
     case objpipe_errc::success:
       e_txt = "objpipe_errc[success]"sv;
+      break;
     case objpipe_errc::closed:
       e_txt = "objpipe_errc[closed]"sv;
+      break;
     case objpipe_errc::bad:
       e_txt = "objpipe_errc[bad]"sv;
+      break;
+    case objpipe_errc::no_thread:
+      e_txt = "objpipe_errc[no_thread]"sv;
+      break;
   }
   return out << e_txt;
 }

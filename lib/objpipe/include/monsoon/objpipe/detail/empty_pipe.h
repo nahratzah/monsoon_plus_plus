@@ -2,6 +2,7 @@
 #define MONSOON_OBJPIPE_DETAIL_EMPTY_PIPE_H
 
 #include <monsoon/objpipe/errc.h>
+#include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/transport.h>
 
 namespace monsoon::objpipe::detail {
@@ -50,6 +51,23 @@ class empty_pipe {
   noexcept
   -> transport<T> {
     return transport<T>(std::in_place_index<1>, objpipe_errc::closed);
+  }
+
+  constexpr auto can_push([[maybe_unused]] existingthread_push tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  template<typename Acceptor>
+  auto ioc_push([[maybe_unused]] existingthread_push tag, [[maybe_unused]] Acceptor&& acceptor) &&
+  noexcept
+  -> void {
+    /* SKIP:
+     * Pushing zero objects into acceptor and then destroying it is effectively
+     * a noop.
+     * We leave destruction to the caller.
+     */
   }
 };
 
