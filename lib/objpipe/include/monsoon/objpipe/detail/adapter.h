@@ -24,6 +24,7 @@
 #include <monsoon/objpipe/detail/select_op.h>
 #include <monsoon/objpipe/detail/virtual.h>
 #include <monsoon/objpipe/detail/transport.h>
+#include <monsoon/objpipe/detail/push_op.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -847,6 +848,17 @@ class adapter_t {
   auto underlying() &&
   -> Source&& {
     return std::move(src_);
+  }
+
+  auto async() &&
+  -> decltype(auto) {
+    return std::move(*this).async(singlethread_push());
+  }
+
+  template<typename PushTag>
+  auto async(PushTag push_tag)
+  -> std::enable_if_t<std::is_base_of_v<existingthread_push, std::decay_t<PushTag>>, async_adapter_t<Source, std::decay_t<PushTag>>> {
+    return async_adapter_t<Source, std::decay_t<PushTag>>(std::move(src_), std::move(push_tag));
   }
 
  private:
