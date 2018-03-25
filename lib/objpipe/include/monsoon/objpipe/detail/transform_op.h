@@ -11,8 +11,39 @@
 #include <monsoon/objpipe/detail/adapt.h>
 #include <monsoon/objpipe/detail/invocable_.h>
 #include <monsoon/objpipe/detail/transport.h>
+#include <monsoon/objpipe/detail/push_op.h>
 
 namespace monsoon::objpipe::detail {
+
+
+template<typename Sink, typename Fn>
+class transform_push {
+  static_assert(std::is_copy_constructible_v<Fn>,
+      "Functor must be copy constructible.");
+
+ public:
+  transform_push(Sink&& sink, Fn&& fn)
+  noexcept(std::is_nothrow_move_constructible_v<Sink>
+      && std::is_nothrow_move_constructible_v<Fn>)
+  : sink_(std::move(sink)),
+    fn_(std::move(fn))
+  {}
+
+  template<typename T>
+  auto operator()(T&& v)
+  -> objpipe_errc {
+    return sink_(fn_(std::forward<T>(v)));
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept {
+    sink_.push_exception(std::move(exptr));
+  }
+
+ private:
+  Sink sink_;
+  Fn fn_; // transform_fn_adapter.
+};
 
 
 struct transform_identity_fn {
@@ -327,6 +358,22 @@ class transform_op {
     return transform_op<Source, Fn..., NextFn>(
         std::move(src_),
         std::move(fn_).extend(std::forward<NextFn>(next_fn)));
+  }
+
+  template<typename PushTag>
+  auto can_push(PushTag tag) const
+  noexcept
+  -> std::enable_if_t<adapt::has_ioc_push<Source, PushTag>, bool> {
+    return src_.can_push(tag);
+  }
+
+  template<typename PushTag, typename Acceptor>
+  auto ioc_push(PushTag tag, Acceptor&& acceptor) &&
+  noexcept
+  -> std::enable_if_t<adapt::has_ioc_push<Source, PushTag>> {
+    std::move(src_).ioc_push(
+        tag,
+        transform_push<std::decay_t<Acceptor>, fn_type>(std::forward<Acceptor>(acceptor), std::move(fn_)));
   }
 
  private:

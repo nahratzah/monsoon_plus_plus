@@ -294,11 +294,17 @@ class virtual_pipe {
     return pimpl_->pull();
   }
 
+  template<typename PushTag>
+  auto can_push(PushTag tag) const noexcept -> bool {
+    assert(pimpl_ != nullptr);
+    return pimpl_->can_push(tag);
+  }
+
   template<typename PushTag, typename Acceptor>
   auto ioc_push(PushTag&& tag, Acceptor&& acceptor) &&
   -> void {
     assert(pimpl_ != nullptr);
-    std::exchange(pimpl_, nullptr)->ioc_push(
+    std::move(*std::exchange(pimpl_, nullptr)).ioc_push(
         std::forward<PushTag>(tag),
         virtual_push_acceptor<T>(std::forward<Acceptor>(acceptor)));
   }

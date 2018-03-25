@@ -31,6 +31,49 @@ noexcept(std::conjunction_v<
     return filter_test_(v, preds...);
 }
 
+
+template<typename Sink, typename... Pred>
+class filter_push {
+ public:
+  filter_push(Sink&& sink, std::tuple<Pred...>&& pred)
+  noexcept(std::is_nothrow_move_constructible_v<Sink>
+      && std::is_nothrow_move_constructible_v<std::tuple<Pred...>>)
+  : sink_(std::move(sink)),
+    pred_(std::move(pred))
+  {}
+
+  template<typename T>
+  auto operator()(T&& v)
+  -> objpipe_errc {
+    if (!test(v)) return objpipe_errc::success;
+    return sink_(std::forward<T>(v));
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    sink_.push_exception(std::move(exptr));
+  }
+
+ private:
+  template<typename T>
+  constexpr auto test(const T& v) const
+  -> bool {
+    return test(v, std::index_sequence_for<Pred...>());
+  }
+
+  template<typename T, std::size_t... Idx>
+  constexpr auto test(const T& v,
+      std::index_sequence<Idx...>) const
+  -> bool {
+    return filter_test_(v, std::get<Idx>(pred_)...);
+  }
+
+  Sink sink_;
+  std::tuple<Pred...> pred_;
+};
+
+
 /**
  * \brief Filter operation.
  * \ingroup objpipe_detail
@@ -173,6 +216,21 @@ class filter_op {
       if (!v.has_value() || test(v.value()))
         return v;
     }
+  }
+
+  template<typename PushTag>
+  auto can_push(PushTag tag) const
+  noexcept
+  -> std::enable_if_t<adapt::has_ioc_push<Source, PushTag>, bool> {
+    return src_.can_push(tag);
+  }
+
+  template<typename PushTag, typename Acceptor>
+  auto ioc_push(PushTag tag, Acceptor&& acceptor) &&
+  -> std::enable_if_t<adapt::has_ioc_push<Source, PushTag>> {
+    return std::move(src_).ioc_push(
+        tag,
+        filter_push<std::decay_t<Acceptor>, Pred...>(std::forward<Acceptor>(acceptor), std::move(pred_)));
   }
 
  private:
