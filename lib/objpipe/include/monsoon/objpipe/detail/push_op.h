@@ -58,9 +58,10 @@ class push_adapter_t {
 namespace adapt_async {
 
 
-template<typename Init, typename Acceptor, typename Merger, typename Extractor>
+template<typename ObjpipeVType, typename Init, typename Acceptor, typename Merger, typename Extractor>
 class promise_reducer {
  public:
+  using objpipe_value_type = ObjpipeVType;
   using state_type = std::remove_cv_t<std::remove_reference_t<decltype(std::declval<Init>()())>>;
   using value_type = std::remove_cv_t<std::remove_reference_t<decltype(std::declval<Extractor>()(std::declval<state_type>()))>>;
 
@@ -473,11 +474,11 @@ class promise_reducer {
     ///\brief Acceptor for rvalue reference.
     ///\details Accepts a single value by rvalue reference.
     ///\param[in] v The accepted value.
-    auto operator()(value_type&& v)
+    auto operator()(objpipe_value_type&& v)
     -> objpipe_errc {
       if (sptr_->is_bad()) return objpipe_errc::bad;
 
-      if constexpr(is_invocable_v<acceptor_type, state_type&, value_type&&>)
+      if constexpr(is_invocable_v<acceptor_type, state_type&, objpipe_value_type&&>)
         return std::invoke(acceptor_, state_, std::move(v));
       else
         return std::invoke(acceptor_, state_, v);
@@ -486,11 +487,11 @@ class promise_reducer {
     ///\brief Acceptor for const reference.
     ///\details Accepts a single value by const reference.
     ///\param[in] v The accepted value.
-    auto operator()(const value_type& v)
+    auto operator()(const objpipe_value_type& v)
     -> objpipe_errc {
       if (sptr_->is_bad()) return objpipe_errc::bad;
 
-      if constexpr(is_invocable_v<acceptor_type, state_type&, const value_type&>)
+      if constexpr(is_invocable_v<acceptor_type, state_type&, const objpipe_value_type&>)
         return std::invoke(acceptor_, state_, v);
       else
         return (*this)(value_type(v));
@@ -499,11 +500,11 @@ class promise_reducer {
     ///\brief Acceptor for lvalue reference.
     ///\details Accepts a single value by lvalue reference.
     ///\param[in] v The accepted value.
-    auto operator()(value_type& v)
+    auto operator()(objpipe_value_type& v)
     -> objpipe_errc {
       if (sptr_->is_bad()) return objpipe_errc::bad;
 
-      if constexpr(is_invocable_v<acceptor_type, state_type&, value_type&>)
+      if constexpr(is_invocable_v<acceptor_type, state_type&, objpipe_value_type&>)
         return std::invoke(acceptor_, state_, v);
       else
         return (*this)(value_type(v));
@@ -553,39 +554,49 @@ class promise_reducer {
       extractor_(std::move(extractor))
     {}
 
-    single_thread_state(single_thread_state&&) = default;
+    single_thread_state(single_thread_state&& other)
+    noexcept(std::is_nothrow_move_constructible_v<Acceptor>
+        && std::is_nothrow_move_constructible_v<Extractor>
+        && std::is_nothrow_move_constructible_v<state_type>)
+    : prom_(std::move(other.prom_)),
+      bad_(std::exchange(other.bad_, true)), // Ensure other won't attempt to assign a value at destruction.
+      state_(std::move(other.state_)),
+      acceptor_(std::move(other.acceptor_)),
+      extractor_(std::move(other.extractor_))
+    {}
+
     single_thread_state(const single_thread_state&) = delete;
     single_thread_state& operator=(single_thread_state&&) = delete;
     single_thread_state& operator=(const single_thread_state&) = delete;
 
     ///\brief Accept a value by rvalue reference.
-    auto operator()(value_type&& v)
+    auto operator()(objpipe_value_type&& v)
     -> objpipe_errc {
       if (bad_) return objpipe_errc::bad;
 
-      if constexpr(is_invocable_v<Acceptor, state_type&, value_type&&>)
+      if constexpr(is_invocable_v<Acceptor, state_type&, objpipe_value_type&&>)
         return std::invoke(acceptor_, state_, std::move(v));
       else
         return std::invoke(acceptor_, state_, v);
     }
 
     ///\brief Accept a value by const reference.
-    auto operator()(const value_type& v)
+    auto operator()(const objpipe_value_type& v)
     -> objpipe_errc {
       if (bad_) return objpipe_errc::bad;
 
-      if constexpr(is_invocable_v<Acceptor, state_type&, const value_type&>)
+      if constexpr(is_invocable_v<Acceptor, state_type&, const objpipe_value_type&>)
         return std::invoke(acceptor_, state_, v);
       else
         return (*this)(value_type(v));
     }
 
     ///\brief Accept a value by lvalue reference.
-    auto operator()(value_type& v)
+    auto operator()(objpipe_value_type& v)
     -> objpipe_errc {
       if (bad_) return objpipe_errc::bad;
 
-      if constexpr(is_invocable_v<Acceptor, state_type&, value_type&>)
+      if constexpr(is_invocable_v<Acceptor, state_type&, objpipe_value_type&>)
         return std::invoke(acceptor_, state_, v);
       else
         return (*this)(value_type(v));
@@ -929,7 +940,7 @@ class async_adapter_t {
         adapt::ioc_push(
             std::move(src_),
             std::move(push_tag_),
-            adapt_async::promise_reducer<std::decay_t<Init>, std::decay_t<Acceptor>, std::decay_t<Merger>, std::decay_t<Extractor>>(std::move(p), std::forward<Init>(init), std::forward<Acceptor>(acceptor), std::forward<Merger>(merger), std::forward<Extractor>(extractor)).new_state(push_tag_));
+            adapt_async::promise_reducer<value_type, std::decay_t<Init>, std::decay_t<Acceptor>, std::decay_t<Merger>, std::decay_t<Extractor>>(std::move(p), std::forward<Init>(init), std::forward<Acceptor>(acceptor), std::forward<Merger>(merger), std::forward<Extractor>(extractor)).new_state(push_tag_));
 
         return f;
       }

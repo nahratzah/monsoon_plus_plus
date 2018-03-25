@@ -303,6 +303,110 @@ TEST(interlock) {
   th.join();
 }
 
+TEST(interlock_push) {
+  constexpr int COUNT = 1 * 1000 * 1000;
+  monsoon::objpipe::interlock_reader<std::pair<int, int>> reader;
+  monsoon::objpipe::interlock_writer<std::pair<int, int>> writer;
+  std::tie(reader, writer) = monsoon::objpipe::new_interlock<std::pair<int, int>>();
+
+  std::vector<int> expect;
+  for (int i = 0; i < COUNT; ++i)
+    expect.push_back(i);
+
+  auto th1 = std::thread(std::bind(
+          [](monsoon::objpipe::interlock_writer<std::pair<int, int>>& writer) {
+            for (int i = 0; i < COUNT; ++i)
+              writer(std::make_pair(1, i));
+          },
+          writer));
+  auto th2 = std::thread(std::bind(
+          [](monsoon::objpipe::interlock_writer<std::pair<int, int>>& writer) {
+            for (int i = 0; i < COUNT; ++i)
+              writer(std::make_pair(2, i));
+          },
+          std::move(writer)));
+
+  // Method under test.
+  const std::vector<std::pair<int, int>> result = std::move(reader)
+      .async()
+      .to_vector()
+      .get();
+
+  // Split result into components, as ordering is not guaranteed.
+  std::vector<int> th1_result;
+  std::vector<int> th2_result;
+  std::for_each(result.begin(), result.end(),
+      [&th1_result, &th2_result](const std::pair<int, int> pair) {
+        CHECK(pair.first == 1 || pair.first == 2);
+        if (pair.first == 1)
+          th1_result.push_back(pair.second);
+        else
+          th2_result.push_back(pair.second);
+      });
+
+  CHECK_EQUAL(expect, th1_result);
+  CHECK_EQUAL(expect, th2_result);
+
+  th1.join();
+  th2.join();
+}
+
+TEST(interlock_push_unordered) {
+  constexpr int COUNT = 1 * 1000 * 1000;
+  monsoon::objpipe::interlock_reader<std::pair<int, int>> reader;
+  monsoon::objpipe::interlock_writer<std::pair<int, int>> writer;
+  std::tie(reader, writer) = monsoon::objpipe::new_interlock<std::pair<int, int>>();
+
+  std::vector<int> expect;
+  for (int i = 0; i < COUNT; ++i)
+    expect.push_back(i);
+
+  auto th1 = std::thread(std::bind(
+          [](monsoon::objpipe::interlock_writer<std::pair<int, int>>& writer) {
+            for (int i = 0; i < COUNT; ++i)
+              writer(std::make_pair(1, i));
+          },
+          writer));
+  auto th2 = std::thread(std::bind(
+          [](monsoon::objpipe::interlock_writer<std::pair<int, int>>& writer) {
+            for (int i = 0; i < COUNT; ++i)
+              writer(std::make_pair(2, i));
+          },
+          std::move(writer)));
+
+  // Method under test.
+  const std::vector<std::pair<int, int>> result = std::move(reader)
+      .async(multithread_unordered_push())
+      .to_vector()
+      .get();
+
+  // Split result into components, as ordering is not guaranteed.
+  std::vector<int> th1_result;
+  std::vector<int> th2_result;
+  std::for_each(result.begin(), result.end(),
+      [&th1_result, &th2_result](const std::pair<int, int> pair) {
+        CHECK(pair.first == 1 || pair.first == 2);
+        if (pair.first == 1)
+          th1_result.push_back(pair.second);
+        else
+          th2_result.push_back(pair.second);
+      });
+
+  // Unordered means the reductions may happen in an unordered fashion,
+  // thus we can not even guarantee that even the elements in a
+  // single thread are reduced in ordered fashion.
+  //
+  // All we can check is that everything is present.
+  std::sort(th1_result.begin(), th1_result.end());
+  std::sort(th2_result.begin(), th2_result.end());
+
+  CHECK_EQUAL(expect, th1_result);
+  CHECK_EQUAL(expect, th2_result);
+
+  th1.join();
+  th2.join();
+}
+
 TEST(reader_to_vector) {
   CHECK_EQUAL(
       std::vector<int>({ 0, 1, 2, 3, 4 }),

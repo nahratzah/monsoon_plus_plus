@@ -21,5 +21,10 @@ inline std::ostream& operator<<(std::ostream& out, const std::vector<T>& v) {
   return out << "]";
 }
 
+template<typename T, typename U>
+inline std::ostream& operator<<(std::ostream& out, const std::pair<T, U>& v) {
+  return out << "(" << v.first << ", " << v.second << ")";
+}
+
 
 } /* namespace std */
