@@ -886,7 +886,12 @@ auto ioc_push(Source&& src, [[maybe_unused]] singlethread_push push_tag, Accepto
                     auto tx = adapt::raw_pull(src);
                     using value_type = typename decltype(tx)::value_type;
 
-                    if (tx.has_value()) {
+                    if (tx.errc() == objpipe_errc::closed) {
+                      break;
+                    } else if (tx.errc() != objpipe_errc::success) {
+                      throw objpipe_error(tx.errc());
+                    } else {
+                      assert(tx.has_value());
                       objpipe_errc e;
                       if constexpr(is_invocable_v<std::decay_t<Acceptor>&, typename decltype(tx)::type>)
                         e = std::invoke(acceptor, std::move(tx).value());
@@ -897,10 +902,6 @@ auto ioc_push(Source&& src, [[maybe_unused]] singlethread_push push_tag, Accepto
 
                       if (e != objpipe_errc::success)
                         break;
-                    } else if (tx.errc() == objpipe_errc::closed) {
-                      break;
-                    } else {
-                      throw objpipe_error(tx.errc());
                     }
                   }
                 } catch (...) {
