@@ -75,6 +75,22 @@ class merge_queue_elem_ {
     return std::move(get());
   }
 
+  ///\brief Raw access to source.
+  auto underlying() const &
+  noexcept
+  -> const Source& {
+    assert(!front_val_.has_value()); // Only allowed on unused source.
+    return src_;
+  }
+
+  ///\brief Raw access to source.
+  auto underlying() &&
+  noexcept
+  -> Source&& {
+    assert(!front_val_.has_value()); // Only allowed on unused source.
+    return std::move(src_);
+  }
+
  private:
   std::optional<transport_type> front_val_;
   Source src_;
@@ -252,6 +268,18 @@ class merge_pipe_base {
     return nullptr;
   }
 
+  auto get_queue() &&
+  noexcept
+  -> queue_container_type&& {
+    return data_store_;
+  }
+
+  auto get_queue() const &
+  noexcept
+  -> queue_container_type&& {
+    return data_store_;
+  }
+
   auto is_less(const value_type& x, const value_type& y) const
   noexcept(is_nothrow_invocable_v<Less&, const value_type&, const value_type&>)
   -> bool {
@@ -317,6 +345,35 @@ class merge_pipe
     }
     std::exchange(recent, nullptr)->reset();
     return objpipe_errc::success;
+  }
+
+  template<bool Enable = adapt::has_ioc_push<Source, multithread_unordered_push>>
+  auto can_push(const multithread_unordered_push& tag) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    const auto& q = this->get_queue();
+    return std::all_of(
+        q.begin(),
+        q.end(),
+        [&tag](const auto& qelem) {
+          return qelem.underlying().can_push(tag);
+        });
+  }
+
+  template<typename Acceptor, bool Enable = adapt::has_ioc_push<Source, multithread_unordered_push>>
+  auto ioc_push(multithread_unordered_push tag, Acceptor&& acceptor) &&
+  -> std::enable_if_t<Enable> {
+    // We drop the ordering constraint from merge:
+    // 1. merging does not drop elements, it only needs ordering for output ordering
+    // 2. the tag specifies we don't care about output ordering
+    // Therefore, we can simply emit each element in unspecified order.
+    auto&& q = std::move(*this).get_queue();
+    std::for_each(
+        std::make_move_iterator(q.begin()),
+        std::make_move_iterator(q.end()),
+        [&tag, &acceptor](auto&& qelem) {
+          return std::move(qelem).underlying().ioc_push(tag, acceptor);
+        });
   }
 
  private:
