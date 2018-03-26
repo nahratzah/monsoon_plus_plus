@@ -78,10 +78,14 @@ class flatten_push {
       thread_pool::default_pool().publish(
           make_task(
               [](Sink&& dst, Collection&& c) {
-                std::for_each(
-                    make_move_iterator(flatten_op_begin_(c)),
-                    make_move_iterator(flatten_op_end_(c)),
-                    std::ref(dst));
+                try {
+                  std::for_each(
+                      make_move_iterator(flatten_op_begin_(c)),
+                      make_move_iterator(flatten_op_end_(c)),
+                      std::ref(dst));
+                } catch (...) {
+                  dst.push_exception(std::current_exception());
+                }
               },
               std::move(dst),
               std::move(c)));
