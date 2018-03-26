@@ -14,7 +14,6 @@
 #include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/adapt.h>
 #include <monsoon/objpipe/detail/invocable_.h>
-#include <monsoon/objpipe/detail/thread_pool.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -248,8 +247,8 @@ class promise_reducer {
       template<typename Arg>
       auto operator()(state_type& s, Arg&& v) const
       noexcept(is_nothrow_invocable_v<Acceptor, state_type&, Arg>)
-      -> void {
-        std::invoke(impl_, s.state, std::forward<Arg>(v));
+      -> objpipe_errc {
+        return std::invoke(impl_, s->state, std::forward<Arg>(v));
       }
 
      private:
@@ -423,7 +422,6 @@ class promise_reducer {
         && std::is_nothrow_move_constructible_v<state_type>
         && is_nothrow_invocable_v<Init>)
     : state_(sptr->new_state()),
-      acceptor_(sptr->acceptor()),
       sptr_(std::move(sptr))
     {}
 
@@ -436,7 +434,6 @@ class promise_reducer {
         && std::is_nothrow_move_constructible_v<state_type>
         && is_nothrow_invocable_v<Init>)
     : state_(sptr->new_state(s)),
-      acceptor_(sptr->acceptor()),
       sptr_(std::move(sptr))
     {}
 
@@ -472,6 +469,15 @@ class promise_reducer {
     noexcept(std::is_nothrow_move_constructible_v<state_type>)
     = default;
 
+    auto operator=(local_state&& rhs)
+    noexcept(std::is_nothrow_move_assignable_v<state_type>)
+    -> local_state& = default;
+
+    auto operator=(const local_state& rhs)
+    -> local_state& {
+      return *this = local_state(rhs);
+    }
+
     ///\brief Acceptor for rvalue reference.
     ///\details Accepts a single value by rvalue reference.
     ///\param[in] v The accepted value.
@@ -480,9 +486,9 @@ class promise_reducer {
       if (sptr_->is_bad()) return objpipe_errc::bad;
 
       if constexpr(is_invocable_v<acceptor_type, state_type&, objpipe_value_type&&>)
-        return std::invoke(acceptor_, state_, std::move(v));
+        return std::invoke(sptr_->acceptor(), state_, std::move(v));
       else
-        return std::invoke(acceptor_, state_, v);
+        return std::invoke(sptr_->acceptor(), state_, v);
     }
 
     ///\brief Acceptor for const reference.
@@ -493,7 +499,7 @@ class promise_reducer {
       if (sptr_->is_bad()) return objpipe_errc::bad;
 
       if constexpr(is_invocable_v<acceptor_type, state_type&, const objpipe_value_type&>)
-        return std::invoke(acceptor_, state_, v);
+        return std::invoke(sptr_->acceptor(), state_, v);
       else
         return (*this)(value_type(v));
     }
@@ -506,7 +512,7 @@ class promise_reducer {
       if (sptr_->is_bad()) return objpipe_errc::bad;
 
       if constexpr(is_invocable_v<acceptor_type, state_type&, objpipe_value_type&>)
-        return std::invoke(acceptor_, state_, v);
+        return std::invoke(sptr_->acceptor(), state_, v);
       else
         return (*this)(value_type(v));
     }
@@ -530,9 +536,6 @@ class promise_reducer {
     ///\brief Reduction-state.
     ///\details Values are accepted into the reduction state.
     state_type state_;
-    ///\brief Value acceptor functor.
-    ///\note Life time is bounded by sptr_.
-    const acceptor_type& acceptor_;
     ///\brief Shared state pointer.
     std::shared_ptr<SharedState> sptr_;
   };
@@ -718,46 +721,6 @@ class promise_reducer {
 };
 
 
-template<typename Fn, typename... Args>
-class task {
- public:
-  template<typename FnArg, typename... ArgsArg, typename = std::enable_if_t<sizeof...(ArgsArg) == sizeof...(Args)>>
-  explicit task(FnArg&& fn, ArgsArg&&... args)
-  noexcept(std::conjunction_v<
-      std::is_nothrow_constructible<Fn, FnArg>,
-      std::is_nothrow_constructible<Args, ArgsArg>...>)
-  : fn_(std::forward<FnArg>(fn)),
-    args_(std::forward<ArgsArg>(args)...)
-  {}
-
-  task(task&& rhs)
-  noexcept(std::conjunction_v<
-      std::is_nothrow_move_constructible<Fn>,
-      std::is_nothrow_move_constructible<Args>...>)
-  : fn_(std::move(rhs.fn_)),
-    args_(std::move(rhs.args_))
-  {}
-
-  auto operator()()
-  noexcept(noexcept(std::apply(std::declval<Fn>(), std::declval<std::tuple<Args...>>())))
-  -> auto {
-    return std::apply(std::move(fn_), std::move(args_));
-  }
-
- private:
-  Fn fn_;
-  std::tuple<Args...> args_;
-};
-
-template<typename Fn, typename... Args>
-auto make_task(Fn&& fn, Args&&... args)
--> task<std::decay_t<Fn>, std::remove_cv_t<std::remove_reference_t<Args>>...> {
-  return task<std::decay_t<Fn>, std::remove_cv_t<std::remove_reference_t<Args>>...>(
-      std::forward<Fn>(fn),
-      std::forward<Args>(args)...);
-}
-
-
 } /* namespace monsoon::objpipe::detail::adapt_async */
 
 
@@ -798,129 +761,6 @@ struct acceptor_adapter {
 
 
 namespace adapt {
-namespace {
-
-
-struct mock_push_adapter_ {
-  template<typename T>
-  auto operator()(T&& v) -> void;
-
-  template<typename T>
-  auto push_exception(std::exception_ptr) -> void;
-};
-
-template<typename Source, typename PushTag, typename = void>
-struct has_ioc_push_
-: std::false_type
-{};
-
-template<typename Source, typename PushTag>
-struct has_ioc_push_<Source, PushTag, std::void_t<decltype(std::declval<Source>().ioc_push(std::declval<PushTag&>(), std::declval<mock_push_adapter_>()))>>
-: std::true_type
-{};
-
-} /* namespace monsoon::objpipe::detail::adapt::<unnamed> */
-
-
-///\brief Test if source has an ioc_push method for the given push tag.
-template<typename Source, typename PushTag>
-constexpr bool has_ioc_push = has_ioc_push_<Source, PushTag>::value;
-
-
-template<typename Source, typename Acceptor>
-auto ioc_push(Source&& src, existingthread_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<has_ioc_push<std::decay_t<Source>, existingthread_push>> {
-  static_assert(std::is_rvalue_reference_v<Source&&>
-      && !std::is_const_v<Source&&>,
-      "Source must be passed by (non-const) rvalue reference.");
-  return std::forward<Source>(src).ioc_push(
-      std::move(push_tag),
-      std::forward<Acceptor>(acceptor));
-}
-
-template<typename Source, typename Acceptor>
-auto ioc_push(Source&& src, singlethread_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<has_ioc_push<std::decay_t<Source>, singlethread_push>> {
-  static_assert(std::is_rvalue_reference_v<Source&&>
-      && !std::is_const_v<Source&&>,
-      "Source must be passed by (non-const) rvalue reference.");
-  return std::forward<Source>(src).ioc_push(
-      std::move(push_tag),
-      std::forward<Acceptor>(acceptor));
-}
-
-template<typename Source, typename Acceptor>
-auto ioc_push(Source&& src, multithread_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<has_ioc_push<std::decay_t<Source>, multithread_push>> {
-  static_assert(std::is_rvalue_reference_v<Source&&>
-      && !std::is_const_v<Source&&>,
-      "Source must be passed by (non-const) rvalue reference.");
-  return std::forward<Source>(src).ioc_push(
-      std::move(push_tag),
-      std::forward<Acceptor>(acceptor));
-}
-
-template<typename Source, typename Acceptor>
-auto ioc_push(Source&& src, multithread_unordered_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<has_ioc_push<std::decay_t<Source>, multithread_unordered_push>> {
-  static_assert(std::is_rvalue_reference_v<Source&&>
-      && !std::is_const_v<Source&&>,
-      "Source must be passed by (non-const) rvalue reference.");
-  return std::forward<Source>(src).ioc_push(
-      std::move(push_tag),
-      std::forward<Acceptor>(acceptor));
-}
-
-template<typename Source, typename Acceptor>
-auto ioc_push(Source&& src, [[maybe_unused]] singlethread_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<!has_ioc_push<std::decay_t<Source>, singlethread_push>> {
-  static_assert(std::is_rvalue_reference_v<Source&&>
-      && !std::is_const_v<Source&&>,
-      "Source must be passed by (non-const) rvalue reference.");
-  thread_pool::default_pool()
-      .publish(
-          adapt_async::make_task(
-              [](Source&& src, std::decay_t<Acceptor>&& acceptor) {
-                try {
-                  for (;;) {
-                    auto tx = adapt::raw_pull(src);
-                    using value_type = typename decltype(tx)::value_type;
-
-                    if (tx.errc() == objpipe_errc::closed) {
-                      break;
-                    } else if (tx.errc() != objpipe_errc::success) {
-                      throw objpipe_error(tx.errc());
-                    } else {
-                      assert(tx.has_value());
-                      objpipe_errc e;
-                      if constexpr(is_invocable_v<std::decay_t<Acceptor>&, typename decltype(tx)::type>)
-                        e = std::invoke(acceptor, std::move(tx).value());
-                      else if constexpr(is_invocable_v<std::decay_t<Acceptor>&, value_type> && std::is_const_v<typename decltype(tx)::type>)
-                        e = std::invoke(acceptor, std::move(tx).by_value().value());
-                      else
-                        e = std::invoke(acceptor, tx.ref());
-
-                      if (e != objpipe_errc::success)
-                        break;
-                    }
-                  }
-                } catch (...) {
-                  acceptor.push_exception(std::current_exception());
-                }
-              },
-              std::move(src),
-              std::forward<Acceptor>(acceptor))
-      );
-}
-
-template<typename Source, typename Acceptor>
-auto ioc_push(Source&& src, [[maybe_unused]] existingthread_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<!has_ioc_push<std::decay_t<Source>, singlethread_push>> {
-  static_assert(std::is_rvalue_reference_v<Source&&>
-      && !std::is_const_v<Source&&>,
-      "Source must be passed by (non-const) rvalue reference.");
-  throw objpipe_error(objpipe_errc::no_thread);
-}
 
 
 } /* namespace monsoon::objpipe::detail::adapt */

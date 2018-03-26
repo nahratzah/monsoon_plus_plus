@@ -9,9 +9,12 @@
 #include <type_traits>
 #include <utility>
 #include <monsoon/objpipe/errc.h>
+#include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/fwd.h>
 #include <monsoon/objpipe/detail/peek_op.h>
 #include <monsoon/objpipe/detail/transport.h>
+#include <monsoon/objpipe/detail/thread_pool.h>
+#include <monsoon/objpipe/detail/task.h>
 
 /**
  * \brief Adapter functions for objpipe source.
@@ -501,6 +504,148 @@ noexcept(noexcept(std::is_nothrow_constructible_v<flatten_op<Source>>))
   static_assert(!std::is_reference_v<Source> && !std::is_const_v<Source>,
       "Source must be an rvalue reference");
   return std::move(src).flatten();
+}
+
+
+namespace {
+
+
+struct mock_push_adapter_ {
+  template<typename T>
+  auto operator()(T&& v) -> void;
+
+  template<typename T>
+  auto push_exception(std::exception_ptr) -> void;
+};
+
+template<typename Source, typename PushTag, typename = void>
+struct has_ioc_push_
+: std::false_type
+{};
+
+template<typename Source, typename PushTag>
+struct has_ioc_push_<Source, PushTag, std::void_t<decltype(std::declval<Source>().ioc_push(std::declval<PushTag&>(), std::declval<mock_push_adapter_>()))>>
+: std::true_type
+{};
+
+
+} /* namespace monsoon::objpipe::detail::adapt::<unnamed> */
+
+
+///\brief Test if source has an ioc_push method for the given push tag.
+template<typename Source, typename PushTag>
+constexpr bool has_ioc_push = has_ioc_push_<Source, PushTag>::value;
+
+
+template<typename Source, typename Acceptor>
+auto ioc_push(Source&& src, existingthread_push push_tag, Acceptor&& acceptor)
+-> std::enable_if_t<has_ioc_push<std::decay_t<Source>, existingthread_push>> {
+  static_assert(std::is_rvalue_reference_v<Source&&>
+      && !std::is_const_v<Source&&>,
+      "Source must be passed by (non-const) rvalue reference.");
+  static_assert(std::is_move_constructible_v<std::decay_t<Acceptor>>,
+      "Acceptor must be move constructible.");
+
+  return std::forward<Source>(src).ioc_push(
+      std::move(push_tag),
+      std::forward<Acceptor>(acceptor));
+}
+
+template<typename Source, typename Acceptor>
+auto ioc_push(Source&& src, singlethread_push push_tag, Acceptor&& acceptor)
+-> std::enable_if_t<has_ioc_push<std::decay_t<Source>, singlethread_push>> {
+  static_assert(std::is_rvalue_reference_v<Source&&>
+      && !std::is_const_v<Source&&>,
+      "Source must be passed by (non-const) rvalue reference.");
+  static_assert(std::is_move_constructible_v<std::decay_t<Acceptor>>,
+      "Acceptor must be move constructible.");
+
+  return std::forward<Source>(src).ioc_push(
+      std::move(push_tag),
+      std::forward<Acceptor>(acceptor));
+}
+
+template<typename Source, typename Acceptor>
+auto ioc_push(Source&& src, multithread_push push_tag, Acceptor&& acceptor)
+-> std::enable_if_t<has_ioc_push<std::decay_t<Source>, multithread_push>> {
+  static_assert(std::is_rvalue_reference_v<Source&&>
+      && !std::is_const_v<Source&&>,
+      "Source must be passed by (non-const) rvalue reference.");
+  static_assert(std::is_copy_constructible_v<std::decay_t<Acceptor>>,
+      "Acceptor must be copy constructible.");
+  static_assert(std::is_move_assignable_v<std::decay_t<Acceptor>>,
+      "Acceptor must be move assignable.");
+
+  return std::forward<Source>(src).ioc_push(
+      std::move(push_tag),
+      std::forward<Acceptor>(acceptor));
+}
+
+template<typename Source, typename Acceptor>
+auto ioc_push(Source&& src, multithread_unordered_push push_tag, Acceptor&& acceptor)
+-> std::enable_if_t<has_ioc_push<std::decay_t<Source>, multithread_unordered_push>> {
+  static_assert(std::is_rvalue_reference_v<Source&&>
+      && !std::is_const_v<Source&&>,
+      "Source must be passed by (non-const) rvalue reference.");
+  static_assert(std::is_copy_constructible_v<std::decay_t<Acceptor>>,
+      "Acceptor must be copy constructible.");
+  static_assert(std::is_move_assignable_v<std::decay_t<Acceptor>>,
+      "Acceptor must be move assignable.");
+
+  return std::forward<Source>(src).ioc_push(
+      std::move(push_tag),
+      std::forward<Acceptor>(acceptor));
+}
+
+template<typename Source, typename Acceptor>
+auto ioc_push(Source&& src, [[maybe_unused]] singlethread_push push_tag, Acceptor&& acceptor)
+-> std::enable_if_t<!has_ioc_push<std::decay_t<Source>, singlethread_push>> {
+  static_assert(std::is_rvalue_reference_v<Source&&>
+      && !std::is_const_v<Source&&>,
+      "Source must be passed by (non-const) rvalue reference.");
+  thread_pool::default_pool()
+      .publish(
+          make_task(
+              [](Source&& src, std::decay_t<Acceptor>&& acceptor) {
+                try {
+                  for (;;) {
+                    auto tx = adapt::raw_pull(src);
+                    using value_type = typename decltype(tx)::value_type;
+
+                    if (tx.errc() == objpipe_errc::closed) {
+                      break;
+                    } else if (tx.errc() != objpipe_errc::success) {
+                      throw objpipe_error(tx.errc());
+                    } else {
+                      assert(tx.has_value());
+                      objpipe_errc e;
+                      if constexpr(is_invocable_v<std::decay_t<Acceptor>&, typename decltype(tx)::type>)
+                        e = std::invoke(acceptor, std::move(tx).value());
+                      else if constexpr(is_invocable_v<std::decay_t<Acceptor>&, value_type> && std::is_const_v<typename decltype(tx)::type>)
+                        e = std::invoke(acceptor, std::move(tx).by_value().value());
+                      else
+                        e = std::invoke(acceptor, tx.ref());
+
+                      if (e != objpipe_errc::success)
+                        break;
+                    }
+                  }
+                } catch (...) {
+                  acceptor.push_exception(std::current_exception());
+                }
+              },
+              std::move(src),
+              std::forward<Acceptor>(acceptor))
+      );
+}
+
+template<typename Source, typename Acceptor>
+auto ioc_push(Source&& src, [[maybe_unused]] existingthread_push push_tag, Acceptor&& acceptor)
+-> std::enable_if_t<!has_ioc_push<std::decay_t<Source>, singlethread_push>> {
+  static_assert(std::is_rvalue_reference_v<Source&&>
+      && !std::is_const_v<Source&&>,
+      "Source must be passed by (non-const) rvalue reference.");
+  throw objpipe_error(objpipe_errc::no_thread);
 }
 
 

@@ -14,8 +14,9 @@
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/transport.h>
-#include <monsoon/objpipe/detail/push_op.h>
 #include <monsoon/objpipe/detail/thread_pool.h>
+#include <monsoon/objpipe/detail/adapt.h>
+#include <monsoon/objpipe/detail/task.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -33,7 +34,7 @@ namespace monsoon::objpipe::detail {
 template<typename T, typename Alloc>
 class array_pipe {
  private:
-  static constexpr std::size_t batch_size = 10000;
+  static constexpr std::ptrdiff_t batch_size = 10000;
   using data_type = std::deque<T, Alloc>;
 
  public:
@@ -110,7 +111,8 @@ class array_pipe {
       auto next_sink = sink; // Copy.
 
       thread_pool::default_pool().publish(
-          adapt_async::make_task(
+          make_task(
+              // Note: data is passed because it has ownership of the range that b,e describe.
               []([[maybe_unused]] std::shared_ptr<data_type> data, auto&& sink, auto&& b, auto&& e) {
                 try {
                   std::for_each(b, e, std::ref(sink));
