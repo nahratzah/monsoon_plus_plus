@@ -421,6 +421,29 @@ TEST(interlock_push_unordered) {
   th2.join();
 }
 
+TEST(iteration_push) {
+  constexpr int COUNT = 1 * 1000 * 1000;
+  std::vector<int> expect;
+  for (int i = 0; i < COUNT; ++i)
+    expect.push_back(i);
+
+  std::vector<std::vector<int>> input;
+  for (int i = 0; i < COUNT; i += 1000) {
+    input.emplace_back();
+    for (int j = i; j < i + 1000 && j < COUNT; ++j)
+      input.back().push_back(j);
+  }
+
+  auto result = monsoon::objpipe::of(std::move(input))
+      .iterate()
+      .iterate()
+      .async(multithread_push())
+      .to_vector()
+      .get();
+
+  CHECK_EQUAL(expect, result);
+}
+
 TEST(reader_to_vector) {
   CHECK_EQUAL(
       std::vector<int>({ 0, 1, 2, 3, 4 }),

@@ -48,6 +48,71 @@ struct can_flatten_<Source,
 template<typename Source>
 constexpr bool can_flatten = can_flatten_<Source>::value;
 
+
+template<typename Collection, typename Sink, bool Multithreaded>
+class flatten_push {
+ public:
+  explicit flatten_push(Sink&& sink)
+  noexcept(std::is_nothrow_move_constructible_v<Sink>)
+  : sink_(std::move(sink))
+  {}
+
+  auto operator()(Collection&& c)
+  -> objpipe_errc {
+    using std::swap;
+
+    if constexpr(!Multithreaded) {
+      auto b = make_move_iterator(flatten_op_begin_(c));
+      auto e = make_move_iterator(flatten_op_end_(c));
+      objpipe_errc error_code = objpipe_errc::success;
+
+      while (b != e && error_code == objpipe_errc::success) {
+        error_code = sink_(*b);
+        ++b;
+      }
+      return error_code;
+    } else {
+      Sink dst = sink_; // Copy.
+      swap(dst, sink_); // Keep hold of successor.
+
+      thread_pool::default_pool().publish(
+          make_task(
+              [](Sink&& dst, Collection&& c) {
+                std::for_each(
+                    make_move_iterator(flatten_op_begin_(c)),
+                    make_move_iterator(flatten_op_end_(c)),
+                    std::ref(dst));
+              },
+              std::move(dst),
+              std::move(c)));
+      return objpipe_errc::success;
+    }
+  }
+
+  auto operator()(const Collection& c)
+  -> objpipe_errc {
+    auto b = flatten_op_begin_(c);
+    auto e = flatten_op_end_(c);
+    objpipe_errc error_code = objpipe_errc::success;
+
+    while (b != e && error_code == objpipe_errc::success) {
+      error_code = sink_(*b);
+      ++b;
+    }
+    return error_code;
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    sink_.push_exception(std::move(exptr));
+  }
+
+ private:
+  Sink sink_;
+};
+
+
 template<typename Collection>
 class flatten_op_store_copy_ {
  public:
@@ -320,6 +385,34 @@ class flatten_op {
       && noexcept(std::declval<store_type&>().advance()))
   -> transport<item_type> {
     return pull();
+  }
+
+  template<typename PushTag>
+  constexpr auto can_push(PushTag tag) const
+  noexcept
+  -> std::enable_if_t<adapt::has_ioc_push<Source, PushTag>
+      || std::is_base_of_v<multithread_push, PushTag>,
+      bool> {
+    if constexpr(std::is_base_of_v<multithread_push, PushTag>)
+      return true; // We have a specialization to shard out.
+    else
+      return src_.can_push(tag);
+  }
+
+  template<typename PushTag, typename Acceptor>
+  auto ioc_push(PushTag tag, Acceptor&& acceptor) &&
+  -> std::enable_if_t<adapt::has_ioc_push<Source, PushTag>
+      || std::is_base_of_v<multithread_push, PushTag>> {
+    using wrapper = flatten_push<
+        std::remove_cv_t<std::remove_reference_t<raw_collection_type>>,
+        std::decay_t<Acceptor>,
+        std::is_base_of_v<multithread_push, std::decay_t<PushTag>>>;
+
+    // adapt::ioc_push will provide a fallback if multithread_push is unavailable.
+    adapt::ioc_push(
+        std::move(src_),
+        tag,
+        wrapper(std::forward<Acceptor>(acceptor)));
   }
 
  private:
