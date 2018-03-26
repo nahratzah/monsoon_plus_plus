@@ -799,7 +799,6 @@ WARN_LOGFILE           =
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = @PROJECT_SOURCE_DIR@/lib/include \
-                         @PROJECT_SOURCE_DIR@/lib/src \
                          @PROJECT_SOURCE_DIR@/lib/objpipe/include \
                          @PROJECT_SOURCE_DIR@/lib/objpipe/src \
                          @PROJECT_SOURCE_DIR@/lib/misc/include \
