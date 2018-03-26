@@ -90,6 +90,16 @@ class virtual_push_acceptor {
   : impl_(rhs.impl_ == nullptr ? nullptr : rhs.impl_->clone())
   {}
 
+  virtual_push_acceptor& operator=(const virtual_push_acceptor& rhs) {
+    impl_ = (rhs.impl_ == nullptr ? nullptr : rhs.impl_->clone());
+    return *this;
+  }
+
+  virtual_push_acceptor& operator=(virtual_push_acceptor&& rhs) {
+    impl_ = std::move(rhs.impl_);
+    return *this;
+  }
+
   auto operator()(T&& v) -> objpipe_errc {
     return (*impl_)(std::move(v));
   }

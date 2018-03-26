@@ -152,6 +152,20 @@ TEST(array_using_iterators) {
   CHECK_EQUAL(objpipe_errc::closed, e);
 }
 
+TEST(array_push) {
+  constexpr int COUNT = 1 * 1000 * 1000;
+  std::vector<int> il;
+  for (int i = 0; i < COUNT; ++i)
+    il.push_back(i);
+
+  auto result = monsoon::objpipe::new_array(il.begin(), il.end())
+      .async(multithread_push())
+      .to_vector()
+      .get();
+
+  CHECK_EQUAL(il, result);
+}
+
 TEST(array_using_initializer_list) {
   auto reader = monsoon::objpipe::new_array({ 0, 1, 2, 3, 4 });
 

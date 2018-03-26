@@ -4,13 +4,19 @@
 ///\file
 ///\ingroup objpipe_detail
 
+#include <algorithm>
+#include <cstddef>
 #include <deque>
 #include <initializer_list>
 #include <iterator>
 #include <memory>
 #include <utility>
 #include <monsoon/objpipe/errc.h>
+#include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/transport.h>
+#include <monsoon/objpipe/detail/thread_pool.h>
+#include <monsoon/objpipe/detail/adapt.h>
+#include <monsoon/objpipe/detail/task.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -28,6 +34,7 @@ namespace monsoon::objpipe::detail {
 template<typename T, typename Alloc>
 class array_pipe {
  private:
+  static constexpr std::ptrdiff_t batch_size = 10000;
   using data_type = std::deque<T, Alloc>;
 
  public:
@@ -83,6 +90,41 @@ class array_pipe {
     auto rv = transport<T>(std::in_place_index<0>, std::move(data_.front()));
     data_.pop_front();
     return rv;
+  }
+
+  constexpr auto can_push([[maybe_unused]] multithread_push tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  template<typename Acceptor>
+  auto ioc_push([[maybe_unused]] multithread_push tag, Acceptor&& acceptor) &&
+  -> void {
+    const std::shared_ptr<data_type> data = std::make_shared<data_type>(std::move(data_));
+
+    auto sink = std::forward<Acceptor>(acceptor);
+    auto b = std::make_move_iterator(data->begin()),
+         e = std::make_move_iterator(data->end());
+    while (b != e) {
+      auto slice_end = (e - b > batch_size ? std::next(b, batch_size) : e);
+      auto next_sink = sink; // Copy.
+
+      thread_pool::default_pool().publish(
+          make_task(
+              // Note: data is passed because it has ownership of the range that b,e describe.
+              []([[maybe_unused]] std::shared_ptr<data_type> data, auto&& sink, auto&& b, auto&& e) {
+                try {
+                  std::for_each(b, e, std::ref(sink));
+                } catch (...) {
+                  sink.push_exception(std::current_exception());
+                }
+              },
+              data, std::move(sink), b, slice_end));
+
+      b = std::move(slice_end);
+      sink = std::move(next_sink);
+    }
   }
 
   auto try_pull()
