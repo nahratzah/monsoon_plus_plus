@@ -422,7 +422,7 @@ TEST(interlock_push_unordered) {
 }
 
 TEST(iteration_push) {
-  constexpr int COUNT = 1 * 1000 * 1000;
+  constexpr int COUNT = 100 * 1000;
   std::vector<int> expect;
   for (int i = 0; i < COUNT; ++i)
     expect.push_back(i);
@@ -445,7 +445,7 @@ TEST(iteration_push) {
 }
 
 TEST(iteration_existingthread_push) {
-  constexpr int COUNT = 1 * 1000 * 1000;
+  constexpr int COUNT = 100 * 1000;
   std::vector<int> expect;
   for (int i = 0; i < COUNT; ++i)
     expect.push_back(i);
@@ -468,7 +468,7 @@ TEST(iteration_existingthread_push) {
 }
 
 TEST(iteration_singlethread_push) {
-  constexpr int COUNT = 1 * 1000 * 1000;
+  constexpr int COUNT = 100 * 1000;
   std::vector<int> expect;
   for (int i = 0; i < COUNT; ++i)
     expect.push_back(i);
@@ -491,7 +491,7 @@ TEST(iteration_singlethread_push) {
 }
 
 TEST(iteration_multithread_push) {
-  constexpr int COUNT = 1 * 1000 * 1000;
+  constexpr int COUNT = 100 * 1000;
   std::vector<int> expect;
   for (int i = 0; i < COUNT; ++i)
     expect.push_back(i);
@@ -514,7 +514,7 @@ TEST(iteration_multithread_push) {
 }
 
 TEST(iteration_multithread_unordered_push) {
-  constexpr int COUNT = 1 * 1000 * 1000;
+  constexpr int COUNT = 100 * 1000;
   std::vector<int> expect;
   for (int i = 0; i < COUNT; ++i)
     expect.push_back(i);
