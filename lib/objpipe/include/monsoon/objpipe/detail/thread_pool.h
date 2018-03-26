@@ -28,7 +28,7 @@ class thread_pool_task {
 ///\brief Thread pool task implementation.
 ///\ingroup objpipe_detail
 template<typename F>
-class thread_pool_task_impl
+class thread_pool_task_impl final
 : public thread_pool_task
 {
  public:
@@ -48,8 +48,8 @@ class thread_pool_task_impl
 
   auto operator()()
   noexcept(is_nothrow_invocable_v<F>)
-  -> auto {
-    return std::invoke(std::move(f_));
+  -> void override {
+    std::invoke(std::move(f_));
   }
 
  private:
@@ -57,21 +57,23 @@ class thread_pool_task_impl
 };
 
 template<typename F>
-class thread_pool_task_future
-: public thread_pool_task_impl<F>
+class thread_pool_task_future final
+: public thread_pool_task
 {
  public:
   using functor_result = std::remove_cv_t<std::remove_reference_t<invoke_result_t<F>>>;
   using promise_type = std::promise<functor_result>;
 
-  explicit thread_pool_task_future(F&& f)
+  explicit thread_pool_task_future(promise_type&& prom, F&& f)
   noexcept(std::is_nothrow_move_constructible_v<F>)
-  : thread_pool_task_impl<F>(std::move(f))
+  : f_(std::move(f)),
+    prom_(std::move(prom))
   {}
 
-  explicit thread_pool_task_future(const F& f)
+  explicit thread_pool_task_future(promise_type&& prom, const F& f)
   noexcept(std::is_nothrow_copy_constructible_v<F>)
-  : thread_pool_task_impl<F>(std::move(f))
+  : f_(f),
+    prom_(std::move(prom))
   {}
 
   ~thread_pool_task_future() noexcept {}
@@ -92,6 +94,7 @@ class thread_pool_task_future
   }
 
  private:
+  F f_;
   promise_type prom_;
 };
 
@@ -380,6 +383,13 @@ class thread_pool {
   thread_pool(duration_t thr_expire, unsigned int max_threads)
   : pimpl_(thread_pool_impl::create(thr_expire, max_threads))
   {}
+
+  ///\brief Default thread pool for objpipe threads.
+  static auto default_pool()
+  -> thread_pool {
+    static thread_pool impl;
+    return impl;
+  }
 
   /**
    * \brief Run the functor in the thread pool.

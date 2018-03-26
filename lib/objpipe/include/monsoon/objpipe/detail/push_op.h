@@ -14,6 +14,7 @@
 #include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/detail/adapt.h>
 #include <monsoon/objpipe/detail/invocable_.h>
+#include <monsoon/objpipe/detail/thread_pool.h>
 
 namespace monsoon::objpipe::detail {
 
@@ -876,40 +877,39 @@ auto ioc_push(Source&& src, [[maybe_unused]] singlethread_push push_tag, Accepto
   static_assert(std::is_rvalue_reference_v<Source&&>
       && !std::is_const_v<Source&&>,
       "Source must be passed by (non-const) rvalue reference.");
-  std::thread thr{
-    adapt_async::make_task(
-        [](Source&& src, std::decay_t<Acceptor>&& acceptor) {
-          try {
-            for (;;) {
-              auto tx = adapt::raw_pull(src);
-              using value_type = typename decltype(tx)::value_type;
+  thread_pool::default_pool()
+      .publish(
+          adapt_async::make_task(
+              [](Source&& src, std::decay_t<Acceptor>&& acceptor) {
+                try {
+                  for (;;) {
+                    auto tx = adapt::raw_pull(src);
+                    using value_type = typename decltype(tx)::value_type;
 
-              if (tx.has_value()) {
-                objpipe_errc e;
-                if constexpr(is_invocable_v<std::decay_t<Acceptor>&, typename decltype(tx)::type>)
-                  e = std::invoke(acceptor, std::move(tx).value());
-                else if constexpr(is_invocable_v<std::decay_t<Acceptor>&, value_type> && std::is_const_v<typename decltype(tx)::type>)
-                  e = std::invoke(acceptor, std::move(tx).by_value().value());
-                else
-                  e = std::invoke(acceptor, tx.ref());
+                    if (tx.has_value()) {
+                      objpipe_errc e;
+                      if constexpr(is_invocable_v<std::decay_t<Acceptor>&, typename decltype(tx)::type>)
+                        e = std::invoke(acceptor, std::move(tx).value());
+                      else if constexpr(is_invocable_v<std::decay_t<Acceptor>&, value_type> && std::is_const_v<typename decltype(tx)::type>)
+                        e = std::invoke(acceptor, std::move(tx).by_value().value());
+                      else
+                        e = std::invoke(acceptor, tx.ref());
 
-                if (e != objpipe_errc::success)
-                  break;
-              } else if (tx.errc() == objpipe_errc::closed) {
-                break;
-              } else {
-                throw objpipe_error(tx.errc());
-              }
-            }
-          } catch (...) {
-            acceptor.push_exception(std::current_exception());
-          }
-        },
-        std::move(src),
-        std::forward<Acceptor>(acceptor))
-  };
-
-  thr.detach();
+                      if (e != objpipe_errc::success)
+                        break;
+                    } else if (tx.errc() == objpipe_errc::closed) {
+                      break;
+                    } else {
+                      throw objpipe_error(tx.errc());
+                    }
+                  }
+                } catch (...) {
+                  acceptor.push_exception(std::current_exception());
+                }
+              },
+              std::move(src),
+              std::forward<Acceptor>(acceptor))
+      );
 }
 
 template<typename Source, typename Acceptor>
