@@ -915,15 +915,15 @@ class async_adapter_t {
   }
 
   auto count() &&
-  -> std::future<std::uintptr_t> {
+  -> std::future<std::uintmax_t> {
     return reduce(
-        []() -> std::uintptr_t { return 0u; },
-        [](std::uintptr_t& c, [[maybe_unused]] const auto& v) {
+        []() -> std::uintmax_t { return 0u; },
+        [](std::uintmax_t& c, [[maybe_unused]] const auto& v) {
           ++c;
           return objpipe_errc::success;
         },
-        [](std::uintptr_t& x, std::uintptr_t&& y) { x += y; },
-        [](std::uintptr_t&& c) -> std::uintptr_t { return c; });
+        [](std::uintmax_t& x, std::uintmax_t&& y) { x += y; },
+        [](std::uintmax_t&& c) -> std::uintmax_t { return c; });
   }
 
  private:
