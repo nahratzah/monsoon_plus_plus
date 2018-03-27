@@ -13,6 +13,8 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <stdexcept>
+#include <limits>
 #include <monsoon/objpipe/reader.h>
 #include <monsoon/objpipe/errc.h>
 #include <monsoon/objpipe/detail/fwd.h>
@@ -666,6 +668,8 @@ class adapter_t {
     std::uintmax_t result = 0;
     objpipe_errc e = src_.pop_front();
     while (e == objpipe_errc::success) {
+      if (result == std::numeric_limits<std::uintmax_t>::max())
+        throw std::overflow_error("objpipe count overflow");
       ++result;
       e = src_.pop_front();
     }

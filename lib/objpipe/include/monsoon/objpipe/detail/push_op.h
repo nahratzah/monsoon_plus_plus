@@ -9,6 +9,8 @@
 #include <future>
 #include <list>
 #include <type_traits>
+#include <stdexcept>
+#include <limits>
 #include <utility>
 #include <vector>
 #include <monsoon/objpipe/push_policies.h>
@@ -921,10 +923,16 @@ class async_adapter_t {
     return reduce(
         []() -> std::uintmax_t { return 0u; },
         [](std::uintmax_t& c, [[maybe_unused]] const auto& v) {
+          if (c == std::numeric_limits<std::uintmax_t>::max())
+            throw std::overflow_error("objpipe count overflow");
           ++c;
           return objpipe_errc::success;
         },
-        [](std::uintmax_t& x, std::uintmax_t&& y) { x += y; },
+        [](std::uintmax_t& x, std::uintmax_t&& y) {
+          if (y > std::numeric_limits<std::uintmax_t>::max() - x)
+            throw std::overflow_error("objpipe count overflow");
+          x += y;
+        },
         [](std::uintmax_t&& c) -> std::uintmax_t { return c; });
   }
 
