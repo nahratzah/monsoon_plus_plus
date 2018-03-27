@@ -5,9 +5,474 @@
 #include <functional>
 #include <iterator>
 #include <type_traits>
+#include <vector>
+#include <list>
+#include <deque>
+#include <mutex>
 #include <monsoon/objpipe/detail/invocable_.h>
+#include <monsoon/objpipe/detail/task.h>
+#include <monsoon/objpipe/detail/thread_pool.h>
 
 namespace monsoon::objpipe::detail {
+
+
+template<typename T>
+using merge_batch_type = std::list<T>;
+
+///\brief Converts a batched stream of elements into its components.
+template<typename T, typename Sink, bool Multithreaded>
+class merge_concat_push {
+ public:
+  explicit merge_concat_push(Sink&& sink)
+  noexcept(std::is_nothrow_move_constructible_v<Sink>)
+  : sink_(std::move(sink))
+  {}
+
+  explicit merge_concat_push(const Sink& sink)
+  noexcept(std::is_nothrow_copy_constructible_v<Sink>)
+  : sink_(sink)
+  {}
+
+  auto operator()(merge_batch_type<T>&& batch)
+  -> objpipe_errc {
+    if constexpr(!Multithreaded) {
+      return push_(sink_, std::move(batch));
+    } else {
+      using std::swap;
+
+      Sink dst = sink_; // Copy.
+      swap(dst, sink_); // Reorder sink_ after dst.
+
+      thread_pool::default_pool().publish(
+          make_task(
+              [](Sink&& dst, merge_batch_type<T>&& batch) {
+                try {
+                  push_(dst, std::move(batch));
+                } catch (...) {
+                  dst.push_exception(std::current_exception());
+                }
+              },
+              std::move(dst),
+              std::move(batch)));
+      return objpipe_errc::success;
+    }
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    sink_.push_exception(std::move(exptr));
+  }
+
+ private:
+  static auto push_(Sink& dst, merge_batch_type<T>&& batch)
+  -> objpipe_errc {
+    objpipe_errc error_code = objpipe_errc::success;
+
+    if constexpr(is_invocable_v<Sink&, T&&>) {
+      auto b = std::make_move_iterator(batch.begin()),
+           e = std::make_move_iterator(batch.end());
+      while (b != e && error_code == objpipe_errc::success)
+        error_code = dst(*b++);
+    } else {
+      auto b = batch.begin(),
+           e = batch.end();
+      while (b != e && error_code == objpipe_errc::success)
+        error_code = dst(*b++);
+    }
+
+    return error_code;
+  }
+
+  Sink sink_;
+};
+
+///\brief Converts a single stream of elements into batches that compare neither less, nor greater.
+template<typename T, typename BatchSink, typename Less>
+class merge_batch_push {
+ public:
+  using batch_type = merge_batch_type<T>;
+
+  merge_batch_push(BatchSink&& sink, Less&& less)
+  noexcept(std::is_nothrow_move_constructible_v<BatchSink>
+      && std::is_nothrow_move_constructible_v<Less>)
+  : sink_(std::move(sink)),
+    less_(std::move(less))
+  {}
+
+  merge_batch_push(BatchSink&& sink, const Less& less)
+  noexcept(std::is_nothrow_move_constructible_v<BatchSink>
+      && std::is_nothrow_copy_constructible_v<Less>)
+  : sink_(std::move(sink)),
+    less_(less)
+  {}
+
+  merge_batch_push(merge_batch_push&& rhs)
+  noexcept(std::is_nothrow_move_constructible_v<batch_type>
+      && std::is_nothrow_move_constructible_v<BatchSink>
+      && std::is_nothrow_move_constructible_v<Less>)
+  : batch_(std::move(rhs.batch_)),
+    sink_(std::move(rhs.sink_)),
+    less_(std::move(rhs.less_))
+  {}
+
+  template<typename Arg>
+  auto operator()(Arg&& v)
+  -> objpipe_errc {
+    if (!batch_.empty() && !equiv_(batch_.front(), v)) {
+      objpipe_errc e = sink_(std::move(batch_));
+      batch_.clear();
+      if (e != objpipe_errc::success) return e;
+    }
+
+    batch_.push_back(std::forward<Arg>(v));
+    return objpipe_errc::success;
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    sink_.push_exception(exptr);
+  }
+
+  ~merge_batch_push() noexcept {
+    if (!batch_.empty())
+      sink_(std::move(batch_));
+  }
+
+ private:
+  auto equiv_(const T& x, const T& y) const
+  noexcept(is_nothrow_invocable_v<const Less&, const T&, const T&>)
+  -> bool {
+    return !std::invoke(less_, x, y) && !std::invoke(less_, y, x);
+  }
+
+  batch_type batch_;
+  BatchSink sink_;
+  Less less_;
+};
+
+///\brief Converts multiple streams of elements into batches that compare neither less, nor greater.
+///\details Implemented in terms of merging merge_batch_push.
+template<typename T, typename Sink, typename Less>
+class multiple_merge_batch_push {
+ private:
+  class storage {
+   private:
+    using data_type = std::deque<merge_batch_type<T>>;
+
+   public:
+    auto close(multiple_merge_batch_push& impl)
+    noexcept
+    -> void {
+      std::unique_lock<std::mutex> lck{ impl.mtx_ };
+
+      if (closed_) return;
+      closed_ = true;
+      if (data_.empty())
+        impl.notify_ready(*this, std::move(lck));
+    }
+
+    // Must be called with multiple_merge_batch_push lock held.
+    auto closed() const
+    noexcept
+    -> bool {
+      return closed_;
+    }
+
+    ///\note Called with mtx held.
+    auto push_back(merge_batch_type<T>&& v)
+    -> void {
+      data_.push_back(std::move(v));
+    }
+
+    ///\note Called with mtx held.
+    auto empty() const
+    noexcept
+    -> bool {
+      return data_.empty();
+    }
+
+    ///\note Called with mtx held.
+    auto front() const
+    noexcept
+    -> const merge_batch_type<T>& {
+      assert(!data_.empty());
+      return data_.front();
+    }
+
+    ///\note Called with mtx held.
+    auto front()
+    noexcept
+    -> merge_batch_type<T>& {
+      assert(!data_.empty());
+      return data_.front();
+    }
+
+    ///\note Called with mtx held.
+    auto pop_front()
+    noexcept
+    -> void {
+      assert(!data_.empty());
+      data_.pop_front();
+    }
+
+    mutable std::mutex mtx;
+
+   private:
+    data_type data_;
+    bool closed_ = false;
+  };
+
+  class greater {
+   public:
+    explicit greater(const Less& less)
+    noexcept
+    : less_(less)
+    {}
+
+    auto operator()(const storage* x, const storage* y) const
+    noexcept(is_nothrow_invocable_v<const Less&, const T&, const T&>)
+    -> bool {
+      if (x == y) return false;
+
+#if __cplusplus >= 201703
+      std::scoped_lock<std::mutex, std::mutex> lck{ x->mtx, y->mtx };
+#else
+      std::lock_guard<std::mutex> lck_1{ (x < y ? x->mtx : y->mtx) };
+      std::lock_guard<std::mutex> lck_2{ (x > y ? x->mtx : y->mtx) };
+#endif
+
+      assert(!x->empty() && !y->empty());
+      assert(!x->front().empty() && !y->front().empty());
+      return std::invoke(less_, x->front().front(), y->front().front());
+    }
+
+   private:
+    const Less& less_;
+  };
+
+  using storage_vector = std::vector<storage>;
+  using data_type = std::vector<storage*>;
+
+  class storage_sink {
+   public:
+    storage_sink(std::shared_ptr<multiple_merge_batch_push> impl, storage& store)
+    : impl_(std::move(impl)),
+      store_(&store)
+    {
+      assert(impl_ != nullptr);
+    }
+
+    storage_sink(storage_sink&& rhs)
+    noexcept
+    : impl_(std::move(rhs.impl_)),
+      store_(std::exchange(rhs.store_, nullptr))
+    {}
+
+    auto operator()(merge_batch_type<T>&& v)
+    -> objpipe_errc {
+      bool do_notify;
+      {
+        std::lock_guard<std::mutex> lck{ store_->mtx };
+        do_notify = store_->empty();
+        store_->push_back(std::move(v));
+      }
+
+      objpipe_errc e = objpipe_errc::success;
+      if (do_notify) {
+        std::unique_lock<std::mutex> lck{ impl_->mtx_ };
+        e = impl_->notify_ready(*store_, std::move(lck));
+      }
+      return e;
+    }
+
+    auto push_exception(std::exception_ptr exptr)
+    noexcept
+    -> void {
+      std::lock_guard<std::mutex> lck{ impl_->mtx_ };
+      if (!std::exchange(impl_->bad_, true))
+        impl_->sink_.push_exception(std::move(exptr));
+    }
+
+    ~storage_sink() {
+      if (impl_ != nullptr) store_->close(*impl_);
+    }
+
+   private:
+    std::shared_ptr<multiple_merge_batch_push> impl_;
+    storage* store_;
+  };
+
+ private:
+  ///\brief Construct a container for member variable ready_.
+  ///\details Ensures the container has sz space reserved.
+  ///\param[in] sz Max number of elements that will appear in the container.
+  ///\returns A container on which reserve(sz) has been called.
+  static auto make_ready_container_(typename storage_vector::size_type sz)
+  -> data_type {
+    data_type result;
+    result.reserve(sz);
+    return result;
+  }
+
+ public:
+  // Use start() instead.
+  // This is only public because std::make_shared requires it.
+  template<typename LessArg>
+  explicit multiple_merge_batch_push(Sink&& sink, LessArg&& less, typename storage_vector::size_type sz)
+  : sink_(std::move(sink)),
+    ready_(make_ready_container_(sz)),
+    store_(sz),
+    pending_(sz),
+    less_(std::forward<LessArg>(less))
+  {}
+
+  template<typename PushTag, typename LessArg, typename SrcCollection>
+  static auto start(Sink&& sink, PushTag push_tag, LessArg&& less, SrcCollection&& sources)
+  -> void {
+    if (sources.empty()) return; // Empty set of soures emits no values.
+
+    // Handle trivial case of single source.
+    if (sources.size() == 1u) {
+      adapt::ioc_push(
+          std::move(sources.front()).underlying(),
+          push_tag,
+          merge_batch_push<T, Sink, Less>(std::move(sink), std::forward<LessArg>(less)));
+      return;
+    }
+
+    auto ptr = std::make_shared<multiple_merge_batch_push>(std::move(sink), std::forward<LessArg>(less), sources.size());
+
+    auto storage_iter = ptr->store_.begin();
+    auto sources_iter = std::make_move_iterator(sources.begin());
+
+    static_assert(std::is_move_constructible_v<T>,
+        "Value type must be move constructible.");
+    static_assert(std::is_move_constructible_v<storage_sink>,
+        "Storage sink must be move constructible.");
+    static_assert(std::is_move_constructible_v<merge_batch_push<T, storage_sink, Less>>,
+        "Merge_batch_push must be move constructible.");
+
+    while (storage_iter != ptr->store_.end()) {
+      assert(sources_iter != std::make_move_iterator(sources.end()));
+
+      // We use (*sources_iter) instead of operator->,
+      // because the iterator will hold an rvalue reference.
+      // operator-> would not allow the rvalue method to be found
+      // (because there is no such think as a pointer to rvalue reference).
+      adapt::ioc_push(
+          (*sources_iter).underlying(),
+          push_tag,
+          merge_batch_push<T, storage_sink, Less>(storage_sink(ptr, *storage_iter), std::forward<LessArg>(less)));
+
+      ++sources_iter;
+      ++storage_iter;
+    }
+    assert(sources_iter == std::make_move_iterator(sources.end()));
+  }
+
+ private:
+  auto notify_ready(storage& s, std::unique_lock<std::mutex> lck)
+  noexcept
+  -> objpipe_errc {
+    assert(lck.owns_lock() && lck.mutex() == &mtx_);
+    assert(std::find(ready_.begin(), ready_.end(), &s) != ready_.end());
+
+    try {
+      std::unique_lock<std::mutex> store_lck{ s.mtx };
+      if (!s.empty()) {
+        ready_.push_back(&s);
+        store_lck.unlock();
+        std::push_heap(ready_.begin(), ready_.end(), greater(less_));
+      } else {
+        assert(s.closed());
+      }
+    } catch (...) {
+      sink_.push_exception(std::current_exception());
+      bad_ = true;
+      return objpipe_errc::closed;
+    }
+    --pending_;
+
+    return maybe_emit_(std::move(lck));
+  }
+
+  auto maybe_emit_(std::unique_lock<std::mutex> lck)
+  -> objpipe_errc {
+    assert(lck.owns_lock() && lck.mutex() == &mtx_);
+
+    try {
+      for (;;) {
+        if (bad_) return objpipe_errc::closed;
+        if (pending_ != 0) return objpipe_errc::success;
+
+        // Create values using heap head.
+        merge_batch_type<T> values;
+        {
+          std::pop_heap(ready_.begin(), ready_.end(), greater(less_));
+          std::unique_lock<std::mutex> store_lck{ ready_.back()->mtx };
+          values = std::move(ready_.back()->front());
+          ready_.back()->pop_front();
+
+          if (!ready_.back()->empty()) {
+            store_lck.unlock();
+            std::push_heap(ready_.begin(), ready_.end(), greater(less_));
+          } else {
+            if (!ready_.back()->closed())
+              ++pending_;
+            store_lck.unlock();
+            ready_.pop_back();
+          }
+        }
+
+        // Merge in other heap heads with similar values.
+        while (!ready_.empty()) {
+          {
+            std::lock_guard<std::mutex> store_lck{ ready_.front()->mtx };
+            if (std::invoke(less_, values.front(), ready_.front()->front().front())
+                || std::invoke(less_, ready_.front()->front().front(), values.front())) {
+              break;
+            }
+          }
+
+          std::pop_heap(ready_.begin(), ready_.end(), greater(less_));
+          std::unique_lock<std::mutex> store_lck{ ready_.back()->mtx };
+          values.splice(
+              values.end(),
+              ready_.back()->front());
+          ready_.back()->pop_front();
+
+          if (!ready_.back()->empty()) {
+            store_lck.unlock();
+            std::push_heap(ready_.begin(), ready_.end(), greater(less_));
+          } else {
+            if (!ready_.back()->closed())
+              ++pending_;
+            store_lck.unlock();
+            ready_.pop_back();
+          }
+        }
+
+        // Emit merged set of values.
+        objpipe_errc e = sink_(std::move(values));
+        if (e != objpipe_errc::success) return e;
+      }
+    } catch (...) {
+      bad_ = true;
+      sink_.push_exception(std::current_exception());
+      return objpipe_errc::closed;
+    }
+  }
+
+  std::mutex mtx_;
+  Sink sink_;
+  data_type ready_;
+  storage_vector store_; // Iterators may not be invalidated.
+  typename storage_vector::size_type pending_;
+  bool bad_ = false;
+  Less less_;
+};
 
 
 ///\brief Adapter for source, that maintains a reference to source front.
@@ -271,12 +736,12 @@ class merge_pipe_base {
   auto get_queue() &&
   noexcept
   -> queue_container_type&& {
-    return data_store_;
+    return std::move(data_store_);
   }
 
   auto get_queue() const &
   noexcept
-  -> queue_container_type&& {
+  -> const queue_container_type& {
     return data_store_;
   }
 
@@ -307,8 +772,10 @@ class merge_pipe_base {
    */
   std::vector<typename queue_container_type::iterator> data_;
 
-  Less less_;
   bool need_init_ = true;
+
+ protected:
+  Less less_;
 };
 
 template<typename Source, typename Less>
@@ -318,6 +785,7 @@ class merge_pipe
  private:
   using queue_elem = typename merge_pipe_base<Source, Less>::queue_elem;
   using transport_type = typename merge_pipe_base<Source, Less>::transport_type;
+  using value_type = typename merge_pipe_base<Source, Less>::value_type;
 
  public:
   using merge_pipe_base<Source, Less>::merge_pipe_base;
@@ -345,6 +813,70 @@ class merge_pipe
     }
     std::exchange(recent, nullptr)->reset();
     return objpipe_errc::success;
+  }
+
+  template<bool Enable = adapt::has_ioc_push<Source, existingthread_push>>
+  auto can_push(const existingthread_push& tag) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    const auto& q = this->get_queue();
+    return std::all_of(
+        q.begin(),
+        q.end(),
+        [&tag](const auto& qelem) {
+          return qelem.underlying().can_push(tag);
+        });
+  }
+
+  constexpr auto can_push(const singlethread_push& tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  constexpr auto can_push(const multithread_push& tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  template<typename Acceptor, bool Enable = adapt::has_ioc_push<Source, existingthread_push>>
+  auto ioc_push(existingthread_push tag, Acceptor&& acceptor) &&
+  -> std::enable_if_t<Enable> {
+    using sink_type = merge_concat_push<value_type, std::decay_t<Acceptor>, false>;
+    using impl_type = multiple_merge_batch_push<value_type, sink_type, Less>;
+
+    impl_type::start(
+        sink_type(std::forward<Acceptor>(acceptor)),
+        tag,
+        std::move(this->less_),
+        std::move(*this).get_queue());
+  }
+
+  template<typename Acceptor>
+  auto ioc_push(singlethread_push tag, Acceptor&& acceptor) &&
+  -> void {
+    using sink_type = merge_concat_push<value_type, std::decay_t<Acceptor>, false>;
+    using impl_type = multiple_merge_batch_push<value_type, sink_type, Less>;
+
+    impl_type::start(
+        sink_type(std::forward<Acceptor>(acceptor)),
+        tag,
+        std::move(this->less_),
+        std::move(*this).get_queue());
+  }
+
+  template<typename Acceptor>
+  auto ioc_push(multithread_push tag, Acceptor&& acceptor) &&
+  -> void {
+    using sink_type = merge_concat_push<value_type, std::decay_t<Acceptor>, true>;
+    using impl_type = multiple_merge_batch_push<value_type, sink_type, Less>;
+
+    impl_type::start(
+        sink_type(std::forward<Acceptor>(acceptor)),
+        singlethread_push(),
+        std::move(this->less_),
+        std::move(*this).get_queue());
   }
 
   template<bool Enable = adapt::has_ioc_push<Source, multithread_unordered_push>>

@@ -641,7 +641,7 @@ auto ioc_push(Source&& src, [[maybe_unused]] singlethread_push push_tag, Accepto
 
 template<typename Source, typename Acceptor>
 auto ioc_push(Source&& src, [[maybe_unused]] existingthread_push push_tag, Acceptor&& acceptor)
--> std::enable_if_t<!has_ioc_push<std::decay_t<Source>, singlethread_push>> {
+-> std::enable_if_t<!has_ioc_push<std::decay_t<Source>, existingthread_push>> {
   static_assert(std::is_rvalue_reference_v<Source&&>
       && !std::is_const_v<Source&&>,
       "Source must be passed by (non-const) rvalue reference.");
