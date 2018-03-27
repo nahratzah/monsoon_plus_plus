@@ -137,10 +137,10 @@ class virtual_intf {
   virtual auto ioc_push(existingthread_push tag, virtual_push_acceptor<T> acceptor) && -> void = 0;
   virtual auto can_push(singlethread_push tag) const noexcept -> bool = 0;
   virtual auto ioc_push(singlethread_push tag, virtual_push_acceptor<T> acceptor) && -> void = 0;
-  virtual auto ioc_push(multithread_push tag, virtual_push_acceptor<T> acceptor) && -> void = 0;
   virtual auto can_push(multithread_push tag) const noexcept -> bool = 0;
-  virtual auto ioc_push(multithread_unordered_push tag, virtual_push_acceptor<T> acceptor) && -> void = 0;
+  virtual auto ioc_push(multithread_push tag, virtual_push_acceptor<T> acceptor) && -> void = 0;
   virtual auto can_push(multithread_unordered_push tag) const noexcept -> bool = 0;
+  virtual auto ioc_push(multithread_unordered_push tag, virtual_push_acceptor<T> acceptor) && -> void = 0;
 };
 
 ///\brief Internal implementation to virtualize an objpipe.
