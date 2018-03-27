@@ -112,6 +112,8 @@ class merge_emit_t {
   using objpipe_type = std::decay_t<decltype(std::declval<const ToObjpipeFunctor&>()(std::declval<const tsdata&>()))>;
   using value_type = typename objpipe_type::value_type;
   using active_store_t = std::list<objpipe_type>;
+  using objpipe_errc = objpipe::objpipe_errc;
+  using transport_type = objpipe::detail::transport<value_type>;
 
  public:
   template<typename Iter>
@@ -122,77 +124,102 @@ class merge_emit_t {
     objpipe_fn_(std::move(objpipe_fn))
   {}
 
-  template<typename Callback>
-  auto operator()(Callback cb) -> void {
-    while (!unstarted_.empty() || !active_.empty()) {
-      assert(loop_invariant());
+  auto is_pullable() const
+  noexcept
+  -> bool {
+    return (!unstarted_.empty() || !active_.empty());
+  }
 
-      // Ensure active has at least one element,
-      // and load all unstarted that start at/before active_.front.
-      while (active_.empty()
-          || (!unstarted_.empty()
-              && !greater()(unstarted_.top(), active_.front()->front()))) {
-        // Convert tsdata to objpipe.
-        active_store_.push_back(objpipe_fn_(*unstarted_.top()));
-        active_.push_back(--active_store_.end());
-        unstarted_.pop();
+  auto wait()
+  -> objpipe_errc {
+    if (unstarted_.empty() && active_.empty())
+      return objpipe_errc::closed;
 
-        // Sort new objpipe into active.
-        if (active_.back()->empty()) {
-          active_store_.erase(active_.back());
-          active_.pop_back(); // Discard empty objpipe.
-        } else {
-          std::push_heap(active_.begin(), active_.end(), greater());
-        }
+    assert(loop_invariant());
+
+    // Ensure active has at least one element,
+    // and load all unstarted that start at/before active_.front.
+    while (active_.empty()
+        || (!unstarted_.empty()
+            && !greater()(unstarted_.top(), active_.front()->front()))) {
+      // Convert tsdata to objpipe.
+      active_store_.push_back(objpipe_fn_(*unstarted_.top()));
+      active_.push_back(--active_store_.end());
+      unstarted_.pop();
+
+      // Sort new objpipe into active.
+      if (active_.back()->empty()) {
+        active_store_.erase(active_.back());
+        active_.pop_back(); // Discard empty objpipe.
+      } else {
+        std::push_heap(active_.begin(), active_.end(), greater());
       }
+    }
 
-      assert(unstarted_.empty()
-          || active_.empty()
-          || greater::tp(unstarted_.top()) > greater::tp(active_.front()));
+    assert(unstarted_.empty()
+        || active_.empty()
+        || greater::tp(unstarted_.top()) > greater::tp(active_.front()));
 
-      // Since empty queues are immediately popped, the loop invariant
-      // may break. Compensate here.
-      if (active_.empty()) {
-        assert(unstarted_.empty());
-        break;
-      }
+    // Since empty queues are immediately popped, the loop invariant
+    // may break. Compensate here.
+    if (active_.empty()) {
+      assert(unstarted_.empty());
+      return objpipe_errc::closed;
+    }
 
-      assert(loop_invariant());
+    return objpipe_errc::success;
+  }
 
-      // Read head element of the head of active.
+  auto front()
+  -> transport_type {
+    objpipe_errc e = wait();
+    if (e != objpipe_errc::success) return transport_type(std::in_place_index<1>, e);
+
+    assert(loop_invariant());
+
+    // Read head element of the head of active.
+    std::pop_heap(active_.begin(), active_.end(), greater());
+    value_type emit = active_.back()->pull();
+    if (active_.back()->empty()) {
+      active_store_.erase(active_.back());
+      active_.pop_back();
+    } else {
+      std::push_heap(active_.begin(), active_.end(), greater());
+    }
+
+    // Merge in all other elements with the same time stamp.
+    while (!active_.empty()
+        && !greater()(active_.front(), emit)
+        && !greater()(emit, active_.front())) {
       std::pop_heap(active_.begin(), active_.end(), greater());
-      value_type emit = active_.back()->pull();
+      merge(emit, active_.back()->pull());
       if (active_.back()->empty()) {
         active_store_.erase(active_.back());
         active_.pop_back();
       } else {
         std::push_heap(active_.begin(), active_.end(), greater());
       }
-
-      // Merge in all other elements with the same time stamp.
-      while (!active_.empty()
-          && !greater()(active_.front(), emit)
-          && !greater()(emit, active_.front())) {
-        std::pop_heap(active_.begin(), active_.end(), greater());
-        merge(emit, active_.back()->pull());
-        if (active_.back()->empty()) {
-          active_store_.erase(active_.back());
-          active_.pop_back();
-        } else {
-          std::push_heap(active_.begin(), active_.end(), greater());
-        }
-      }
-
-      // Emit merged element.
-      cb(std::move(emit));
-
-      assert(loop_invariant());
     }
+
+    assert(loop_invariant());
+
+    // Mark pop_front as pending.
+    pending_pop_ = true;
+    // Emit merged element.
+    return transport_type(std::in_place_index<0>, std::move(emit));
+  }
+
+  auto pop_front()
+  -> objpipe_errc {
+    objpipe_errc e = objpipe_errc::success;
+    if (!pending_pop_) e = front().errc();
+    pending_pop_ = false;
+    return e;
   }
 
   auto as_objpipe() &&
   -> decltype(auto) {
-    return objpipe::new_callback<value_type>(std::move(*this));
+    return objpipe::detail::adapter(std::move(*this));
   }
 
  private:
@@ -209,6 +236,7 @@ class merge_emit_t {
   ToObjpipeFunctor objpipe_fn_;
   active_store_t active_store_;
   std::vector<typename active_store_t::iterator> active_;
+  bool pending_pop_ = false;
 };
 
 template<typename Iter, typename ToObjpipeFunctor>
