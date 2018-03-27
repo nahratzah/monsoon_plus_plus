@@ -35,6 +35,8 @@ class merge_concat_push {
 
   auto operator()(merge_batch_type<T>&& batch)
   -> objpipe_errc {
+    assert(!batch.empty());
+
     if constexpr(!Multithreaded) {
       return push_(sink_, std::move(batch));
     } else {
@@ -85,6 +87,79 @@ class merge_concat_push {
   }
 
   Sink sink_;
+};
+
+///\brief Converts a batched stream into its reduction.
+template<typename T, typename Sink, typename MergeOp, bool Multithreaded>
+class merge_reduce_push {
+ public:
+  merge_reduce_push(Sink&& sink, MergeOp&& do_merge)
+  noexcept(std::is_nothrow_move_constructible_v<Sink>
+      && std::is_nothrow_move_constructible_v<MergeOp>)
+  : sink_(std::move(sink)),
+    do_merge_(std::move(do_merge))
+  {}
+
+  merge_reduce_push(const Sink& sink, MergeOp&& do_merge)
+  noexcept(std::is_nothrow_copy_constructible_v<Sink>
+      && std::is_nothrow_move_constructible_v<MergeOp>)
+  : sink_(sink),
+    do_merge_(std::move(do_merge))
+  {}
+
+  auto operator()(merge_batch_type<T>&& batch)
+  -> objpipe_errc {
+    assert(!batch.empty());
+
+    if constexpr(!Multithreaded) {
+      return push_(sink_, std::move(batch), do_merge_);
+    } else {
+      using std::swap;
+
+      Sink dst = sink_; // Copy.
+      swap(dst, sink_); // Reorder sink_ after dst.
+
+      thread_pool::default_pool().publish(
+          make_task(
+              [](Sink&& dst, merge_batch_type<T>&& batch, MergeOp&& do_merge) {
+                try {
+                  push_(dst, std::move(batch), do_merge);
+                } catch (...) {
+                  dst.push_exception(std::current_exception());
+                }
+              },
+              std::move(dst),
+              std::move(batch),
+              do_merge_));
+      return objpipe_errc::success;
+    }
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    sink_.push_exception(std::move(exptr));
+  }
+
+ private:
+  static auto push_(Sink& dst, merge_batch_type<T>&& batch, const MergeOp& do_merge)
+  -> objpipe_errc {
+    auto front = transport<T>(std::in_place_index<0>, std::move(batch.front()));
+    auto b = ++std::make_move_iterator(batch.begin());
+    auto e = std::make_move_iterator(batch.end());
+
+    while (b != e)
+      do_merge(front, transport<T&&>(std::in_place_index<0>, *b++));
+
+    if constexpr(is_invocable_v<Sink&, T&&>) {
+      return dst(std::move(front).value());
+    } else {
+      return dst(front.ref());
+    }
+  }
+
+  Sink sink_;
+  MergeOp do_merge_;
 };
 
 ///\brief Converts a single stream of elements into batches that compare neither less, nor greater.
@@ -904,7 +979,7 @@ class merge_pipe
         std::make_move_iterator(q.begin()),
         std::make_move_iterator(q.end()),
         [&tag, &acceptor](auto&& qelem) {
-          return std::move(qelem).underlying().ioc_push(tag, acceptor);
+          return std::move(qelem).underlying().ioc_push(tag, std::decay_t<Acceptor>(acceptor));
         });
   }
 
@@ -989,6 +1064,70 @@ class merge_reduce_pipe
 
     pending_pop = false;
     return objpipe_errc::success;
+  }
+
+  template<bool Enable = adapt::has_ioc_push<Source, existingthread_push>>
+  auto can_push(const existingthread_push& tag) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    const auto& q = this->get_queue();
+    return std::all_of(
+        q.begin(),
+        q.end(),
+        [&tag](const auto& qelem) {
+          return qelem.underlying().can_push(tag);
+        });
+  }
+
+  constexpr auto can_push(const singlethread_push& tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  constexpr auto can_push(const multithread_push& tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  template<typename Acceptor, bool Enable = adapt::has_ioc_push<Source, existingthread_push>>
+  auto ioc_push(existingthread_push tag, Acceptor&& acceptor) &&
+  -> std::enable_if_t<Enable> {
+    using sink_type = merge_reduce_push<value_type, std::decay_t<Acceptor>, do_merge_t<value_type, ReduceOp>, false>;
+    using impl_type = multiple_merge_batch_push<value_type, sink_type, Less>;
+
+    impl_type::start(
+        sink_type(std::forward<Acceptor>(acceptor), std::move(do_merge_)),
+        tag,
+        std::move(this->less_),
+        std::move(*this).get_queue());
+  }
+
+  template<typename Acceptor>
+  auto ioc_push(singlethread_push tag, Acceptor&& acceptor) &&
+  -> void {
+    using sink_type = merge_reduce_push<value_type, std::decay_t<Acceptor>, do_merge_t<value_type, ReduceOp>, false>;
+    using impl_type = multiple_merge_batch_push<value_type, sink_type, Less>;
+
+    impl_type::start(
+        sink_type(std::forward<Acceptor>(acceptor), std::move(do_merge_)),
+        tag,
+        std::move(this->less_),
+        std::move(*this).get_queue());
+  }
+
+  template<typename Acceptor>
+  auto ioc_push(multithread_push tag, Acceptor&& acceptor) &&
+  -> void {
+    using sink_type = merge_reduce_push<value_type, std::decay_t<Acceptor>, do_merge_t<value_type, ReduceOp>, true>;
+    using impl_type = multiple_merge_batch_push<value_type, sink_type, Less>;
+
+    impl_type::start(
+        sink_type(std::forward<Acceptor>(acceptor), std::move(do_merge_)),
+        singlethread_push(),
+        std::move(this->less_),
+        std::move(*this).get_queue());
   }
 
  private:
