@@ -265,6 +265,33 @@ class merge_emit_t {
         });
   }
 
+  template<typename Iter, typename Sink>
+  static auto emit_batch_(
+      Iter fbegin, Iter fend,
+      std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+      const ToObjpipeFunctor& objpipe_fn,
+      Sink& sink)
+  -> void {
+    using objpipe::detail::thread_pool;
+    using std::swap;
+
+    std::decay_t<Sink> dst = sink; // Copy.
+    swap(dst, sink); // Reorder dst before sink.
+
+    thread_pool::default_pool().publish(
+        objpipe::detail::make_task(
+            [tr_begin, tr_end, objpipe_fn](std::vector<std::shared_ptr<const tsdata>>&& files, std::decay_t<Sink>&& dst) {
+              try {
+                merge_emit_t::make_batch_(files.cbegin(), files.cend(), tr_begin, tr_end, objpipe_fn)
+                    .for_each(std::ref(dst));
+              } catch (...) {
+                dst.push_exception(std::current_exception());
+              }
+            },
+            std::vector<std::shared_ptr<const tsdata>>(fbegin, fend),
+            std::move(dst)));
+  }
+
   ///\brief Multithread sink implementation.
   ///\details Works by creating merged batches for a time range.
   template<typename Sink>
@@ -274,11 +301,6 @@ class merge_emit_t {
       std::list<std::shared_ptr<const tsdata>> files)
   noexcept
   -> void {
-    using objpipe::objpipe_error;
-    using objpipe::singlethread_push;
-    using objpipe::detail::thread_pool;
-    using std::swap;
-
     // Files must be sorted by begin time point.
     assert(std::is_sorted(files.begin(), files.end(),
             [](const auto& x_fptr, const auto& y_fptr) {
@@ -315,23 +337,13 @@ class merge_emit_t {
         }
 
         // Emit batch.
-        std::decay_t<Sink> dst = sink; // Copy.
-        swap(dst, sink); // Reorder dst before sink.
-        objpipe::detail::adapt::ioc_push(
-            merge_emit_t::make_batch_(files.cbegin(), range_end_iter, tr_begin, tr_end, objpipe_fn).underlying(),
-            singlethread_push(), // XXX replace with correct push tag.
-            std::move(dst));
+        merge_emit_t::emit_batch_(files.cbegin(), range_end_iter, tr_begin, tr_end, objpipe_fn, sink);
 
         // Update tr_begin for next iteration.
         tr_begin = tr_end + time_point::duration(1); // Smallest increment in time point.
       }
 
-      if (!files.empty()) {
-        objpipe::detail::adapt::ioc_push(
-            merge_emit_t::make_batch_(files.cbegin(), files.cend(), tr_begin, {}, objpipe_fn).underlying(),
-            singlethread_push(), // XXX replace with correct push tag.
-            std::decay_t<Sink>(sink)); // Copy, since sink must remain valid for catch block below!
-      }
+      merge_emit_t::emit_batch_(files.cbegin(), files.cend(), tr_begin, {}, objpipe_fn, sink);
     } catch (...) {
       sink.push_exception(std::current_exception());
     }
