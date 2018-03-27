@@ -16,10 +16,14 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <list>
 #include <monsoon/history/collect_history.h>
 #include <monsoon/history/dir/tsdata.h>
 #include <monsoon/interpolate.h>
 #include <monsoon/objpipe/callback.h>
+#include <monsoon/objpipe/array.h>
+#include <monsoon/objpipe/push_policies.h>
+#include <monsoon/objpipe/merge.h>
 #include "v2/tsdata.h"
 
 namespace monsoon::history {
@@ -109,7 +113,7 @@ class merge_emit_t {
       std::shared_ptr<const tsdata>,
       std::vector<std::shared_ptr<const tsdata>>,
       greater>;
-  using objpipe_type = std::decay_t<decltype(std::declval<const ToObjpipeFunctor&>()(std::declval<const tsdata&>()))>;
+  using objpipe_type = std::decay_t<decltype(std::declval<const ToObjpipeFunctor&>()(std::declval<const tsdata&>(), std::declval<std::optional<time_point>>(), std::declval<std::optional<time_point>>()))>;
   using value_type = typename objpipe_type::value_type;
   using active_store_t = std::list<objpipe_type>;
   using objpipe_errc = objpipe::objpipe_errc;
@@ -143,7 +147,7 @@ class merge_emit_t {
         || (!unstarted_.empty()
             && !greater()(unstarted_.top(), active_.front()->front()))) {
       // Convert tsdata to objpipe.
-      active_store_.push_back(objpipe_fn_(*unstarted_.top()));
+      active_store_.push_back(objpipe_fn_(*unstarted_.top(), {}, {}));
       active_.push_back(--active_store_.end());
       unstarted_.pop();
 
@@ -178,8 +182,6 @@ class merge_emit_t {
     value_type emit = read_head_();
     merge_matching_elements_(emit);
 
-    assert(loop_invariant());
-
     // Mark pop_front as pending.
     pending_pop_ = true;
     // Emit merged element.
@@ -199,7 +201,142 @@ class merge_emit_t {
     return objpipe::detail::adapter(std::move(*this));
   }
 
+  constexpr auto can_push([[maybe_unused]] objpipe::multithread_push tag) const
+  noexcept
+  -> bool {
+    return true;
+  }
+
+  template<typename Acceptor>
+  auto ioc_push([[maybe_unused]] objpipe::multithread_push tag, Acceptor&& acceptor) &&
+  -> void {
+    using objpipe::detail::thread_pool;
+
+    assert(active_.empty());
+
+    thread_pool::default_pool().publish(
+        objpipe::detail::make_task(
+            [](std::decay_t<Acceptor>&& acceptor, ToObjpipeFunctor&& objpipe_fn, unstarted_queue&& unstarted) {
+              try {
+                // Create list of files.
+                // Note: due to the unstarted_ queue being a min_heap,
+                // the files will be ordered by begin time point.
+                std::list<std::shared_ptr<const tsdata>> files;
+                while (!unstarted.empty()) {
+                  files.push_back(unstarted.top());
+                  unstarted.pop();
+                }
+
+                sink_into_(std::move(acceptor), objpipe_fn, std::move(files));
+              } catch (...) {
+                acceptor.push_exception(std::current_exception());
+              }
+            },
+            std::forward<Acceptor>(acceptor),
+            std::move(objpipe_fn_),
+            std::move(unstarted_)));
+  }
+
  private:
+  ///\brief Create a batch of values.
+  ///\returns A objpipe with a batch of elements.
+  ///   Empty result indicates there are no more elements.
+  template<typename Iter>
+  static auto make_batch_(
+      Iter fbegin, Iter fend,
+      std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
+      const ToObjpipeFunctor& objpipe_fn)
+  -> decltype(auto) {
+    auto pipes = objpipe::new_array(fbegin, fend)
+        .transform(
+            [&tr_begin, &tr_end, &objpipe_fn](const std::shared_ptr<const tsdata>& f) {
+              return objpipe_fn(*f, tr_begin, tr_end);
+            });
+
+    greater cmp;
+    return objpipe::merge_combine(
+        pipes.begin(), pipes.end(),
+        [cmp](const value_type& x, const value_type& y) {
+          return cmp(y, x);
+        },
+        [](value_type& emit, value_type&& to_add) {
+          merge(emit, std::move(to_add));
+          return emit;
+        });
+  }
+
+  ///\brief Multithread sink implementation.
+  ///\details Works by creating merged batches for a time range.
+  template<typename Sink>
+  static auto sink_into_(
+      Sink&& sink,
+      const ToObjpipeFunctor& objpipe_fn,
+      std::list<std::shared_ptr<const tsdata>> files)
+  noexcept
+  -> void {
+    using objpipe::objpipe_error;
+    using objpipe::singlethread_push;
+    using objpipe::detail::thread_pool;
+    using std::swap;
+
+    // Files must be sorted by begin time point.
+    assert(std::is_sorted(files.begin(), files.end(),
+            [](const auto& x_fptr, const auto& y_fptr) {
+              return greater::tp(x_fptr) < greater::tp(y_fptr);
+            }));
+
+    if (files.empty()) return; // Nothing to do.
+
+    try {
+      std::optional<time_point> tr_begin;
+      // Iterator to end of active file list.
+      for (auto files_iter = files.cbegin(); files_iter != files.cend(); ++files_iter) {
+        // Erase any files ending before tr_begin.
+        if (tr_begin.has_value()) {
+          while (!files.empty() && std::get<1>(files.front()->time()) < tr_begin) {
+            assert(files.cbegin() != files_iter); // May not invalidate iter.
+            files.pop_front();
+          }
+        }
+
+        // Figure out next batch end time point.
+        time_point tr_end = std::get<1>((*files_iter)->time());
+
+        // Figure out the range of files to include in the next batch.
+        // tr_end will be adjusted downward to the minimum of the range.
+        auto range_end_iter = files_iter;
+        while (range_end_iter != files.end()) {
+          time_point r_begin, r_end;
+          std::tie(r_begin, r_end) = (*range_end_iter)->time();
+          if (r_begin > tr_end) break; // Found end of intersecting range.
+          if (r_end < tr_end) tr_end = r_end; // Clamp range time point downward.
+
+          ++range_end_iter;
+        }
+
+        // Emit batch.
+        std::decay_t<Sink> dst = sink; // Copy.
+        swap(dst, sink); // Reorder dst before sink.
+        objpipe::detail::adapt::ioc_push(
+            merge_emit_t::make_batch_(files.cbegin(), range_end_iter, tr_begin, tr_end, objpipe_fn).underlying(),
+            singlethread_push(), // XXX replace with correct push tag.
+            std::move(dst));
+
+        // Update tr_begin for next iteration.
+        tr_begin = tr_end + time_point::duration(1); // Smallest increment in time point.
+      }
+
+      if (!files.empty()) {
+        objpipe::detail::adapt::ioc_push(
+            merge_emit_t::make_batch_(files.cbegin(), files.cend(), tr_begin, {}, objpipe_fn).underlying(),
+            singlethread_push(), // XXX replace with correct push tag.
+            std::decay_t<Sink>(sink)); // Copy, since sink must remain valid for catch block below!
+      }
+    } catch (...) {
+      sink.push_exception(std::current_exception());
+    }
+  }
+
   // Read head element of the head of active.
   auto read_head_()
   -> value_type {
@@ -656,8 +793,10 @@ auto dirhistory::emit(
       merge_emit(
           files_.begin(),
           files_.end(),
-          [tr_begin, tr_end, group_filter, tag_filter, metric_filter](const tsdata& tsd) {
-            return tsd.emit(tr_begin, tr_end, group_filter, tag_filter, metric_filter);
+          [tr_begin, tr_end, group_filter, tag_filter, metric_filter](const tsdata& tsd, std::optional<time_point> min_tp, std::optional<time_point> max_tp) {
+            if (min_tp < tr_begin) min_tp = tr_begin;
+            if (tr_end.has_value() && tr_end < max_tp) max_tp = tr_end;
+            return tsd.emit(min_tp, max_tp, group_filter, tag_filter, metric_filter);
           }),
       tr, slack);
 }
@@ -671,7 +810,9 @@ auto dirhistory::emit_time(
   return merge_emit(
       files_.begin(),
       files_.end(),
-      [tr_begin, tr_end](const tsdata& tsd) {
+      [tr_begin, tr_end](const tsdata& tsd, std::optional<time_point> min_tp, std::optional<time_point> max_tp) {
+        if (min_tp < tr_begin) min_tp = tr_begin;
+        if (tr_end.has_value() && tr_end < max_tp) max_tp = tr_end;
         return tsd.emit_time(tr_begin, tr_end);
       });
 }
