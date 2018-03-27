@@ -175,31 +175,8 @@ class merge_emit_t {
     objpipe_errc e = wait();
     if (e != objpipe_errc::success) return transport_type(std::in_place_index<1>, e);
 
-    assert(loop_invariant());
-
-    // Read head element of the head of active.
-    std::pop_heap(active_.begin(), active_.end(), greater());
-    value_type emit = active_.back()->pull();
-    if (active_.back()->empty()) {
-      active_store_.erase(active_.back());
-      active_.pop_back();
-    } else {
-      std::push_heap(active_.begin(), active_.end(), greater());
-    }
-
-    // Merge in all other elements with the same time stamp.
-    while (!active_.empty()
-        && !greater()(active_.front(), emit)
-        && !greater()(emit, active_.front())) {
-      std::pop_heap(active_.begin(), active_.end(), greater());
-      merge(emit, active_.back()->pull());
-      if (active_.back()->empty()) {
-        active_store_.erase(active_.back());
-        active_.pop_back();
-      } else {
-        std::push_heap(active_.begin(), active_.end(), greater());
-      }
-    }
+    value_type emit = read_head_();
+    merge_matching_elements_(emit);
 
     assert(loop_invariant());
 
@@ -223,6 +200,45 @@ class merge_emit_t {
   }
 
  private:
+  // Read head element of the head of active.
+  auto read_head_()
+  -> value_type {
+    assert(loop_invariant());
+    assert(!active_.empty());
+
+    std::pop_heap(active_.begin(), active_.end(), greater());
+    value_type emit = active_.back()->pull();
+    if (active_.back()->empty()) {
+      active_store_.erase(active_.back());
+      active_.pop_back();
+    } else {
+      std::push_heap(active_.begin(), active_.end(), greater());
+    }
+    return emit;
+  }
+
+  // Merge in all other elements with the same time stamp.
+  auto merge_matching_elements_(value_type& emit)
+  -> void {
+    assert(loop_invariant());
+
+    while (!active_.empty()
+        && !greater()(active_.front(), emit)
+        && !greater()(emit, active_.front())) {
+
+      std::pop_heap(active_.begin(), active_.end(), greater());
+      merge(emit, active_.back()->pull());
+      if (active_.back()->empty()) {
+        active_store_.erase(active_.back());
+        active_.pop_back();
+      } else {
+        std::push_heap(active_.begin(), active_.end(), greater());
+      }
+
+      assert(loop_invariant());
+    }
+  }
+
   auto loop_invariant() const
   noexcept
   -> bool {
