@@ -283,6 +283,14 @@ class merge_emit_t {
             [tr_begin, tr_end, objpipe_fn](std::vector<std::shared_ptr<const tsdata>>&& files, std::decay_t<Sink>&& dst) {
               try {
                 merge_emit_t::make_batch_(files.cbegin(), files.cend(), tr_begin, tr_end, objpipe_fn)
+                    .peek(
+                        [tr_begin](const auto& x) {
+                          if (tr_begin.has_value()) assert(greater::tp(x) >= *tr_begin);
+                        })
+                    .peek(
+                        [tr_end](const auto& x) {
+                          if (tr_end.has_value()) assert(greater::tp(x) <= *tr_end);
+                        })
                     .for_each(std::ref(dst));
               } catch (...) {
                 dst.push_exception(std::current_exception());
@@ -806,8 +814,8 @@ auto dirhistory::emit(
           files_.begin(),
           files_.end(),
           [tr_begin, tr_end, group_filter, tag_filter, metric_filter](const tsdata& tsd, std::optional<time_point> min_tp, std::optional<time_point> max_tp) {
-            if (min_tp < tr_begin) min_tp = tr_begin;
-            if (tr_end.has_value() && tr_end < max_tp) max_tp = tr_end;
+            if (tr_begin.has_value() && (!min_tp.has_value() || *min_tp < *tr_begin)) min_tp = tr_begin;
+            if (tr_end.has_value() && (!max_tp.has_value() || *tr_end < *max_tp)) max_tp = tr_end;
             return tsd.emit(min_tp, max_tp, group_filter, tag_filter, metric_filter);
           }),
       tr, slack);
@@ -823,9 +831,9 @@ auto dirhistory::emit_time(
       files_.begin(),
       files_.end(),
       [tr_begin, tr_end](const tsdata& tsd, std::optional<time_point> min_tp, std::optional<time_point> max_tp) {
-        if (min_tp < tr_begin) min_tp = tr_begin;
-        if (tr_end.has_value() && tr_end < max_tp) max_tp = tr_end;
-        return tsd.emit_time(tr_begin, tr_end);
+        if (tr_begin.has_value() && (!min_tp.has_value() || *min_tp < *tr_begin)) min_tp = tr_begin;
+        if (tr_end.has_value() && (!max_tp.has_value() || *tr_end < *max_tp)) max_tp = tr_end;
+        return tsd.emit_time(min_tp, max_tp);
       });
 }
 
