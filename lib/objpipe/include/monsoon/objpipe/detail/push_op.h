@@ -888,9 +888,10 @@ class async_adapter_t {
         });
   }
 
-  template<typename OutputIterator>
+  template<typename OutputIterator,
+      bool Enable = !std::is_base_of_v<multithread_push, PushTag> || std::is_base_of_v<multithread_unordered_push, PushTag>>
   auto copy(OutputIterator&& out) &&
-  -> std::future<void> {
+  -> std::enable_if_t<Enable, std::future<void>> {
     return reduce(
         [out]() { return out; },
         [](std::decay_t<OutputIterator>& out, auto&& v) {
@@ -901,9 +902,10 @@ class async_adapter_t {
         void_extractor());
   }
 
-  template<typename Fn>
+  template<typename Fn,
+      bool Enable = !std::is_base_of_v<multithread_push, PushTag> || std::is_base_of_v<multithread_unordered_push, PushTag>>
   auto for_each(Fn&& fn) &&
-  -> std::future<void> {
+  -> std::enable_if_t<Enable, std::future<void>> {
     return reduce(
         [fn]() { return fn; },
         [](std::decay_t<Fn>& fn, auto&& v) {
@@ -924,6 +926,40 @@ class async_adapter_t {
         },
         [](std::uintmax_t& x, std::uintmax_t&& y) { x += y; },
         [](std::uintmax_t&& c) -> std::uintmax_t { return c; });
+  }
+
+  template<typename Pred = std::less<value_type>>
+  auto min(Pred pred = Pred())
+  -> std::future<std::optional<value_type>> {
+    return reduce(
+        []() -> std::optional<value_type> { return {}; },
+        [pred](std::optional<value_type>& c, auto&& v) {
+          if (!c.has_value() || std::invoke(pred, v, *c))
+            c.emplace(std::forward<decltype(v)>(v));
+        },
+        [pred](std::optional<value_type>& x, std::optional<value_type>&& y) {
+          if (!y.has_value()) return;
+          if (!x.has_value() || std::invoke(pred, *y, *x))
+            x = std::move(y);
+        },
+        [](std::optional<value_type>&& c) -> std::optional<value_type>&& { return std::move(c); });
+  }
+
+  template<typename Pred = std::less<value_type>>
+  auto max(Pred pred = Pred())
+  -> std::future<std::optional<value_type>> {
+    return reduce(
+        []() -> std::optional<value_type> { return {}; },
+        [pred](std::optional<value_type>& c, auto&& v) {
+          if (!c.has_value() || std::invoke(pred, *c, v))
+            c.emplace(std::forward<decltype(v)>(v));
+        },
+        [pred](std::optional<value_type>& x, std::optional<value_type>&& y) {
+          if (!y.has_value()) return;
+          if (!x.has_value() || std::invoke(pred, *x, *y))
+            x = std::move(y);
+        },
+        [](std::optional<value_type>&& c) -> std::optional<value_type>&& { return std::move(c); });
   }
 
  private:
