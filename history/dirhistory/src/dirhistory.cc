@@ -24,6 +24,7 @@
 #include <monsoon/objpipe/array.h>
 #include <monsoon/objpipe/push_policies.h>
 #include <monsoon/objpipe/merge.h>
+#include <monsoon/objpipe/of.h>
 #include "v2/tsdata.h"
 
 namespace monsoon::history {
@@ -800,6 +801,27 @@ auto dirhistory::time() const -> std::tuple<time_point, time_point> {
 #endif
 }
 
+namespace {
+
+template<typename C>
+auto filter_files_(const C& files, std::optional<time_point> tr_begin, std::optional<time_point> tr_end)
+-> decltype(auto) {
+  return objpipe::of(std::ref(files))
+      .iterate()
+      .filter( // Only keep those files that intersect time wise.
+          [tr_begin, tr_end](const auto& fptr) -> bool {
+            if (!tr_begin.has_value() && !tr_end.has_value()) return true;
+
+            time_point file_begin, file_end;
+            std::tie(file_begin, file_end) = fptr->time();
+
+            return (!tr_begin.has_value() || file_end >= *tr_begin)
+                && (!tr_end.has_value() || file_begin <= *tr_end);
+          });
+}
+
+}
+
 auto dirhistory::emit(
     time_range tr,
     path_matcher group_filter,
@@ -809,10 +831,11 @@ auto dirhistory::emit(
   auto tr_begin = tr.begin();
   auto tr_end = tr.end();
 
+  auto file_set = filter_files_(files_, tr_begin, tr_end);
   return interpolation_based_emit(
       merge_emit(
-          files_.begin(),
-          files_.end(),
+          file_set.begin(),
+          file_set.end(),
           [tr_begin, tr_end, group_filter, tag_filter, metric_filter](const tsdata& tsd, std::optional<time_point> min_tp, std::optional<time_point> max_tp) {
             if (tr_begin.has_value() && (!min_tp.has_value() || *min_tp < *tr_begin)) min_tp = tr_begin;
             if (tr_end.has_value() && (!max_tp.has_value() || *tr_end < *max_tp)) max_tp = tr_end;
@@ -827,9 +850,10 @@ auto dirhistory::emit_time(
   auto tr_begin = tr.begin();
   auto tr_end = tr.end();
 
+  auto file_set = filter_files_(files_, tr_begin, tr_end);
   return merge_emit(
-      files_.begin(),
-      files_.end(),
+      file_set.begin(),
+      file_set.end(),
       [tr_begin, tr_end](const tsdata& tsd, std::optional<time_point> min_tp, std::optional<time_point> max_tp) {
         if (tr_begin.has_value() && (!min_tp.has_value() || *min_tp < *tr_begin)) min_tp = tr_begin;
         if (tr_end.has_value() && (!max_tp.has_value() || *tr_end < *max_tp)) max_tp = tr_end;
