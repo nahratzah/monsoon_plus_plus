@@ -5,6 +5,7 @@
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
+#include <monsoon/objpipe/push_policies.h>
 #include <cstdint>
 #include <iostream>
 #include <memory>
@@ -21,7 +22,10 @@ int main(int argc, char** argv) {
   }
 
   auto history = open_dir(argv[1]);
-  auto counter = history->emit_time(monsoon::time_range()).count();
+  auto counter = history->emit_time(monsoon::time_range())
+      .async(monsoon::objpipe::multithread_unordered_push())
+      .count()
+      .get();
   std::cout << counter << " scrapes\n";
   return 0;
 }
