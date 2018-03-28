@@ -15,7 +15,7 @@
 #include <monsoon/time_range.h>
 #include <monsoon/path_matcher.h>
 #include <monsoon/tag_matcher.h>
-#include <monsoon/objpipe/reader.h>
+#include <objpipe/reader.h>
 
 namespace monsoon {
 

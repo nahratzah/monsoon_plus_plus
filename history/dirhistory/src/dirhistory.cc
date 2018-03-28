@@ -20,11 +20,11 @@
 #include <monsoon/history/collect_history.h>
 #include <monsoon/history/dir/tsdata.h>
 #include <monsoon/interpolate.h>
-#include <monsoon/objpipe/callback.h>
-#include <monsoon/objpipe/array.h>
-#include <monsoon/objpipe/push_policies.h>
-#include <monsoon/objpipe/merge.h>
-#include <monsoon/objpipe/of.h>
+#include <objpipe/callback.h>
+#include <objpipe/array.h>
+#include <objpipe/push_policies.h>
+#include <objpipe/merge.h>
+#include <objpipe/of.h>
 #include "v2/tsdata.h"
 
 namespace monsoon::history {

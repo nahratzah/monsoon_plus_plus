@@ -1,6 +1,6 @@
 #include <monsoon/metric_name.h>
 #include <monsoon/simple_group.h>
-#include <monsoon/objpipe/of.h>
+#include <objpipe/of.h>
 #include "hacks.h"
 #include "UnitTest++/UnitTest++.h"
 

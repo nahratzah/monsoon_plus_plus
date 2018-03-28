@@ -6,7 +6,7 @@
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/xdr/xdr_stream.h>
-#include <monsoon/objpipe/callback.h>
+#include <objpipe/callback.h>
 
 namespace monsoon {
 namespace history {

@@ -11,7 +11,7 @@
 #include <monsoon/metric_source.h>
 #include <monsoon/time_point.h>
 #include <monsoon/time_range.h>
-#include <monsoon/objpipe/reader.h>
+#include <objpipe/reader.h>
 #include <monsoon/match_clause.h>
 #include <variant>
 #include <memory>

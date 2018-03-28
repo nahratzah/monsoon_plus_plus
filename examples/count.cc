@@ -5,7 +5,7 @@
 #include <monsoon/group_name.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/metric_value.h>
-#include <monsoon/objpipe/push_policies.h>
+#include <objpipe/push_policies.h>
 #include <cstdint>
 #include <iostream>
 #include <memory>

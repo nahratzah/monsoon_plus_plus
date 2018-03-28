@@ -9,7 +9,7 @@
 #include <vector>
 #include <unordered_map>
 #include <monsoon/xdr/xdr.h>
-#include <monsoon/objpipe/callback.h>
+#include <objpipe/callback.h>
 
 namespace monsoon {
 namespace history {

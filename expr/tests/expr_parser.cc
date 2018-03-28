@@ -1,6 +1,6 @@
 #include <monsoon/metric_source.h>
 #include <monsoon/expression.h>
-#include <monsoon/objpipe/of.h>
+#include <objpipe/of.h>
 #include "UnitTest++/UnitTest++.h"
 #include <vector>
 #include <optional>

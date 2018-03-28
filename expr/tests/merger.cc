@@ -2,8 +2,8 @@
 #include <monsoon/expression.h>
 #include <monsoon/match_clause.h>
 #include <monsoon/tags.h>
-#include <monsoon/objpipe/of.h>
-#include <monsoon/objpipe/array.h>
+#include <objpipe/of.h>
+#include <objpipe/array.h>
 #include <stdexcept>
 #include "test_hacks.ii"
 #include "UnitTest++/UnitTest++.h"

@@ -17,7 +17,7 @@
 #include <monsoon/tags.h>
 #include <monsoon/time_point.h>
 #include <monsoon/expression.h>
-#include <monsoon/objpipe/of.h>
+#include <objpipe/of.h>
 #include <monsoon/expr_export_.h>
 
 namespace monsoon::expressions {
