@@ -76,8 +76,8 @@ class virtual_push_acceptor {
  public:
   virtual_push_acceptor() = default;
 
-  template<typename Impl>
-  virtual_push_acceptor(Impl&& impl)
+  template<typename Impl, typename = std::enable_if_t<!std::is_base_of_v<virtual_push_acceptor, std::decay_t<Impl>>>>
+  explicit virtual_push_acceptor(Impl&& impl)
   : impl_(std::make_unique<virtual_push_acceptor_impl<T, std::decay_t<Impl>>>(std::forward<Impl>(impl)))
   {}
 
@@ -90,10 +90,7 @@ class virtual_push_acceptor {
   : impl_(rhs.impl_ == nullptr ? nullptr : rhs.impl_->clone())
   {}
 
-  virtual_push_acceptor& operator=(const virtual_push_acceptor& rhs) {
-    impl_ = (rhs.impl_ == nullptr ? nullptr : rhs.impl_->clone());
-    return *this;
-  }
+  virtual_push_acceptor& operator=(const virtual_push_acceptor& rhs) = delete;
 
   virtual_push_acceptor& operator=(virtual_push_acceptor&& rhs) {
     impl_ = std::move(rhs.impl_);
