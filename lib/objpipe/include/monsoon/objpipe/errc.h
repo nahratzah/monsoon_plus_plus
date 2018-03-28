@@ -48,7 +48,7 @@ namespace objpipe {
  * \ingroup objpipe_errors
  * \return the object pipe error category.
  */
-const std::error_category& objpipe_category() {
+inline const std::error_category& objpipe_category() {
   class objpipe_category_t
   : public std::error_category
   {
@@ -92,7 +92,7 @@ const std::error_category& objpipe_category() {
  * \ingroup objpipe_errors
  * \param e The error code for which to create an error condition.
  */
-std::error_condition make_error_condition(objpipe_errc e) {
+inline std::error_condition make_error_condition(objpipe_errc e) {
   return std::error_condition(static_cast<int>(e), objpipe_category());
 }
 
@@ -100,7 +100,7 @@ std::error_condition make_error_condition(objpipe_errc e) {
  * \brief Write errc to output stream.
  * \ingroup objpipe_errors
  */
-std::ostream& operator<<(std::ostream& out, objpipe_errc e) {
+inline std::ostream& operator<<(std::ostream& out, objpipe_errc e) {
   using namespace std::string_view_literals;
 
   std::string_view e_txt;
