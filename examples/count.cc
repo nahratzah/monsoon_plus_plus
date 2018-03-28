@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
 
   auto history = open_dir(argv[1]);
   auto counter = history->emit_time(monsoon::time_range())
-      .async(monsoon::objpipe::multithread_unordered_push())
+      .async(objpipe::multithread_unordered_push())
       .count()
       .get();
   std::cout << counter << " scrapes\n";
