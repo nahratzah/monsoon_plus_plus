@@ -2,7 +2,7 @@
 #include <string_view>
 #include <string>
 #include <vector>
-#include <monsoon/objpipe/array.h>
+#include <objpipe/array.h>
 #include "hacks.h"
 #include "UnitTest++/UnitTest++.h"
 

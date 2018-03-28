@@ -14,8 +14,8 @@
 #include <type_traits>
 #include <algorithm>
 #include <queue>
-#include <monsoon/objpipe/callback.h>
-#include <monsoon/objpipe/merge.h>
+#include <objpipe/callback.h>
+#include <objpipe/merge.h>
 
 namespace monsoon {
 namespace history {

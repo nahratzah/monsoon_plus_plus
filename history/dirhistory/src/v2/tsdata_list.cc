@@ -1,7 +1,7 @@
 #include "tsdata_list.h"
 #include "../raw_file_segment_writer.h"
-#include <monsoon/objpipe/callback.h>
-#include <monsoon/objpipe/of.h>
+#include <objpipe/callback.h>
+#include <objpipe/of.h>
 
 namespace monsoon {
 namespace history {

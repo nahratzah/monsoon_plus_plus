@@ -26,8 +26,8 @@ std::string concat_args(char** b, char** e) {
   return std::move(oss).str();
 }
 
-auto print_scalar(monsoon::expression::scalar_objpipe&& pipe) -> monsoon::objpipe::reader<std::string>;
-auto print_vector(monsoon::expression::vector_objpipe&& pipe) -> monsoon::objpipe::reader<std::string>;
+auto print_scalar(monsoon::expression::scalar_objpipe&& pipe) -> objpipe::reader<std::string>;
+auto print_vector(monsoon::expression::vector_objpipe&& pipe) -> objpipe::reader<std::string>;
 
 int main(int argc, char** argv) {
   if (argc <= 2) {
@@ -51,7 +51,7 @@ int main(int argc, char** argv) {
 }
 
 auto print_scalar(monsoon::expression::scalar_objpipe&& pipe)
--> monsoon::objpipe::reader<std::string> {
+-> objpipe::reader<std::string> {
   return std::move(pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
       .transform(
@@ -62,7 +62,7 @@ auto print_scalar(monsoon::expression::scalar_objpipe&& pipe)
 }
 
 auto print_vector(monsoon::expression::vector_objpipe&& pipe)
--> monsoon::objpipe::reader<std::string> {
+-> objpipe::reader<std::string> {
   return std::move(pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
       .transform(

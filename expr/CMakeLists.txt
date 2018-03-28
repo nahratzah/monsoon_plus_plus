@@ -15,11 +15,11 @@ add_library (monsoon_expr
 target_link_libraries (monsoon_expr ${extra_libs})
 target_link_libraries (monsoon_expr monsoon_lib)
 target_link_libraries (monsoon_expr monsoon_intf)
-target_link_libraries (monsoon_expr monsoon_objpipe)
+target_link_libraries (monsoon_expr objpipe)
 target_include_directories (monsoon_expr PUBLIC include)
 target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
 target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
-target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:monsoon_objpipe,INTERFACE_INCLUDE_DIRECTORIES>)
+target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:objpipe,INTERFACE_INCLUDE_DIRECTORIES>)
 set_property (TARGET monsoon_expr PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_expr PROPERTY SOVERSION "0.0")
 

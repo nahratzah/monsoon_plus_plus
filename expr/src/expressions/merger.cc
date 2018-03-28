@@ -17,7 +17,7 @@
 #include <monsoon/tags.h>
 #include <monsoon/time_point.h>
 #include <monsoon/expression.h>
-#include <monsoon/objpipe/of.h>
+#include <objpipe/of.h>
 #include <monsoon/expr_export_.h>
 
 namespace monsoon::expressions {
@@ -618,7 +618,7 @@ class vector_sink {
  * \ingroup expr
  *
  * \details
- * Reads data from the \p Pipe (an \ref monsoon::objpipe::reader<T> "objpipe")
+ * Reads data from the \p Pipe (an \ref objpipe::reader<T> "objpipe")
  * into the appropriate sink.
  *
  * \tparam Pipe An object pipe. Must be an instance of
@@ -646,7 +646,7 @@ class pull_cycle {
 
   /**
    * \brief Constructs a new cycle, taking values from
-   * the \ref monsoon::objpipe::reader<T> "objpipe" \p source
+   * the \ref objpipe::reader<T> "objpipe" \p source
    * and storing them into \p sink.
    */
   pull_cycle(Pipe&& source, sink_type&& sink)

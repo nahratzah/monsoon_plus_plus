@@ -85,6 +85,11 @@ if(NOT monsoon_cache_DIR)
   add_subdirectory(contrib/monsoon_cache)
 endif()
 
+find_package(objpipe)
+if(NOT objpipe_DIR)
+  add_subdirectory(contrib/objpipe)
+endif()
+
 # Add module directories.
 add_subdirectory (lib)
 add_subdirectory (intf)
