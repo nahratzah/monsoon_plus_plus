@@ -2,17 +2,19 @@ project (monsoon_objpipe)
 
 find_package (Boost COMPONENTS context REQUIRED)
 
-add_library (monsoon_objpipe
-  src/errc.cc)
-target_include_directories(monsoon_objpipe PUBLIC include)
-target_include_directories(monsoon_objpipe PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
-target_include_directories(monsoon_objpipe PUBLIC ${Boost_INCLUDE_DIR})
-target_link_libraries (monsoon_objpipe monsoon_lib)
-target_link_libraries (monsoon_objpipe ${Boost_CONTEXT_LIBRARY})
-set_property (TARGET monsoon_objpipe PROPERTY VERSION "0.0")
-set_property (TARGET monsoon_objpipe PROPERTY SOVERSION "0.0")
+add_library (monsoon_objpipe INTERFACE)
+target_include_directories(monsoon_objpipe INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${Boost_INCLUDE_DIR}>
+    $<INSTALL_INTERFACE:include>
+    $<INSTALL_INTERFACE:${Boost_INCLUDE_DIR}>)
+target_link_libraries (monsoon_objpipe INTERFACE ${Boost_CONTEXT_LIBRARY})
 
-install (TARGETS monsoon_objpipe DESTINATION lib)
+find_package (Threads REQUIRED)
+if(CMAKE_USE_PTHREADS_INIT)
+  target_link_libraries(monsoon_objpipe INTERFACE ${CMAKE_THREAD_LIBS_INIT})
+endif()
+
 install (FILES
   include/monsoon/objpipe/callback.h
   include/monsoon/objpipe/doc_.h
