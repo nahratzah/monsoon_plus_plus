@@ -209,9 +209,9 @@ struct merger_apply_scalar {
 
   ///\brief Convert the scalar to a \ref expression::scalar_emit_type "scalar emit type".
   auto as_emit(time_point tp) &&
-  -> expression::scalar_emit_type {
+  -> std::optional<expression::scalar_emit_type> {
     using scalar_emit_type = expression::scalar_emit_type;
-    assert(value.has_value());
+    if (!value.has_value()) return {};
 
     if (is_fact)
       return scalar_emit_type(tp, std::in_place_index<1>, *std::move(value));
@@ -699,7 +699,7 @@ class scalar_merger_pipe {
 
  public:
   using objpipe_errc = objpipe::objpipe_errc;
-  using result_type = expression::scalar_emit_type;
+  using result_type = std::optional<expression::scalar_emit_type>;
   using transport_type = objpipe::detail::transport<result_type>;
   using fn_type = std::function<metric_value(const std::vector<metric_value>&)>;
 
@@ -1417,85 +1417,82 @@ auto scalar_merger_pipe::pull(bool block)
   if (inputs_.empty())
     return transport_type(std::in_place_index<1>, objpipe_errc::closed);
 
-  for (;;) {
-    // Compute minimum time point.
-    // If all of the inputs fails to supply a time point,
-    // we're an empty objpipe.
-    time_point tp;
-    {
-      time_point_selector selector;
-      std::for_each(
-          inputs_.begin(), inputs_.end(),
-          [&selector, block](pull_cycle<scalar_objpipe>& x) {
-            time_point_selector input_selector = x.suggest_emit_tp();
-            if (!input_selector.factual.has_value()) {
-              x.read_more(block);
-              input_selector = x.suggest_emit_tp();
-            }
+  // Compute minimum time point.
+  // If all of the inputs fails to supply a time point,
+  // we're an empty objpipe.
+  time_point tp;
+  {
+    time_point_selector selector;
+    std::for_each(
+        inputs_.begin(), inputs_.end(),
+        [&selector, block](pull_cycle<scalar_objpipe>& x) {
+          time_point_selector input_selector = x.suggest_emit_tp();
+          if (!input_selector.factual.has_value()) {
+            x.read_more(block);
+            input_selector = x.suggest_emit_tp();
+          }
 
-            selector = tps_min(selector, input_selector);
-          });
-      if (!selector.get().has_value()) {
-        if (block
-            || std::none_of(
-                inputs_.begin(),
-                inputs_.end(),
-                [](const pull_cycle<scalar_objpipe>& x) {
-                  return x.is_pullable();
-                }))
-          return transport_type(std::in_place_index<1>, objpipe_errc::closed);
-        else
-          return transport_type(std::in_place_index<1>, objpipe_errc::success);
-      }
-
-      tp = *selector.get();
+          selector = tps_min(selector, input_selector);
+        });
+    if (!selector.get().has_value()) {
+      if (block
+          || std::none_of(
+              inputs_.begin(),
+              inputs_.end(),
+              [](const pull_cycle<scalar_objpipe>& x) {
+                return x.is_pullable();
+              }))
+        return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+      else
+        return transport_type(std::in_place_index<1>, objpipe_errc::success);
     }
 
-    merger_apply_scalar result(nullptr, true);
+    tp = *selector.get();
+  }
 
-    // Create argument set for function invocation.
-    // Also fill in result.is_fact, which is true iff all of the values are a fact.
-    std::vector<metric_value> args;
-    args.reserve(inputs_.size());
+  merger_apply_scalar result(nullptr, true);
+
+  // Create argument set for function invocation.
+  // Also fill in result.is_fact, which is true iff all of the values are a fact.
+  std::vector<metric_value> args;
+  args.reserve(inputs_.size());
+  std::for_each(
+      inputs_.begin(),
+      inputs_.end(),
+      [&result, tp, &args, this](pull_cycle<scalar_objpipe>& x) {
+        scalar s = x.get(tp, tp - slack_, tp + slack_);
+        result.is_fact &= s.is_fact;
+        if (s.value.has_value())
+          args.push_back(std::move(*s.value));
+      });
+
+  // Invoke computation.
+  // Note that if any of the metric values is absent,
+  // the computation is skipped and an absent value is placed
+  // instead.
+  // (We detect this using the observation that the argument set is
+  // shorter than the input set.)
+  if (args.size() == inputs_.size()) result.value = fn_(args);
+
+  if (result.is_fact) {
+    // Drop everything at/before tp.
     std::for_each(
         inputs_.begin(),
         inputs_.end(),
-        [&result, tp, &args, this](pull_cycle<scalar_objpipe>& x) {
-          scalar s = x.get(tp, tp - slack_, tp + slack_);
-          result.is_fact &= s.is_fact;
-          if (s.value.has_value())
-            args.push_back(std::move(*s.value));
+        [tp, this](pull_cycle<scalar_objpipe>& x) {
+          x.forward_to_time(tp, tp - slack_);
         });
-
-    // Invoke computation.
-    // Note that if any of the metric values is absent,
-    // the computation is skipped and an absent value is placed
-    // instead.
-    // (We detect this using the observation that the argument set is
-    // shorter than the input set.)
-    if (args.size() == inputs_.size()) result.value = fn_(args);
-
-    if (result.is_fact) {
-      // Drop everything at/before tp.
-      std::for_each(
-          inputs_.begin(),
-          inputs_.end(),
-          [tp, this](pull_cycle<scalar_objpipe>& x) {
-            x.forward_to_time(tp, tp - slack_);
-          });
-    } else {
-      // Mark time point as emitted.
-      std::for_each(
-          inputs_.begin(),
-          inputs_.end(),
-          [tp](pull_cycle<scalar_objpipe>& x) {
-            x.mark_emitted(tp);
-          });
-    }
-
-    if (result.value.has_value())
-      return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  } else {
+    // Mark time point as emitted.
+    std::for_each(
+        inputs_.begin(),
+        inputs_.end(),
+        [tp](pull_cycle<scalar_objpipe>& x) {
+          x.mark_emitted(tp);
+        });
   }
+
+  return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
 }
 
 auto scalar_merger_pipe::try_pull()
@@ -1826,11 +1823,12 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
   args.push_back(std::move(x));
   args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(
-      scalar_merger_pipe(
-          std::move(args),
-          slack,
-          wrap_fn_(fn)));
+  return objpipe::detail::adapter(scalar_merger_pipe(std::move(args), slack, wrap_fn_(fn)))
+      .filter(
+          [](const std::optional<expression::scalar_emit_type>& opt) {
+            return opt.has_value();
+          })
+      .deref();
 }
 
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
