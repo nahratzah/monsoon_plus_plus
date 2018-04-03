@@ -763,7 +763,7 @@ class vector_merger_pipe {
       std::vector<metric_value>& fn_args,
       std::vector<metric_value>::iterator out_iter,
       const args_vector& args,
-      args_vector::iterator in_iter)
+      args_vector::const_iterator in_iter)
   -> void;
   auto apply_(merger_apply_vector::map_type& out, args_vector&& args) -> void;
 
@@ -1717,8 +1717,8 @@ auto vector_merger_pipe::apply_(
     const std::optional<tags>& tag_set,
     std::vector<metric_value>& fn_args,
     std::vector<metric_value>::iterator out_iter,
-    const args_vector& args,
-    args_vector::iterator in_iter)
+    [[maybe_unused]] const args_vector& args,
+    args_vector::const_iterator in_iter)
 -> void {
   // Equal position assertion.
   assert((out_iter == fn_args.end()) == (in_iter == args.end()));
@@ -1797,6 +1797,8 @@ auto vector_merger_pipe::apply_(
 -> void {
   std::vector<metric_value> fn_args;
   fn_args.resize(args.size());
+
+  apply_(out, {}, fn_args, fn_args.begin(), args, args.begin());
 }
 
 
