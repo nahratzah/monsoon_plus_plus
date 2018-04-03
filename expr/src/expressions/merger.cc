@@ -858,9 +858,60 @@ class scalar_merger_pipe {
 
  private:
   std::vector<pull_cycle<scalar_objpipe>> inputs_;
-  std::function<metric_value(const std::vector<metric_value>&)> fn_;
+  fn_type fn_;
   time_point::duration slack_;
   bool pending_pop_ = false;
+};
+
+
+class vector_merger_pipe {
+ private:
+  using scalar_objpipe = expression::scalar_objpipe;
+  using vector_objpipe = expression::vector_objpipe;
+  using input_type = std::variant<
+      pull_cycle<scalar_objpipe>,
+      pull_cycle<vector_objpipe>>;
+  using args_vector = std::vector<std::variant<metric_value, tagged_vector::map_type>>;
+
+ public:
+  using objpipe_errc = objpipe::objpipe_errc;
+  using result_type = std::vector<expression::vector_emit_type>;
+  using transport_type = objpipe::detail::transport<result_type>;
+  using fn_type = std::function<metric_value(const std::vector<metric_value>&)>;
+
+  vector_merger_pipe(vector_merger_pipe&&) = default;
+
+  vector_merger_pipe(
+      std::vector<std::variant<scalar_objpipe, vector_objpipe>>&& inputs,
+      std::shared_ptr<const match_clause> mc,
+      std::shared_ptr<const match_clause> out_mc,
+      time_point::duration slack,
+      fn_type fn);
+
+  auto wait() -> objpipe_errc;
+  auto is_pullable() const noexcept -> bool;
+  auto front() -> transport_type;
+  auto pop_front() -> objpipe_errc;
+  auto pull(bool block = true) -> transport_type;
+  auto try_pull() -> transport_type;
+
+ private:
+  auto apply_(
+      merger_apply_vector::map_type& result,
+      const std::optional<tags>& tag_set,
+      std::vector<metric_value>& fn_args,
+      std::vector<metric_value>::iterator out_iter,
+      const args_vector& args,
+      args_vector::iterator in_iter)
+  -> void;
+  auto apply_(merger_apply_vector::map_type& out, args_vector&& args) -> void;
+
+  std::vector<input_type> inputs_;
+  fn_type fn_;
+  time_point::duration slack_;
+  bool pending_pop_ = false;
+  std::shared_ptr<const match_clause> mc_;
+  std::shared_ptr<const match_clause> out_mc_;
 };
 
 
@@ -1755,7 +1806,7 @@ auto scalar_merger_pipe::pull(bool block)
       std::for_each(
           inputs_.begin(),
           inputs_.end(),
-          [tp, &result](pull_cycle<scalar_objpipe>& x) {
+          [tp](pull_cycle<scalar_objpipe>& x) {
             x.mark_emitted(tp);
           });
     }
@@ -1768,6 +1819,311 @@ auto scalar_merger_pipe::pull(bool block)
 auto scalar_merger_pipe::try_pull()
 -> transport_type {
   return pull(false);
+}
+
+
+vector_merger_pipe::vector_merger_pipe(
+    std::vector<std::variant<scalar_objpipe, vector_objpipe>>&& inputs,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
+    fn_type fn)
+: fn_(std::move(fn)),
+  slack_(slack),
+  mc_(std::move(mc)),
+  out_mc_(std::move(out_mc))
+{
+  inputs_.reserve(inputs.size());
+  std::transform(
+      std::make_move_iterator(inputs.begin()),
+      std::make_move_iterator(inputs.end()),
+      std::back_inserter(inputs_),
+      [this](std::variant<scalar_objpipe, vector_objpipe>&& pipe) {
+        return std::visit(
+            overload(
+                [](scalar_objpipe&& pipe) -> input_type {
+                  return pull_cycle<scalar_objpipe>(std::move(pipe), create_sink_for<scalar_objpipe>());
+                },
+                [this](vector_objpipe&& pipe) -> input_type {
+                  return pull_cycle<vector_objpipe>(std::move(pipe), create_sink_for<vector_objpipe>(mc_));
+                }),
+            std::move(pipe));
+      });
+}
+
+auto vector_merger_pipe::wait()
+-> objpipe_errc {
+  if (pending_pop_) return objpipe_errc::success;
+
+  if (inputs_.empty()) return objpipe_errc::closed;
+  time_point_selector selector;
+  std::for_each(
+      inputs_.begin(),
+      inputs_.end(),
+      [&selector](auto& x) {
+        std::visit(
+            [&selector](auto& x) {
+              time_point_selector suggestion = x.suggest_emit_tp();
+              if (!suggestion.factual.has_value()) {
+                x.read_more(true);
+                suggestion = x.suggest_emit_tp();
+              }
+              selector = tps_min(selector, suggestion);
+            },
+            x);
+      });
+
+  return (selector.get().has_value()
+      ? objpipe_errc::success
+      : objpipe_errc::closed);
+}
+
+auto vector_merger_pipe::is_pullable() const
+noexcept
+-> bool {
+  return std::all_of(
+      inputs_.begin(), inputs_.end(),
+      [](const auto& x) {
+        return std::visit(
+            [](const auto& x) {
+              return x.is_pullable() || x.suggest_emit_tp().get().has_value();
+            },
+            x);
+      });
+}
+
+auto vector_merger_pipe::front()
+-> transport_type {
+  transport_type result = pull();
+  assert(result.has_value() || result.errc() != objpipe_errc::success);
+  pending_pop_ = true;
+  return result;
+}
+
+auto vector_merger_pipe::pop_front()
+-> objpipe_errc {
+  if (!pending_pop_) return pull().errc();
+
+  pending_pop_ = false;
+  return objpipe_errc::success;
+}
+
+auto vector_merger_pipe::pull(bool block)
+-> transport_type {
+  assert(!pending_pop_);
+
+  if (inputs_.empty())
+    return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+
+  for (;;) {
+    // Compute minimum time point.
+    // If all of the inputs fails to supply a time point,
+    // we're an empty objpipe.
+    time_point tp;
+    {
+      time_point_selector selector;
+      std::for_each(
+          inputs_.begin(), inputs_.end(),
+          [&selector, block](auto& x) {
+            time_point_selector input_selector = std::visit(
+                [block](auto& x) {
+                  time_point_selector input_selector = x.suggest_emit_tp();
+                  if (!input_selector.factual.has_value()) {
+                    x.read_more(block);
+                    input_selector = x.suggest_emit_tp();
+                  }
+                  return input_selector;
+                },
+                x);
+
+            selector = tps_min(selector, input_selector);
+          });
+      if (!selector.get().has_value()) {
+        if (block
+            || std::none_of(
+                inputs_.begin(),
+                inputs_.end(),
+                [](const auto& x) {
+                  return std::visit(
+                      [](const auto& x) {
+                        return x.is_pullable();
+                      },
+                      x);
+                }))
+          return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+        else
+          return transport_type(std::in_place_index<1>, objpipe_errc::success);
+      }
+
+      tp = *selector.get();
+    }
+
+    // Create argument set for function invocation.
+    // Also fill in result.is_fact, which is true iff all of the values are a fact.
+    args_vector args;
+    args.reserve(inputs_.size());
+    bool is_fact = true;
+    merger_apply_vector::map_type::size_type bucket_count = 1;
+    std::for_each(
+        inputs_.begin(),
+        inputs_.end(),
+        [&](auto& x) {
+            std::visit(
+                overload(
+                    [&is_fact, tp, &args, this](pull_cycle<scalar_objpipe>& x) {
+                      scalar s = x.get(tp, tp - slack_, tp + slack_);
+                      is_fact &= s.is_fact;
+                      if (s.value.has_value())
+                        args.push_back(std::move(*s.value));
+                    },
+                    [&bucket_count, &is_fact, tp, &args, this](pull_cycle<vector_objpipe>& x) {
+                      tagged_vector s = x.get(tp, tp - slack_, tp + slack_);
+                      is_fact &= s.is_fact;
+                      bucket_count = std::max(bucket_count, s.values.bucket_count());
+                      args.push_back(std::move(s.values));
+                    }),
+                x);
+        });
+
+    merger_apply_vector result(bucket_count, out_mc_, out_mc_, is_fact);
+
+    // Invoke computation.
+    // Note that if any of the metric values is absent,
+    // the computation is skipped and an absent value is placed
+    // instead.
+    // (We detect this using the observation that the argument set is
+    // shorter than the input set.)
+    if (args.size() == inputs_.size()) apply_(result.values, std::move(args));
+
+    if (result.is_fact) {
+      // Drop everything at/before tp.
+      std::for_each(
+          inputs_.begin(),
+          inputs_.end(),
+          [tp, this](auto& x) {
+            std::visit(
+                [&](auto& x) {
+                  x.forward_to_time(tp, tp - slack_);
+                },
+                x);
+          });
+    } else {
+      // Mark time point as emitted.
+      std::for_each(
+          inputs_.begin(),
+          inputs_.end(),
+          [tp](auto& x) {
+            std::visit(
+                [&](auto& x) {
+                  x.mark_emitted(tp);
+                },
+                x);
+          });
+    }
+
+    return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  }
+}
+
+auto vector_merger_pipe::try_pull()
+-> transport_type {
+  return pull(false);
+}
+
+auto vector_merger_pipe::apply_(
+    merger_apply_vector::map_type& result,
+    const std::optional<tags>& tag_set,
+    std::vector<metric_value>& fn_args,
+    std::vector<metric_value>::iterator out_iter,
+    const args_vector& args,
+    args_vector::iterator in_iter)
+-> void {
+  // Equal position assertion.
+  assert((out_iter == fn_args.end()) == (in_iter == args.end()));
+
+  // Sentinel operation.
+  if (out_iter == fn_args.end()) {
+    assert(tag_set.has_value());
+
+    // Add computed value to result set.
+    merger_apply_vector::map_type::iterator pos;
+    bool is_new_value;
+    std::tie(pos, is_new_value) = result.emplace(*tag_set, fn_(fn_args));
+
+    // Invalidate collisions by setting them to empty.
+    if (!is_new_value) pos->second = metric_value();
+    return;
+  }
+
+  // Recurse, with current values filled in.
+  std::visit(
+      overload(
+          [&](const metric_value& v) {
+            *out_iter = v;
+            ++out_iter;
+            ++in_iter;
+
+            apply_(
+                result,
+                tag_set,
+                fn_args,
+                std::move(out_iter),
+                args,
+                std::move(in_iter));
+          },
+          [&](const tagged_vector::map_type& m) {
+            if (tag_set.has_value()) {
+              auto elem_iter = m.find(*tag_set);
+              if (elem_iter == m.end()) return;
+              *out_iter = elem_iter->second;
+              ++out_iter;
+              ++in_iter;
+
+              apply_(
+                  result,
+                  mc_->reduce(*tag_set, elem_iter->first),
+                  fn_args,
+                  std::move(out_iter),
+                  args,
+                  std::move(in_iter));
+            } else {
+              std::for_each(
+                  m.begin(),
+                  m.end(),
+                  [&, in_iter, out_iter](const auto& pair) {
+                    tags next_tag_set = (tag_set.has_value()
+                        ? mc_->reduce(*tag_set, pair.first)
+                        : pair.first);
+                    *out_iter = pair.second;
+
+                    apply_(
+                        result,
+                        pair.first,
+                        fn_args,
+                        std::next(out_iter),
+                        args,
+                        std::next(in_iter));
+                  });
+            }
+          }),
+      *in_iter);
+}
+
+auto vector_merger_pipe::apply_(
+    merger_apply_vector::map_type& out,
+    args_vector&& args)
+-> void {
+  std::vector<metric_value> fn_args;
+  fn_args.resize(args.size());
+}
+
+
+auto wrap_fn_(metric_value(*fn)(const metric_value&, const metric_value&)) ->
+std::function<metric_value(const std::vector<metric_value>&)> {
+  return [fn](const std::vector<metric_value>& args) {
+    assert(args.size() == 2);
+    return std::invoke(fn, args[0], args[1]);
+  };
 }
 
 
@@ -1786,20 +2142,13 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
   args.push_back(std::move(x));
   args.push_back(std::move(y));
 
-  std::function<metric_value(const std::vector<metric_value>&)> wrap_fn =
-      [fn](const std::vector<metric_value>& args) {
-        assert(args.size() == 2);
-        return std::invoke(fn, args[0], args[1]);
-      };
-
   return objpipe::detail::adapter(
       scalar_merger_pipe(
           std::move(args),
           slack,
-          std::move(wrap_fn)));
+          wrap_fn_(fn)));
 }
 
-#if 0
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     std::shared_ptr<const match_clause> mc,
     std::shared_ptr<const match_clause> out_mc,
@@ -1807,12 +2156,12 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     expression::vector_objpipe&& x,
     expression::scalar_objpipe&& y)
 -> expression::vector_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::vector_objpipe,
-      expression::scalar_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(args), mc, out_mc, slack, wrap_fn_(fn)))
       .iterate();
 }
 
@@ -1823,12 +2172,12 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     expression::scalar_objpipe&& x,
     expression::vector_objpipe&& y)
 -> expression::vector_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::scalar_objpipe,
-      expression::vector_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(args), mc, out_mc, slack, wrap_fn_(fn)))
       .iterate();
 }
 
@@ -1839,15 +2188,14 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     expression::vector_objpipe&& x,
     expression::vector_objpipe&& y)
 -> expression::vector_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::vector_objpipe,
-      expression::vector_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(args), mc, out_mc, slack, wrap_fn_(fn)))
       .iterate();
 }
-#endif
 
 
 } /* namespace monsoon::expressions */
