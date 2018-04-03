@@ -259,7 +259,7 @@ std::string to_string(const expression&);
  * \param expr The expression to be written to the output stream.
  * \return The output stream.
  */
-monsoon_intf_export_
+monsoon_expr_export_
 auto operator<<(std::ostream& out, const expression& expr) -> std::ostream&;
 
 monsoon_expr_export_
