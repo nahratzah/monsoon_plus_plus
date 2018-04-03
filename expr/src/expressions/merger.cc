@@ -56,7 +56,7 @@ class time_point_selector {
 
 ///\brief Compute the minimum between two optional time points, ignoring empty optionals.
 ///\ingroup expr
-constexpr auto tps_min_(
+constexpr auto min_of_present_opts(
     const std::optional<time_point>& x,
     const std::optional<time_point>& y)
 noexcept
@@ -73,7 +73,7 @@ constexpr auto tps_min(const time_point_selector& x, const time_point_selector& 
 noexcept
 -> time_point_selector {
   return time_point_selector(
-      tps_min_(x.speculative, y.speculative),
+      min_of_present_opts(x.speculative, y.speculative),
       std::min(x.factual, y.factual));
 }
 
@@ -1049,7 +1049,12 @@ noexcept
       .iterate()
       .select_second()
       .transform(&scalar_sink::suggest_emit_tp)
-      .reduce(time_point_selector(), &tps_min);
+      .reduce(time_point_selector(),
+          [](const time_point_selector& x, const time_point_selector& y) {
+            return time_point_selector(
+                min_of_present_opts(x.speculative, y.speculative),
+                min_of_present_opts(x.factual, y.factual));
+          });
 }
 
 auto vector_sink::mark_emitted(time_point tp)
