@@ -677,16 +677,6 @@ class pull_cycle {
   auto invariant() const noexcept -> bool;
 
  private:
-  /**
-   * \brief Try to read facts up-to-and-including \p tp.
-   *
-   * \details Repeatedly invokes read_more(), until sink_.fact_end() exceeds tp.
-   * \note While this function is const, it mutates the underlying data.
-   *
-   * \param The time point we would like to have facts on.
-   */
-  auto try_forward_to_(time_point tp) const -> void;
-
   sink_type sink_;
   mutable Pipe source_;
   time_point_selector next_tp_;
@@ -1240,12 +1230,6 @@ auto pull_cycle<Pipe>::get(time_point tp, time_point min_interp_tp, time_point m
     .get(std::declval<time_point>(), std::declval<time_point>(), std::declval<time_point>(), std::declval<bool>())) {
   assert(invariant());
 
-  // Read up to and including max_interp_tp,
-  // to favour facts that are known correct
-  // (as opposed to using facts that may change
-  // due to interpolation and thus have to be labelled
-  // speculative).
-  try_forward_to_(max_interp_tp);
   return sink_.get(tp, min_interp_tp, max_interp_tp, !source_.is_pullable());
 }
 
@@ -1288,24 +1272,6 @@ auto pull_cycle<Pipe>::read_more(bool block)
 
   assert(invariant());
   return accepted_fact;
-}
-
-template<typename Pipe>
-auto pull_cycle<Pipe>::try_forward_to_(time_point tp) const
--> void {
-  assert(invariant());
-
-  bool failed_to_read = !source_.is_pullable();
-  while (!failed_to_read && sink_.fact_end() < tp) {
-    // We hide that we're actually changing data underneath,
-    // since this is the only function that requires it.
-    //
-    // It's semantically const, in that it does not affect the
-    // logical view of the data.
-    failed_to_read = !const_cast<pull_cycle&>(*this).read_more();
-  }
-
-  assert(invariant());
 }
 
 template<typename Pipe>
