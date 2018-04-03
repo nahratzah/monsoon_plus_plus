@@ -258,21 +258,6 @@ struct merger_apply_vector {
 };
 
 template<typename Fn>
-auto merger_apply(Fn&& fn, scalar x, scalar y,
-    [[maybe_unused]] const std::shared_ptr<const match_clause>& out_mc)
--> merger_apply_scalar {
-  if (x.value.has_value() && y.value.has_value()) {
-    return merger_apply_scalar(
-        std::invoke(std::forward<Fn>(fn), x.value.value(), y.value.value()),
-        x.is_fact && y.is_fact);
-  } else {
-    return merger_apply_scalar(
-        nullptr,
-        x.is_fact && y.is_fact);
-  }
-}
-
-template<typename Fn>
 auto merger_apply(Fn&& fn, scalar x, tagged_vector y,
     const std::shared_ptr<const match_clause>& out_mc)
 -> merger_apply_vector {
@@ -1164,8 +1149,6 @@ noexcept
       [tp](auto& data_elem) {
         data_elem.second.mark_emitted(tp);
       });
-  if (last_known_fact_tp_ == tp)
-    last_known_fact_emitted_ = true;
 
   assert(invariant());
 }
@@ -1236,6 +1219,9 @@ auto vector_sink::forward_to_time(time_point tp, time_point expire_before)
     else
       ++elem;
   }
+
+  if (last_known_fact_tp_ == tp)
+    last_known_fact_emitted_ = true;
 
   assert(invariant());
 }
