@@ -683,12 +683,17 @@ class pull_cycle {
 };
 
 
-template<typename Pipe>
-class push_cycle {
+template<typename Pipe, typename MergerImpl>
+class push_cycle
+: public pull_cycle<Pipe>::sink_type
+{
  public:
   using sink_type = typename pull_cycle<Pipe>::sink_type;
 
   class acceptor {
+   private:
+    using objpipe_errc = objpipe::objpipe_errc;
+
    public:
     acceptor(acceptor&&) noexcept = default;
 
@@ -697,13 +702,16 @@ class push_cycle {
     {}
 
     template<typename T>
-    auto operator()(T&& v)
-    -> objpipe_errc {
+    auto operator()(T&& next)
+    -> std::enable_if_t<
+        std::is_same_v<typename Pipe::value_type, std::remove_cv_t<std::remove_reference_t<T>>>,
+        objpipe_errc> {
       const bool is_fact = (next->data.index() == 1);
       const time_point tp = next->tp;
 
-      std::lock_guard<std::mutex> lck{ ptr_->mtx(); }
-      const bool accepted = ptr_->sink_.accept(std::forward<T>(v));
+      std::lock_guard<std::mutex> lck{ ptr_->mtx_() };
+      if (ptr_->is_closed_(lck)) return objpipe_errc::closed;
+      const bool accepted = ptr_->sink_.accept(std::forward<T>(next));
 
       if (accepted) {
         auto& next_tp_ = ptr_->next_tp_;
@@ -716,7 +724,7 @@ class push_cycle {
           next_tp_.speculative = tp;
           next_tp_changed = true;
         }
-        if (next_tp_changed) return ptr_->maybe_emit();
+        if (next_tp_changed) ptr_->maybe_emit_();
       }
 
       return objpipe_errc::success;
@@ -725,19 +733,73 @@ class push_cycle {
     auto push_exception(std::exception_ptr exptr)
     noexcept
     -> void {
-      ptr_->push_exception(std::move(exptr));
+      ptr_->push_exception_(std::move(exptr));
     }
 
    private:
     std::shared_ptr<push_cycle> ptr_;
   };
 
+  push_cycle(sink_type&& sink, MergerImpl& merger_impl)
+  noexcept(std::is_nothrow_move_constructible_v<sink_type>)
+  : sink_(sink),
+    merger_impl_(merger_impl)
+  {}
+
+  push_cycle(const push_cycle&) = delete;
+  push_cycle(push_cycle&&) = delete;
+  push_cycle& operator=(const push_cycle&) = delete;
+  push_cycle& operator=(push_cycle&&) = delete;
+
+  auto suggest_emit_tp() const noexcept -> time_point_selector {
+    assert(next_tp_ == this->sink_type::suggest_emit_tp());
+    return next_tp_;
+  }
+
+  auto start(
+      std::shared_ptr<void> owner,
+      Pipe&& pipe,
+      objpipe::existingthread_push policy)
+  -> void {
+    std::move(pipe)
+        .ioc_push(policy, acceptor(std::shared_ptr<push_cycle>(owner, this)));
+  }
+
+  auto start(
+      std::shared_ptr<void> owner,
+      Pipe&& pipe,
+      objpipe::singlethread_push policy)
+  -> void {
+    std::move(pipe)
+        .ioc_push(policy, acceptor(std::shared_ptr<push_cycle>(owner, this)));
+  }
+
  private:
-  auto mtx() const noexcept -> std::mutex;
-  auto push_exception(std::exception_ptr exptr) noexcept -> void;
+  auto mtx_() const
+  noexcept
+  -> std::mutex& {
+    return merger_impl_.mtx;
+  }
+
+  auto push_exception_(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    merger_impl_.push_exception(std::move(exptr));
+  }
+
+  auto maybe_emit_(const std::unique_lock<std::mutex>& lck)
+  -> void {
+    return merger_impl_.maybe_emit(lck);
+  }
+
+  auto is_closed_(const std::unique_lock<std::mutex>& lck)
+  -> bool {
+    return merger_impl_.is_closed(lck);
+  }
 
   sink_type sink_;
   time_point_selector next_tp_;
+  MergerImpl& merger_impl_;
 };
 
 
