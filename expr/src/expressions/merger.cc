@@ -683,6 +683,64 @@ class pull_cycle {
 };
 
 
+template<typename Pipe>
+class push_cycle {
+ public:
+  using sink_type = typename pull_cycle<Pipe>::sink_type;
+
+  class acceptor {
+   public:
+    acceptor(acceptor&&) noexcept = default;
+
+    acceptor(std::shared_ptr<push_cycle> ptr)
+    : ptr_(std::move(ptr))
+    {}
+
+    template<typename T>
+    auto operator()(T&& v)
+    -> objpipe_errc {
+      const bool is_fact = (next->data.index() == 1);
+      const time_point tp = next->tp;
+
+      std::lock_guard<std::mutex> lck{ ptr_->mtx(); }
+      const bool accepted = ptr_->sink_.accept(std::forward<T>(v));
+
+      if (accepted) {
+        auto& next_tp_ = ptr_->next_tp_;
+        bool next_tp_changed = false;
+        if (is_fact && !next_tp_.factual.has_value()) {
+          next_tp_.factual = tp;
+          next_tp_changed = true;
+        }
+        if (!next_tp_.speculative.has_value() || *next_tp_.speculative > tp) {
+          next_tp_.speculative = tp;
+          next_tp_changed = true;
+        }
+        if (next_tp_changed) return ptr_->maybe_emit();
+      }
+
+      return objpipe_errc::success;
+    }
+
+    auto push_exception(std::exception_ptr exptr)
+    noexcept
+    -> void {
+      ptr_->push_exception(std::move(exptr));
+    }
+
+   private:
+    std::shared_ptr<push_cycle> ptr_;
+  };
+
+ private:
+  auto mtx() const noexcept -> std::mutex;
+  auto push_exception(std::exception_ptr exptr) noexcept -> void;
+
+  sink_type sink_;
+  time_point_selector next_tp_;
+};
+
+
 class scalar_merger_pipe {
  private:
   using scalar_objpipe = expression::scalar_objpipe;
