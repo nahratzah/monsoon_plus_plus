@@ -668,6 +668,25 @@ class pull_cycle {
     return source_.is_pullable();
   }
 
+  template<bool Enable = objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<Pipe>, objpipe::existingthread_push>>
+  auto can_push(const objpipe::existingthread_push& policy) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    return source_.underlying().can_push(policy);
+  }
+
+  template<typename Acceptor, bool Enable = objpipe::detail::adapt::has_ioc_push<Pipe, objpipe::existingthread_push>>
+  auto ioc_push(const objpipe::existingthread_push& policy, Acceptor&& acceptor)
+  -> void {
+    source_.underlying().ioc_push(policy, std::forward<Acceptor>(acceptor));
+  }
+
+  auto release_source() &&
+  noexcept
+  -> Pipe&& {
+    return std::move(source_);
+  }
+
   /**
    * \brief Invariant.
    *
@@ -701,15 +720,19 @@ class push_cycle
     : ptr_(std::move(ptr))
     {}
 
+    ~acceptor() noexcept {
+      if (ptr_ != nullptr) ptr_->close_();
+    }
+
     template<typename T>
     auto operator()(T&& next)
     -> std::enable_if_t<
         std::is_same_v<typename Pipe::value_type, std::remove_cv_t<std::remove_reference_t<T>>>,
         objpipe_errc> {
-      const bool is_fact = (next->data.index() == 1);
-      const time_point tp = next->tp;
+      const bool is_fact = (next.data.index() == 1);
+      const time_point tp = next.tp;
 
-      std::lock_guard<std::mutex> lck{ ptr_->mtx_() };
+      const std::unique_lock<std::mutex> lck{ ptr_->mtx_() };
       if (ptr_->is_closed_(lck)) return objpipe_errc::closed;
       const bool accepted = ptr_->sink_.accept(std::forward<T>(next));
 
@@ -724,7 +747,7 @@ class push_cycle
           next_tp_.speculative = tp;
           next_tp_changed = true;
         }
-        if (next_tp_changed) ptr_->maybe_emit_();
+        if (next_tp_changed) ptr_->maybe_emit_(lck);
       }
 
       return objpipe_errc::success;
@@ -742,14 +765,11 @@ class push_cycle
 
   push_cycle(sink_type&& sink, MergerImpl& merger_impl)
   noexcept(std::is_nothrow_move_constructible_v<sink_type>)
-  : sink_(sink),
+  : sink_(std::move(sink)),
     merger_impl_(merger_impl)
   {}
 
-  push_cycle(const push_cycle&) = delete;
-  push_cycle(push_cycle&&) = delete;
-  push_cycle& operator=(const push_cycle&) = delete;
-  push_cycle& operator=(push_cycle&&) = delete;
+  push_cycle(push_cycle&&) = default;
 
   auto suggest_emit_tp() const noexcept -> time_point_selector {
     assert(next_tp_ == this->sink_type::suggest_emit_tp());
@@ -759,19 +779,15 @@ class push_cycle
   auto start(
       std::shared_ptr<void> owner,
       Pipe&& pipe,
-      objpipe::existingthread_push policy)
+      const objpipe::existingthread_push& policy)
   -> void {
     std::move(pipe)
+        .underlying()
         .ioc_push(policy, acceptor(std::shared_ptr<push_cycle>(owner, this)));
   }
 
-  auto start(
-      std::shared_ptr<void> owner,
-      Pipe&& pipe,
-      objpipe::singlethread_push policy)
-  -> void {
-    std::move(pipe)
-        .ioc_push(policy, acceptor(std::shared_ptr<push_cycle>(owner, this)));
+  auto get(time_point tp, time_point min_interp_tp, time_point max_interp_tp) const {
+    return this->sink_type::get(tp, min_interp_tp, max_interp_tp, acceptor_closed_);
   }
 
  private:
@@ -779,6 +795,19 @@ class push_cycle
   noexcept
   -> std::mutex& {
     return merger_impl_.mtx;
+  }
+
+  auto close_()
+  noexcept
+  -> void {
+    try {
+      std::unique_lock<std::mutex> lck{ mtx_() };
+      assert(!acceptor_closed_);
+      acceptor_closed_ = true;
+      maybe_emit_(lck);
+    } catch (...) {
+      push_exception_(std::current_exception());
+    }
   }
 
   auto push_exception_(std::exception_ptr exptr)
@@ -789,7 +818,7 @@ class push_cycle
 
   auto maybe_emit_(const std::unique_lock<std::mutex>& lck)
   -> void {
-    return merger_impl_.maybe_emit(lck);
+    merger_impl_.maybe_emit(lck);
   }
 
   auto is_closed_(const std::unique_lock<std::mutex>& lck)
@@ -800,6 +829,145 @@ class push_cycle
   sink_type sink_;
   time_point_selector next_tp_;
   MergerImpl& merger_impl_;
+  bool acceptor_closed_ = false;
+};
+
+
+template<typename Acceptor>
+class scalar_merger_push
+: public std::enable_shared_from_this<scalar_merger_push<Acceptor>>
+{
+ private:
+  using scalar_objpipe = expression::scalar_objpipe;
+
+ public:
+  using fn_type = std::function<metric_value(const std::vector<metric_value>&)>;
+
+  scalar_merger_push(
+      Acceptor&& acceptor,
+      time_point::duration slack,
+      fn_type fn)
+  : fn_(std::move(fn)),
+    slack_(slack),
+    acceptor_(std::move(acceptor))
+  {}
+
+  scalar_merger_push(scalar_merger_push&&) = delete;
+
+  auto start(std::vector<scalar_objpipe>&& inputs, const objpipe::existingthread_push& policy)
+  -> void {
+    // First, create all the sinks.
+    inputs_.reserve(inputs.size());
+    std::generate_n(
+        std::back_inserter(inputs_), inputs.size(),
+        [this]() -> push_cycle<scalar_objpipe, scalar_merger_push> {
+          using sink_type = typename push_cycle<scalar_objpipe, scalar_merger_push>::sink_type;
+          return push_cycle<scalar_objpipe, scalar_merger_push>(sink_type(), *this);
+        });
+
+    // Next, start each sink.
+    // We do this in a separate step, to easier guarantee that
+    // the inputs_ vector won't reallocate.
+    // (That may not happen, as it would invalidate pointers.)
+    auto task_iter = inputs_.begin();
+    for (scalar_objpipe& pipe : inputs) {
+      assert(task_iter != inputs_.end());
+      task_iter->start(this->shared_from_this(), std::move(pipe), policy);
+
+      ++task_iter;
+    }
+    assert(task_iter == inputs_.end());
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    std::lock_guard<std::mutex> lck{ mtx };
+    closed_ = true;
+    acceptor_.push_exception(std::move(exptr));
+  }
+
+  auto is_closed([[maybe_unused]] const std::unique_lock<std::mutex>& lck) const
+  noexcept
+  -> bool {
+    assert(lck.owns_lock() && lck.mutex() == &mtx);
+    return closed_;
+  }
+
+  auto maybe_emit([[maybe_unused]] const std::unique_lock<std::mutex>& lck)
+  -> void {
+    for (;;) {
+      // Compute minimum time point.
+      // If all of the inputs fail to supply a time point,
+      // we're in need of more data.
+      time_point tp;
+      {
+        time_point_selector selector;
+        std::for_each(
+            inputs_.begin(), inputs_.end(),
+            [&selector](push_cycle<scalar_objpipe, scalar_merger_push>& x) {
+              selector = tps_min(selector, x.suggest_emit_tp());
+            });
+        if (!selector.get().has_value())
+          return;
+
+        tp = *selector.get();
+      }
+
+      merger_apply_scalar result(nullptr, true);
+
+      // Create argument set for function invocation.
+      // Also fill in result.is_fact, which is true iff all of the values are a fact.
+      std::vector<metric_value> args;
+      args.reserve(inputs_.size());
+      std::for_each(
+          inputs_.begin(),
+          inputs_.end(),
+          [&result, tp, &args, this](push_cycle<scalar_objpipe, scalar_merger_push>& x) {
+            scalar s = x.get(tp, tp - slack_, tp + slack_);
+            result.is_fact &= s.is_fact;
+            if (s.value.has_value())
+              args.push_back(std::move(*s.value));
+          });
+
+      // Invoke computation.
+      // Note that if any of the metric values is absent,
+      // the computation is skipped and an absent value is placed
+      // instead.
+      // (We detect this using the observation that the argument set is
+      // shorter than the input set.)
+      if (args.size() == inputs_.size()) result.value = fn_(args);
+
+      if (result.is_fact) {
+        // Drop everything at/before tp.
+        std::for_each(
+            inputs_.begin(),
+            inputs_.end(),
+            [tp, this](push_cycle<scalar_objpipe, scalar_merger_push>& x) {
+              x.forward_to_time(tp, tp - slack_);
+            });
+      } else {
+        // Mark time point as emitted.
+        std::for_each(
+            inputs_.begin(),
+            inputs_.end(),
+            [tp](push_cycle<scalar_objpipe, scalar_merger_push>& x) {
+              x.mark_emitted(tp);
+            });
+      }
+
+      acceptor_(std::move(result).as_emit(tp));
+    }
+  }
+
+  std::mutex mtx;
+
+ private:
+  std::vector<push_cycle<scalar_objpipe, scalar_merger_push>> inputs_;
+  fn_type fn_;
+  time_point::duration slack_;
+  Acceptor acceptor_;
+  bool closed_;
 };
 
 
@@ -826,6 +994,32 @@ class scalar_merger_pipe {
   auto pop_front() -> objpipe_errc;
   auto pull(bool block = true) -> transport_type;
   auto try_pull() -> transport_type;
+
+  template<bool Enable = objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<scalar_objpipe>, objpipe::existingthread_push>>
+  auto can_push(const objpipe::existingthread_push& policy) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    return std::all_of(
+        inputs_.begin(), inputs_.end(),
+        [&policy](const auto& x) { return x.can_push(policy); });
+  }
+
+  template<typename Acceptor, bool Enable = objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<scalar_objpipe>, objpipe::existingthread_push>>
+  auto ioc_push(const objpipe::existingthread_push& policy, Acceptor&& acceptor) &&
+  -> std::enable_if_t<Enable> {
+    std::vector<scalar_objpipe> inputs;
+    inputs.reserve(inputs_.size());
+    std::transform(
+        std::make_move_iterator(inputs_.begin()),
+        std::make_move_iterator(inputs_.end()),
+        std::back_inserter(inputs),
+        [](pull_cycle<scalar_objpipe>&& x) {
+          return std::move(x).release_source();
+        });
+
+    auto push = std::make_shared<scalar_merger_push<std::decay_t<Acceptor>>>(std::forward<Acceptor>(acceptor), std::move(slack_), std::move(fn_));
+    push->start(std::move(inputs), policy);
+  }
 
  private:
   std::vector<pull_cycle<scalar_objpipe>> inputs_;
