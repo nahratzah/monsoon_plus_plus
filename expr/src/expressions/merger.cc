@@ -944,6 +944,171 @@ auto compute_scalar_emit(
   return std::move(result).as_emit(tp);
 }
 
+auto compute_vector_emit_apply_(
+    const std::function<metric_value(const std::vector<metric_value>&)>& fn,
+    const match_clause& mc,
+    merger_apply_vector::map_type& out,
+    const std::vector<std::variant<metric_value, tagged_vector::map_type>>& args)
+-> void {
+  struct compute_vector_emit_apply_ctx_ {
+    const std::function<metric_value(const std::vector<metric_value>&)>& fn;
+    const match_clause& mc;
+    merger_apply_vector::map_type& result;
+    const std::vector<std::variant<metric_value, tagged_vector::map_type>>& args;
+    std::vector<metric_value> fn_args;
+
+    auto operator()(
+        const std::optional<tags>& tag_set,
+        std::vector<metric_value>::iterator out_iter,
+        std::vector<std::variant<metric_value, tagged_vector::map_type>>::const_iterator in_iter)
+    -> void {
+      // Equal position assertion.
+      assert((out_iter == fn_args.end()) == (in_iter == args.end()));
+
+      // Sentinel operation.
+      if (out_iter == fn_args.end()) {
+        assert(tag_set.has_value());
+
+        // Add computed value to result set.
+        merger_apply_vector::map_type::iterator pos;
+        bool is_new_value;
+        std::tie(pos, is_new_value) = result.emplace(*tag_set, fn(fn_args));
+
+        // Invalidate collisions by setting them to empty.
+        if (!is_new_value) pos->second = metric_value();
+        return;
+      }
+
+      // Recurse, with current values filled in.
+      std::visit(
+          overload(
+              [&](const metric_value& v) {
+                *out_iter = v;
+                ++out_iter;
+                ++in_iter;
+
+                (*this)(
+                    tag_set,
+                    std::move(out_iter),
+                    std::move(in_iter));
+              },
+              [&](const tagged_vector::map_type& m) {
+                if (tag_set.has_value()) {
+                  auto elem_iter = m.find(*tag_set);
+                  if (elem_iter == m.end()) return;
+                  *out_iter = elem_iter->second;
+                  ++out_iter;
+                  ++in_iter;
+
+                  (*this)(
+                      mc.reduce(*tag_set, elem_iter->first),
+                      std::move(out_iter),
+                      std::move(in_iter));
+                } else {
+                  std::for_each(
+                      m.begin(),
+                      m.end(),
+                      [&, in_iter, out_iter](const auto& pair) {
+                        *out_iter = pair.second;
+
+                        (*this)(
+                            pair.first,
+                            std::next(out_iter),
+                            std::next(in_iter));
+                      });
+                }
+              }),
+          *in_iter);
+    }
+  };
+
+  compute_vector_emit_apply_ctx_ ctx{ fn, mc, out, args, std::vector<metric_value>() };
+  ctx.fn_args.resize(args.size());
+
+  ctx({}, ctx.fn_args.begin(), ctx.args.begin());
+}
+
+template<typename InputCollection>
+auto compute_vector_emit(
+    time_point tp,
+    InputCollection& pipes,
+    const std::function<metric_value(const std::vector<metric_value>&)>& fn,
+    const match_clause& mc,
+    time_point::duration slack,
+    const std::shared_ptr<const match_clause>& out_mc) {
+  using args_vector = std::vector<std::variant<metric_value, tagged_vector::map_type>>;
+
+  // Create argument set for function invocation.
+  // Also fill in result.is_fact, which is true iff all of the values are a fact.
+  args_vector args;
+  args.reserve(pipes.size());
+  bool is_fact = true;
+  merger_apply_vector::map_type::size_type bucket_count = 1;
+  std::for_each(
+      pipes.begin(),
+      pipes.end(),
+      [&](auto& x) {
+          std::variant<scalar, tagged_vector> scalar_or_vector = std::visit(
+              [tp, slack](auto& x) -> std::variant<scalar, tagged_vector> {
+                return x.get(tp, tp - slack, tp + slack);
+              },
+              x);
+
+          std::visit(
+              overload(
+                  [&is_fact, tp, &args, slack](scalar&& s) {
+                    is_fact &= s.is_fact;
+                    if (s.value.has_value())
+                      args.push_back(std::move(*s.value));
+                  },
+                  [&bucket_count, &is_fact, tp, &args, slack](tagged_vector&& v) {
+                    is_fact &= v.is_fact;
+                    bucket_count = std::max(bucket_count, v.values.bucket_count());
+                    args.push_back(std::move(v.values));
+                  }),
+              std::move(scalar_or_vector));
+      });
+
+  merger_apply_vector result(bucket_count, out_mc, out_mc, is_fact);
+
+  // Invoke computation.
+  // Note that if any of the metric values is absent,
+  // the computation is skipped and an absent value is placed
+  // instead.
+  // (We detect this using the observation that the argument set is
+  // shorter than the input set.)
+  if (args.size() == pipes.size())
+    compute_vector_emit_apply_(fn, mc, result.values, args);
+
+  if (result.is_fact) {
+    // Drop everything at/before tp.
+    std::for_each(
+        pipes.begin(),
+        pipes.end(),
+        [tp, slack](auto& x) {
+          std::visit(
+              [&](auto& x) {
+                x.forward_to_time(tp, tp - slack);
+              },
+              x);
+        });
+  } else {
+    // Mark time point as emitted.
+    std::for_each(
+        pipes.begin(),
+        pipes.end(),
+        [tp](auto& x) {
+          std::visit(
+              [&](auto& x) {
+                x.mark_emitted(tp);
+              },
+              x);
+        });
+  }
+
+  return std::move(result).as_emit(tp);
+}
+
 
 template<typename Acceptor>
 class scalar_merger_push
@@ -1887,211 +2052,38 @@ auto vector_merger_pipe::pull(bool block)
 -> transport_type {
   assert(!pending_pop_);
 
-  if (inputs_.empty())
-    return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+  // Compute minimum time point.
+  // If all of the inputs fails to supply a time point,
+  // we're an empty objpipe.
+  time_point tp;
+  {
+    bool has_suggestion;
+    std::tie(tp, has_suggestion) = suggest_emit_tp(inputs_, block);
 
-  for (;;) {
-    // Compute minimum time point.
-    // If all of the inputs fails to supply a time point,
-    // we're an empty objpipe.
-    time_point tp;
-    {
-      time_point_selector selector;
-      std::for_each(
-          inputs_.begin(), inputs_.end(),
-          [&selector, block](auto& x) {
-            time_point_selector input_selector = std::visit(
-                [block](auto& x) {
-                  time_point_selector input_selector = x.suggest_emit_tp();
-                  if (!input_selector.factual.has_value()) {
-                    x.read_more(block);
-                    input_selector = x.suggest_emit_tp();
-                  }
-                  return input_selector;
-                },
-                x);
-
-            selector = tps_min(selector, input_selector);
-          });
-      if (!selector.get().has_value()) {
-        if (block
-            || std::none_of(
-                inputs_.begin(),
-                inputs_.end(),
-                [](const auto& x) {
-                  return std::visit(
-                      [](const auto& x) {
-                        return x.is_pullable();
-                      },
-                      x);
-                }))
-          return transport_type(std::in_place_index<1>, objpipe_errc::closed);
-        else
-          return transport_type(std::in_place_index<1>, objpipe_errc::success);
-      }
-
-      tp = *selector.get();
-    }
-
-    // Create argument set for function invocation.
-    // Also fill in result.is_fact, which is true iff all of the values are a fact.
-    args_vector args;
-    args.reserve(inputs_.size());
-    bool is_fact = true;
-    merger_apply_vector::map_type::size_type bucket_count = 1;
-    std::for_each(
-        inputs_.begin(),
-        inputs_.end(),
-        [&](auto& x) {
-            std::visit(
-                overload(
-                    [&is_fact, tp, &args, this](pull_cycle<scalar_objpipe>& x) {
-                      scalar s = x.get(tp, tp - slack_, tp + slack_);
-                      is_fact &= s.is_fact;
-                      if (s.value.has_value())
-                        args.push_back(std::move(*s.value));
+    if (!has_suggestion) {
+      if (block
+          || std::none_of(
+              inputs_.begin(),
+              inputs_.end(),
+              [](const auto& x) {
+                return std::visit(
+                    [](const auto& x) {
+                      return x.is_pullable();
                     },
-                    [&bucket_count, &is_fact, tp, &args, this](pull_cycle<vector_objpipe>& x) {
-                      tagged_vector s = x.get(tp, tp - slack_, tp + slack_);
-                      is_fact &= s.is_fact;
-                      bucket_count = std::max(bucket_count, s.values.bucket_count());
-                      args.push_back(std::move(s.values));
-                    }),
-                x);
-        });
-
-    merger_apply_vector result(bucket_count, out_mc_, out_mc_, is_fact);
-
-    // Invoke computation.
-    // Note that if any of the metric values is absent,
-    // the computation is skipped and an absent value is placed
-    // instead.
-    // (We detect this using the observation that the argument set is
-    // shorter than the input set.)
-    if (args.size() == inputs_.size()) apply_(result.values, std::move(args));
-
-    if (result.is_fact) {
-      // Drop everything at/before tp.
-      std::for_each(
-          inputs_.begin(),
-          inputs_.end(),
-          [tp, this](auto& x) {
-            std::visit(
-                [&](auto& x) {
-                  x.forward_to_time(tp, tp - slack_);
-                },
-                x);
-          });
-    } else {
-      // Mark time point as emitted.
-      std::for_each(
-          inputs_.begin(),
-          inputs_.end(),
-          [tp](auto& x) {
-            std::visit(
-                [&](auto& x) {
-                  x.mark_emitted(tp);
-                },
-                x);
-          });
+                    x);
+              }))
+        return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+      else
+        return transport_type(std::in_place_index<1>, objpipe_errc::success);
     }
-
-    return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
   }
+
+  return transport_type(std::in_place_index<0>, compute_vector_emit(tp, inputs_, fn_, *mc_, slack_, out_mc_));
 }
 
 auto vector_merger_pipe::try_pull()
 -> transport_type {
   return pull(false);
-}
-
-auto vector_merger_pipe::apply_(
-    merger_apply_vector::map_type& result,
-    const std::optional<tags>& tag_set,
-    std::vector<metric_value>& fn_args,
-    std::vector<metric_value>::iterator out_iter,
-    [[maybe_unused]] const args_vector& args,
-    args_vector::const_iterator in_iter)
--> void {
-  // Equal position assertion.
-  assert((out_iter == fn_args.end()) == (in_iter == args.end()));
-
-  // Sentinel operation.
-  if (out_iter == fn_args.end()) {
-    assert(tag_set.has_value());
-
-    // Add computed value to result set.
-    merger_apply_vector::map_type::iterator pos;
-    bool is_new_value;
-    std::tie(pos, is_new_value) = result.emplace(*tag_set, fn_(fn_args));
-
-    // Invalidate collisions by setting them to empty.
-    if (!is_new_value) pos->second = metric_value();
-    return;
-  }
-
-  // Recurse, with current values filled in.
-  std::visit(
-      overload(
-          [&](const metric_value& v) {
-            *out_iter = v;
-            ++out_iter;
-            ++in_iter;
-
-            apply_(
-                result,
-                tag_set,
-                fn_args,
-                std::move(out_iter),
-                args,
-                std::move(in_iter));
-          },
-          [&](const tagged_vector::map_type& m) {
-            if (tag_set.has_value()) {
-              auto elem_iter = m.find(*tag_set);
-              if (elem_iter == m.end()) return;
-              *out_iter = elem_iter->second;
-              ++out_iter;
-              ++in_iter;
-
-              apply_(
-                  result,
-                  mc_->reduce(*tag_set, elem_iter->first),
-                  fn_args,
-                  std::move(out_iter),
-                  args,
-                  std::move(in_iter));
-            } else {
-              std::for_each(
-                  m.begin(),
-                  m.end(),
-                  [&, in_iter, out_iter](const auto& pair) {
-                    tags next_tag_set = (tag_set.has_value()
-                        ? mc_->reduce(*tag_set, pair.first)
-                        : pair.first);
-                    *out_iter = pair.second;
-
-                    apply_(
-                        result,
-                        pair.first,
-                        fn_args,
-                        std::next(out_iter),
-                        args,
-                        std::next(in_iter));
-                  });
-            }
-          }),
-      *in_iter);
-}
-
-auto vector_merger_pipe::apply_(
-    merger_apply_vector::map_type& out,
-    args_vector&& args)
--> void {
-  std::vector<metric_value> fn_args;
-  fn_args.resize(args.size());
-
-  apply_(out, {}, fn_args, fn_args.begin(), args, args.begin());
 }
 
 
