@@ -1271,6 +1271,143 @@ class scalar_merger_pipe {
 };
 
 
+template<typename Acceptor>
+class vector_merger_push
+: public std::enable_shared_from_this<vector_merger_push<Acceptor>>
+{
+ private:
+  using scalar_objpipe = expression::scalar_objpipe;
+  using vector_objpipe = expression::vector_objpipe;
+
+ public:
+  using fn_type = std::function<metric_value(const std::vector<metric_value>&)>;
+
+  vector_merger_push(
+      Acceptor&& acceptor,
+      time_point::duration slack,
+      fn_type fn,
+      std::shared_ptr<const match_clause> mc,
+      std::shared_ptr<const match_clause> out_mc)
+  : fn_(std::move(fn)),
+    slack_(slack),
+    acceptor_(std::move(acceptor)),
+    mc_(std::move(mc)),
+    out_mc_(std::move(out_mc))
+  {}
+
+  vector_merger_push(vector_merger_push&&) = delete;
+
+  ~vector_merger_push() noexcept {
+    try {
+      std::unique_lock<std::mutex> lck{ mtx };
+      maybe_emit(lck, true);
+    } catch (...) {
+      acceptor_.push_exception(std::current_exception());
+    }
+  }
+
+  auto start(std::vector<std::variant<scalar_objpipe, vector_objpipe>>&& inputs, const objpipe::existingthread_push& policy)
+  -> void {
+    using this_inputs_variant = std::variant<
+        push_cycle<scalar_objpipe, vector_merger_push>,
+        push_cycle<vector_objpipe, vector_merger_push>>;
+    using scalar_sink_type = typename push_cycle<scalar_objpipe, vector_merger_push>::sink_type;
+    using vector_sink_type = typename push_cycle<vector_objpipe, vector_merger_push>::sink_type;
+
+    // First, create all the sinks.
+    // Sink type must match the pipe type.
+    inputs_.reserve(inputs.size());
+    std::transform(
+        inputs.cbegin(),
+        inputs.cend(),
+        std::back_inserter(inputs_),
+        [this](const auto& x) -> this_inputs_variant {
+          return std::visit(
+              overload(
+                  [this]([[maybe_unused]] const scalar_objpipe& pipe) -> this_inputs_variant {
+                    return push_cycle<scalar_objpipe, vector_merger_push>(scalar_sink_type(), *this);
+                  },
+                  [this]([[maybe_unused]] const vector_objpipe& pipe) -> this_inputs_variant {
+                    return push_cycle<vector_objpipe, vector_merger_push>(vector_sink_type(mc_), *this);
+                  }),
+              x);
+        });
+
+    // Next, start each sink.
+    // We do this in a separate step, to easier guarantee that
+    // the inputs_ vector won't reallocate.
+    // (That may not happen, as it would invalidate pointers.)
+    auto task_iter = inputs_.begin();
+    for (std::variant<scalar_objpipe, vector_objpipe>& pipe : inputs) {
+      assert(task_iter != inputs_.end());
+      std::visit(
+          overload(
+              [this, &policy](push_cycle<scalar_objpipe, vector_merger_push>& task, scalar_objpipe&& pipe) {
+                task.start(this->shared_from_this(), std::move(pipe), policy);
+              },
+              [this, &policy](push_cycle<vector_objpipe, vector_merger_push>& task, vector_objpipe&& pipe) {
+                task.start(this->shared_from_this(), std::move(pipe), policy);
+              },
+              [](const auto& task, const auto& pipe) {
+                assert(false); // Sink type and pipe type must match.
+              }),
+          *task_iter, std::move(pipe));
+
+      ++task_iter;
+    }
+    assert(task_iter == inputs_.end());
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    std::lock_guard<std::mutex> lck{ mtx };
+    closed_ = true;
+    acceptor_.push_exception(std::move(exptr));
+  }
+
+  auto is_closed([[maybe_unused]] const std::unique_lock<std::mutex>& lck) const
+  noexcept
+  -> bool {
+    assert(lck.owns_lock() && lck.mutex() == &mtx);
+    return closed_;
+  }
+
+  auto maybe_emit([[maybe_unused]] const std::unique_lock<std::mutex>& lck, bool closed = false)
+  -> void {
+    assert(lck.owns_lock() && lck.mutex() == &mtx);
+
+    while (!this->closed_) {
+      // Compute minimum time point.
+      // If all of the inputs fail to supply a time point,
+      // we're in need of more data.
+      time_point tp;
+      {
+        bool has_suggestion;
+        std::tie(tp, has_suggestion) = suggest_emit_tp(inputs_, true);
+
+        if (!has_suggestion)
+          return;
+      }
+
+      objpipe::objpipe_errc e = acceptor_(compute_vector_emit(tp, inputs_, fn_, *mc_, slack_, out_mc_));
+      if (e != objpipe::objpipe_errc::success) closed_ = true;
+    }
+  }
+
+  std::mutex mtx;
+
+ private:
+  std::vector<std::variant<push_cycle<scalar_objpipe, vector_merger_push>, push_cycle<vector_objpipe, vector_merger_push>>> inputs_;
+  fn_type fn_;
+  time_point::duration slack_;
+  Acceptor acceptor_;
+  bool closed_;
+  const std::shared_ptr<const match_clause> mc_;
+  const std::shared_ptr<const match_clause> out_mc_;
+};
+
+
 class vector_merger_pipe {
  private:
   using scalar_objpipe = expression::scalar_objpipe;
@@ -1301,6 +1438,42 @@ class vector_merger_pipe {
   auto pop_front() -> objpipe_errc;
   auto pull(bool block = true) -> transport_type;
   auto try_pull() -> transport_type;
+
+  template<bool Enable = objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<scalar_objpipe>, objpipe::existingthread_push>
+                                         && objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<vector_objpipe>, objpipe::existingthread_push>>
+  auto can_push(const objpipe::existingthread_push& policy) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    return std::all_of(
+        inputs_.begin(), inputs_.end(),
+        [&policy](const auto& x) {
+          return std::visit(
+              [&policy](const auto& x) { return x.can_push(policy); },
+              x);
+        });
+  }
+
+  template<typename Acceptor, bool Enable = objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<scalar_objpipe>, objpipe::existingthread_push>
+                                         && objpipe::detail::adapt::has_ioc_push<objpipe::detail::adapter_underlying_type_t<vector_objpipe>, objpipe::existingthread_push>>
+  auto ioc_push(const objpipe::existingthread_push& policy, Acceptor&& acceptor) &&
+  -> std::enable_if_t<Enable> {
+    std::vector<std::variant<scalar_objpipe, vector_objpipe>> inputs;
+    inputs.reserve(inputs_.size());
+    std::transform(
+        std::make_move_iterator(inputs_.begin()),
+        std::make_move_iterator(inputs_.end()),
+        std::back_inserter(inputs),
+        [](auto&& x) {
+          return std::visit(
+              [](auto&& x) -> std::variant<scalar_objpipe, vector_objpipe> {
+                return std::move(x).release_source();
+              },
+              std::move(x));
+        });
+
+    auto push = std::make_shared<vector_merger_push<std::decay_t<Acceptor>>>(std::forward<Acceptor>(acceptor), std::move(slack_), std::move(fn_), mc_, out_mc_);
+    push->start(std::move(inputs), policy);
+  }
 
  private:
   std::vector<input_type> inputs_;
