@@ -3,7 +3,6 @@
 namespace monsoon {
 
 
-collector::collector() {}
 collector::~collector() noexcept {}
 
 
