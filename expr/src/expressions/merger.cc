@@ -1260,12 +1260,13 @@ auto pull_cycle<Pipe>::read_more(bool block)
     const time_point tp = next->tp;
 
     const bool accepted = sink_.accept(*std::move(next));
-    accepted_fact = (accepted && is_fact);
 
-    if (accepted_fact && !next_tp_.factual.has_value())
-      next_tp_.factual = tp;
-    if (!next_tp_.speculative.has_value() || *next_tp_.speculative > tp)
-      next_tp_.speculative = tp;
+    if (accepted) {
+      if (is_fact && !next_tp_.factual.has_value())
+        next_tp_.factual = tp;
+      if (!next_tp_.speculative.has_value() || *next_tp_.speculative > tp)
+        next_tp_.speculative = tp;
+    }
 
     assert(invariant());
   } while (!accepted_fact);
