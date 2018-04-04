@@ -2236,9 +2236,8 @@ std::function<metric_value(const std::vector<metric_value>&)> {
 } /* namespace monsoon::expressions::<unnamed> */
 
 
-auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
-    [[maybe_unused]] std::shared_ptr<const match_clause> mc,
-    [[maybe_unused]] std::shared_ptr<const match_clause> out_mc,
+auto make_merger(
+    metric_value(*fn)(const metric_value&, const metric_value&),
     time_point::duration slack,
     expression::scalar_objpipe&& x,
     expression::scalar_objpipe&& y)
@@ -2256,7 +2255,8 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
       .deref();
 }
 
-auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
+auto make_merger(
+    metric_value(*fn)(const metric_value&, const metric_value&),
     std::shared_ptr<const match_clause> mc,
     std::shared_ptr<const match_clause> out_mc,
     time_point::duration slack,

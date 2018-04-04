@@ -86,8 +86,6 @@ TEST(scalar_scalar_empty) {
           .to_vector(),
       make_merger(
           &dummy_binop,
-          std::make_shared<default_match_clause>(),
-          std::make_shared<default_match_clause>(),
           time_point::duration(5000),
           empty_scalar_objpipe(),
           empty_scalar_objpipe())
@@ -100,8 +98,6 @@ TEST(scalar_scalar_exact_tp_facts) {
           .to_vector(),
       make_merger(
           &same_binop,
-          std::make_shared<default_match_clause>(),
-          std::make_shared<default_match_clause>(),
           time_point::duration(5000),
           fact_scalar_objpipe({{ time_point(1000), std::in_place_index<1>, 17 }}),
           fact_scalar_objpipe({{ time_point(1000), std::in_place_index<1>, 17 }}))
@@ -114,8 +110,6 @@ TEST(scalar_scalar_interpolate_facts_lhs) {
           .to_vector(),
       make_merger(
           &same_binop,
-          std::make_shared<default_match_clause>(),
-          std::make_shared<default_match_clause>(),
           time_point::duration(5000),
           fact_scalar_objpipe({
               { time_point(1000), std::in_place_index<1>, 16 },
@@ -133,8 +127,6 @@ TEST(scalar_scalar_interpolate_facts_rhs) {
           .to_vector(),
       make_merger(
           &same_binop,
-          std::make_shared<default_match_clause>(),
-          std::make_shared<default_match_clause>(),
           time_point::duration(5000),
           fact_scalar_objpipe({
               { time_point(2000), std::in_place_index<1>, 17 }

@@ -20,16 +20,12 @@ namespace monsoon::expressions {
  * \brief Merge two scalar expressions using a computation.
  * \ingroup expr
  * \param[in] fn Compute the result of two metric values.
- * \param[in] mc Unused.
- * \param[in] out_mc Unused.
  * \param[in] slack Duration before and after generated time points, to consider if interpolation is required.
  * \param[in] x Objpipe supplying left argument to the \p fn.
  * \param[in] y Objpipe supplying left argument to the \p fn.
  */
 auto monsoon_expr_export_ make_merger(
     metric_value(*fn)(const metric_value&, const metric_value&),
-    std::shared_ptr<const match_clause> mc,
-    std::shared_ptr<const match_clause> out_mc,
     time_point::duration slack,
     expression::scalar_objpipe&& x,
     expression::scalar_objpipe&& y)
