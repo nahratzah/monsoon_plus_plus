@@ -2304,5 +2304,40 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
       .iterate();
 }
 
+auto make_merger(
+    std::function<metric_value(const std::vector<metric_value>&)> fn,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
+    std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>>&& pipes)
+-> std::variant<expression::scalar_objpipe, expression::vector_objpipe> {
+  if (std::any_of(
+          pipes.cbegin(),
+          pipes.cend(),
+          [](const auto& variant) {
+            return std::holds_alternative<expression::scalar_objpipe>(variant);
+          })) {
+    std::vector<expression::scalar_objpipe> args;
+    args.reserve(pipes.size());
+    std::transform(
+        std::make_move_iterator(pipes.begin()),
+        std::make_move_iterator(pipes.end()),
+        std::back_inserter(args),
+        [](auto&& pipe) -> expression::scalar_objpipe&& {
+          return std::get<expression::scalar_objpipe>(std::move(pipe));
+        });
+
+    return objpipe::detail::adapter(scalar_merger_pipe(std::move(args), slack, fn))
+        .filter(
+            [](const std::optional<expression::scalar_emit_type>& opt) {
+              return opt.has_value();
+            })
+        .deref();
+  }
+
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(pipes), mc, out_mc, slack, fn))
+      .iterate();
+}
+
 
 } /* namespace monsoon::expressions */
