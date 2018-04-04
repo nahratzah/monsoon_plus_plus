@@ -1303,16 +1303,6 @@ class vector_merger_pipe {
   auto try_pull() -> transport_type;
 
  private:
-  auto apply_(
-      merger_apply_vector::map_type& result,
-      const std::optional<tags>& tag_set,
-      std::vector<metric_value>& fn_args,
-      std::vector<metric_value>::iterator out_iter,
-      const args_vector& args,
-      args_vector::const_iterator in_iter)
-  -> void;
-  auto apply_(merger_apply_vector::map_type& out, args_vector&& args) -> void;
-
   std::vector<input_type> inputs_;
   fn_type fn_;
   time_point::duration slack_;
