@@ -25,6 +25,76 @@ namespace {
 
 
 /**
+ * \brief Time point selector for mergers.
+ * \ingroup expr
+ * \details Mergers need both speculative and factual emit timepoints.
+ */
+class time_point_selector {
+ public:
+  ///\brief Create an empty time_point_selector.
+  constexpr time_point_selector() noexcept = default;
+
+  constexpr time_point_selector(
+      const std::optional<time_point>& speculative,
+      const std::optional<time_point>& factual)
+  noexcept
+  : speculative(speculative),
+    factual(factual)
+  {}
+
+  ///\brief Retrieve the best suggestion of a time point emit.
+  constexpr auto get() const
+  noexcept
+  -> const std::optional<time_point>& {
+    return (!factual.has_value() && speculative.has_value()
+        ? speculative
+        : factual);
+  }
+
+  std::optional<time_point> speculative, factual;
+};
+
+///\brief Compute the minimum between two optional time points, ignoring empty optionals.
+///\ingroup expr
+constexpr auto min_of_present_opts(
+    const std::optional<time_point>& x,
+    const std::optional<time_point>& y)
+noexcept
+-> const std::optional<time_point>& {
+  if (!y.has_value()) return x;
+  if (!x.has_value() || *x > *y) return y;
+  return x;
+}
+
+///\brief Compute the minimum between two \ref time_point_selector "time point selectors".
+///\ingroup expr
+///\relates time_point_selector
+constexpr auto tps_min(const time_point_selector& x, const time_point_selector& y)
+noexcept
+-> time_point_selector {
+  return time_point_selector(
+      min_of_present_opts(x.speculative, y.speculative),
+      std::min(x.factual, y.factual));
+}
+
+///\brief Equality comparison.
+///\relates time_point_selector
+constexpr auto operator==(const time_point_selector& x, const time_point_selector& y)
+noexcept
+-> bool {
+  return x.factual == y.factual && x.speculative == y.speculative;
+}
+
+///\brief Inequality comparison.
+///\relates time_point_selector
+constexpr auto operator!=(const time_point_selector& x, const time_point_selector& y)
+noexcept
+-> bool {
+  return !(x == y);
+}
+
+
+/**
  * \brief Scalar time point value.
  * \ingroup expr
  * \details Describes a scalar at a given time point.
@@ -139,15 +209,14 @@ struct merger_apply_scalar {
 
   ///\brief Convert the scalar to a \ref expression::scalar_emit_type "scalar emit type".
   auto as_emit(time_point tp) &&
-  -> std::vector<expression::scalar_emit_type> {
-    std::vector<expression::scalar_emit_type> result;
-    if (value.has_value()) {
-      if (is_fact)
-        result.emplace_back(tp, std::in_place_index<1>, *std::move(value));
-      else
-        result.emplace_back(tp, std::in_place_index<0>, *std::move(value));
-    }
-    return result;
+  -> std::optional<expression::scalar_emit_type> {
+    using scalar_emit_type = expression::scalar_emit_type;
+    if (!value.has_value()) return {};
+
+    if (is_fact)
+      return scalar_emit_type(tp, std::in_place_index<1>, *std::move(value));
+    else
+      return scalar_emit_type(tp, std::in_place_index<0>, *std::move(value));
   }
 };
 
@@ -187,116 +256,6 @@ struct merger_apply_vector {
     return result;
   }
 };
-
-template<typename Fn>
-auto merger_apply(Fn&& fn, scalar x, scalar y,
-    [[maybe_unused]] const std::shared_ptr<const match_clause>& out_mc)
--> merger_apply_scalar {
-  if (x.value.has_value() && y.value.has_value()) {
-    return merger_apply_scalar(
-        std::invoke(std::forward<Fn>(fn), x.value.value(), y.value.value()),
-        x.is_fact && y.is_fact);
-  } else {
-    return merger_apply_scalar(
-        nullptr,
-        x.is_fact && y.is_fact);
-  }
-}
-
-template<typename Fn>
-auto merger_apply(Fn&& fn, scalar x, tagged_vector y,
-    const std::shared_ptr<const match_clause>& out_mc)
--> merger_apply_vector {
-  merger_apply_vector result = merger_apply_vector(
-      y.values.bucket_count(),
-      out_mc,
-      out_mc,
-      x.is_fact && y.is_fact);
-
-  if (x.value.has_value()) {
-    objpipe::of(std::move(y))
-        .transform(&tagged_vector::values)
-        .iterate()
-        .transform(
-            [&fn, &x](const auto& pair) {
-              return std::make_pair(pair.first, std::invoke(fn, x.value.value(), pair.second));
-            })
-        .filter([&out_mc](const auto& pair) { return out_mc->pass(pair.first); })
-        .for_each(
-            [&result](std::pair<tags, metric_value>&& pair) {
-              auto ins_pos = result.values.emplace(pair.first, std::move(pair.second));
-              if (ins_pos.second == false)
-                ins_pos.first->second = metric_value(); // Invalidate collision.
-            });
-  }
-
-  return result;
-}
-
-template<typename Fn>
-auto merger_apply(Fn&& fn, tagged_vector x, scalar y,
-    const std::shared_ptr<const match_clause>& out_mc)
--> merger_apply_vector {
-  merger_apply_vector result = merger_apply_vector(
-      x.values.bucket_count(),
-      out_mc,
-      out_mc,
-      x.is_fact && y.is_fact);
-
-  if (y.value.has_value()) {
-    objpipe::of(std::move(x))
-        .transform(&tagged_vector::values)
-        .iterate()
-        .transform(
-            [&fn, &y](const auto& pair) {
-              return std::make_pair(pair.first, std::invoke(fn, pair.second, y.value.value()));
-            })
-        .filter([&out_mc](const auto& pair) { return out_mc->pass(pair.first); })
-        .for_each(
-            [&result](std::pair<tags, metric_value>&& pair) {
-              auto ins_pos = result.values.emplace(std::move(pair.first), std::move(pair.second));
-              if (ins_pos.second == false)
-                ins_pos.first->second = metric_value(); // Invalidate collision.
-            });
-  }
-
-  return result;
-}
-
-template<typename Fn>
-auto merger_apply(Fn&& fn, tagged_vector x, tagged_vector y,
-    const std::shared_ptr<const match_clause>& out_mc)
--> merger_apply_vector {
-  const std::shared_ptr<const match_clause> mc = x.values.hash_function().mc;
-  merger_apply_vector result = merger_apply_vector(
-      x.values.bucket_count(),
-      out_mc,
-      out_mc,
-      x.is_fact && y.is_fact);
-
-  objpipe::of(std::move(x))
-      .transform(&tagged_vector::values)
-      .iterate()
-      .transform(
-          [&fn, &y, &mc](const std::pair<const tags, metric_value>& pair) -> std::optional<std::pair<tags, metric_value>> {
-            auto y_val = y.values.find(pair.first);
-            if (y_val == y.values.end()) return {};
-            return std::make_pair(
-                mc->reduce(pair.first, y_val->first),
-                std::invoke(fn, pair.second, y_val->second));
-          })
-      .filter([](const auto& opt_pair) { return opt_pair.has_value(); })
-      .deref()
-      .filter([&out_mc](const auto& pair) { return out_mc->pass(pair.first); })
-      .for_each(
-          [&result](std::pair<tags, metric_value>&& pair) {
-            auto ins_pos = result.values.emplace(std::move(pair.first), std::move(pair.second));
-            if (ins_pos.second == false)
-              ins_pos.first->second = metric_value(); // Invalidate collision.
-          });
-
-  return result;
-}
 
 /**
  * \brief Scalar sink.
@@ -340,8 +299,9 @@ class scalar_sink {
     ///\brief Indicates if the scalar is a fact, as opposed to a speculation.
     bool is_fact : 1;
 
-    ///\brief Indicates if this scalar has been emitted.
+    ///\brief Indicates if this scalar has been emitted as a speculation.
     ///\details Emitted scalars still participate in interpolation.
+    ///\note Facts are always erased using forward_to_time.
     bool is_emitted : 1;
   };
 
@@ -424,7 +384,7 @@ class scalar_sink {
    *
    * \returns The time point of the oldest time point held.
    */
-  auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
+  auto suggest_emit_tp() const noexcept -> time_point_selector;
 
   /**
    * \brief Mark time point as having been emitted.
@@ -537,7 +497,7 @@ class vector_sink {
    *
    * \returns The time point of the oldest time point held.
    */
-  auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
+  auto suggest_emit_tp() const noexcept -> time_point_selector;
 
   /**
    * \brief Mark time point as having been emitted.
@@ -661,7 +621,7 @@ class pull_cycle {
    *
    * \returns The time point of the oldest time point held.
    */
-  auto suggest_emit_tp() const noexcept -> std::optional<time_point>;
+  auto suggest_emit_tp() const noexcept -> time_point_selector;
 
   /**
    * \brief Mark time point as having been emitted.
@@ -717,63 +677,92 @@ class pull_cycle {
   auto invariant() const noexcept -> bool;
 
  private:
-  /**
-   * \brief Try to read facts up-to-and-including \p tp.
-   *
-   * \details Repeatedly invokes read_more(), until sink_.fact_end() exceeds tp.
-   * \note While this function is const, it mutates the underlying data.
-   *
-   * \param The time point we would like to have facts on.
-   */
-  auto try_forward_to_(time_point tp) const -> void;
-
   sink_type sink_;
   mutable Pipe source_;
-  std::optional<time_point> next_tp_;
+  time_point_selector next_tp_;
 };
 
 
-template<typename PipeX, typename PipeY, typename Fn>
-class pair_merger_pipe {
+class scalar_merger_pipe {
+ private:
+  using scalar_objpipe = expression::scalar_objpipe;
+
  public:
   using objpipe_errc = objpipe::objpipe_errc;
-
-  using result_type = decltype(
-      merger_apply(
-          std::declval<const Fn&>(),
-          std::declval<const pull_cycle<PipeX>&>().get(
-              std::declval<time_point>(),
-              std::declval<time_point>(),
-              std::declval<time_point>()),
-          std::declval<const pull_cycle<PipeY>&>().get(
-              std::declval<time_point>(),
-              std::declval<time_point>(),
-              std::declval<time_point>()),
-          std::declval<std::shared_ptr<const match_clause>>())
-          .as_emit(std::declval<time_point>()));
+  using result_type = std::optional<expression::scalar_emit_type>;
   using transport_type = objpipe::detail::transport<result_type>;
+  using fn_type = std::function<metric_value(const std::vector<metric_value>&)>;
 
-  pair_merger_pipe(pair_merger_pipe&&) = default;
-  template<typename FnArg>
-  pair_merger_pipe(PipeX&& x, PipeY&& y,
-      const std::shared_ptr<const match_clause>& mc,
-      std::shared_ptr<const match_clause> out_mc,
+  scalar_merger_pipe(scalar_merger_pipe&&) = default;
+
+  scalar_merger_pipe(
+      std::vector<scalar_objpipe>&& inputs,
       time_point::duration slack,
-      FnArg&& fn);
-  auto wait() const -> objpipe_errc;
+      fn_type fn);
+
+  auto wait() -> objpipe_errc;
   auto is_pullable() const noexcept -> bool;
-  auto front() const -> transport_type;
+  auto front() -> transport_type;
   auto pop_front() -> objpipe_errc;
-  auto pull() -> transport_type;
+  auto pull(bool block = true) -> transport_type;
   auto try_pull() -> transport_type;
 
  private:
-  mutable pull_cycle<PipeX> x_;
-  mutable pull_cycle<PipeY> y_;
-  std::shared_ptr<const match_clause> out_mc_;
-  Fn fn_;
+  std::vector<pull_cycle<scalar_objpipe>> inputs_;
+  fn_type fn_;
   time_point::duration slack_;
-  mutable std::optional<time_point> last_front_tp_;
+  bool pending_pop_ = false;
+};
+
+
+class vector_merger_pipe {
+ private:
+  using scalar_objpipe = expression::scalar_objpipe;
+  using vector_objpipe = expression::vector_objpipe;
+  using input_type = std::variant<
+      pull_cycle<scalar_objpipe>,
+      pull_cycle<vector_objpipe>>;
+  using args_vector = std::vector<std::variant<metric_value, tagged_vector::map_type>>;
+
+ public:
+  using objpipe_errc = objpipe::objpipe_errc;
+  using result_type = std::vector<expression::vector_emit_type>;
+  using transport_type = objpipe::detail::transport<result_type>;
+  using fn_type = std::function<metric_value(const std::vector<metric_value>&)>;
+
+  vector_merger_pipe(vector_merger_pipe&&) = default;
+
+  vector_merger_pipe(
+      std::vector<std::variant<scalar_objpipe, vector_objpipe>>&& inputs,
+      std::shared_ptr<const match_clause> mc,
+      std::shared_ptr<const match_clause> out_mc,
+      time_point::duration slack,
+      fn_type fn);
+
+  auto wait() -> objpipe_errc;
+  auto is_pullable() const noexcept -> bool;
+  auto front() -> transport_type;
+  auto pop_front() -> objpipe_errc;
+  auto pull(bool block = true) -> transport_type;
+  auto try_pull() -> transport_type;
+
+ private:
+  auto apply_(
+      merger_apply_vector::map_type& result,
+      const std::optional<tags>& tag_set,
+      std::vector<metric_value>& fn_args,
+      std::vector<metric_value>::iterator out_iter,
+      const args_vector& args,
+      args_vector::const_iterator in_iter)
+  -> void;
+  auto apply_(merger_apply_vector::map_type& out, args_vector&& args) -> void;
+
+  std::vector<input_type> inputs_;
+  fn_type fn_;
+  time_point::duration slack_;
+  bool pending_pop_ = false;
+  std::shared_ptr<const match_clause> mc_;
+  std::shared_ptr<const match_clause> out_mc_;
 };
 
 
@@ -782,13 +771,18 @@ scalar_sink::~scalar_sink() noexcept {}
 
 auto scalar_sink::suggest_emit_tp() const
 noexcept
--> std::optional<time_point> {
+-> time_point_selector {
   assert(invariant());
 
-  const auto emit_iter = std::find_if(data_.begin(), data_.end(),
-      [](const value& v) { return !v.is_emitted; });
-  if (emit_iter == data_.end()) return {};
-  return emit_iter->tp;
+  // We make use of the fact that callers are to use
+  // forward_to_time to expire emitted facts.
+  for (const value& v : data_) {
+    if (!v.is_emitted)
+      return time_point_selector(v.tp, data_.front().tp);
+  }
+  if (!data_.empty())
+    return time_point_selector(std::optional<time_point>(), data_.front().tp);
+  return {};
 }
 
 auto scalar_sink::mark_emitted(time_point tp)
@@ -905,11 +899,13 @@ auto scalar_sink::forward_to_time(time_point tp, time_point expire_before)
   if (recent_.has_value() && recent_->tp < expire_before)
     recent_.reset();
 
-  const auto keep_begin = std::lower_bound(
+  auto keep_begin = std::lower_bound(
       data_.begin(),
       data_.end(),
       tp,
       tp_compare_());
+  if (keep_begin != data_.end() && keep_begin->tp == tp)
+    ++keep_begin;
 
   if (keep_begin != data_.begin()) {
     const auto first_speculative = std::lower_bound(
@@ -936,6 +932,14 @@ auto scalar_sink::forward_to_time(time_point tp, time_point expire_before)
             else
               return x.tp >= expire_before;
           }));
+  // Validate that we only throw away data at/before tp.
+  assert(std::all_of(
+          data_.begin(), keep_begin,
+          [tp](const value& x) { return x.tp <= tp; }));
+  // Validate that only remaining data is after tp.
+  assert(std::all_of(
+          keep_begin, data_.end(),
+          [tp](const value& x) { return x.tp > tp; }));
   data_.erase(data_.begin(), keep_begin);
 
   assert(invariant());
@@ -1028,20 +1032,19 @@ vector_sink::~vector_sink() noexcept {}
 
 auto vector_sink::suggest_emit_tp() const
 noexcept
--> std::optional<time_point> {
+-> time_point_selector {
   assert(invariant());
 
-  std::optional<time_point> min = objpipe::of(std::cref(data_))
+  return objpipe::of(std::cref(data_))
       .iterate()
       .select_second()
       .transform(&scalar_sink::suggest_emit_tp)
-      .filter([](const std::optional<time_point>& v) { return v.has_value(); })
-      .deref()
-      .min();
-
-  if (!min.has_value() && !last_known_fact_emitted_)
-    min = last_known_fact_tp_;
-  return min;
+      .reduce(time_point_selector(),
+          [](const time_point_selector& x, const time_point_selector& y) {
+            return time_point_selector(
+                min_of_present_opts(x.speculative, y.speculative),
+                min_of_present_opts(x.factual, y.factual));
+          });
 }
 
 auto vector_sink::mark_emitted(time_point tp)
@@ -1053,8 +1056,6 @@ noexcept
       [tp](auto& data_elem) {
         data_elem.second.mark_emitted(tp);
       });
-  if (last_known_fact_tp_ == tp)
-    last_known_fact_emitted_ = true;
 
   assert(invariant());
 }
@@ -1125,6 +1126,9 @@ auto vector_sink::forward_to_time(time_point tp, time_point expire_before)
     else
       ++elem;
   }
+
+  if (last_known_fact_tp_ == tp)
+    last_known_fact_emitted_ = true;
 
   assert(invariant());
 }
@@ -1202,7 +1206,7 @@ noexcept
 
 template<typename Pipe>
 auto pull_cycle<Pipe>::suggest_emit_tp() const noexcept
--> std::optional<time_point> {
+-> time_point_selector {
   assert(invariant());
 
   return next_tp_;
@@ -1226,12 +1230,6 @@ auto pull_cycle<Pipe>::get(time_point tp, time_point min_interp_tp, time_point m
     .get(std::declval<time_point>(), std::declval<time_point>(), std::declval<time_point>(), std::declval<bool>())) {
   assert(invariant());
 
-  // Read up to and including max_interp_tp,
-  // to favour facts that are known correct
-  // (as opposed to using facts that may change
-  // due to interpolation and thus have to be labelled
-  // speculative).
-  try_forward_to_(max_interp_tp);
   return sink_.get(tp, min_interp_tp, max_interp_tp, !source_.is_pullable());
 }
 
@@ -1246,7 +1244,7 @@ auto pull_cycle<Pipe>::read_more(bool block)
   do {
     std::optional<typename Pipe::value_type> next;
 
-    if (!next_tp_.has_value() && block) {
+    if (!next_tp_.factual.has_value() && block) {
       try {
         next = source_.pull();
       } catch (const objpipe::objpipe_error& e) {
@@ -1264,32 +1262,16 @@ auto pull_cycle<Pipe>::read_more(bool block)
     const bool accepted = sink_.accept(*std::move(next));
     accepted_fact = (accepted && is_fact);
 
-    if (accepted_fact && (!next_tp_.has_value() || *next_tp_ < tp))
-      next_tp_ = sink_.suggest_emit_tp();
+    if (accepted_fact && !next_tp_.factual.has_value())
+      next_tp_.factual = tp;
+    if (!next_tp_.speculative.has_value() || *next_tp_.speculative > tp)
+      next_tp_.speculative = tp;
 
     assert(invariant());
   } while (!accepted_fact);
 
   assert(invariant());
   return accepted_fact;
-}
-
-template<typename Pipe>
-auto pull_cycle<Pipe>::try_forward_to_(time_point tp) const
--> void {
-  assert(invariant());
-
-  bool failed_to_read = !source_.is_pullable();
-  while (!failed_to_read && sink_.fact_end() < tp) {
-    // We hide that we're actually changing data underneath,
-    // since this is the only function that requires it.
-    //
-    // It's semantically const, in that it does not affect the
-    // logical view of the data.
-    failed_to_read = !const_cast<pull_cycle&>(*this).read_more();
-  }
-
-  assert(invariant());
 }
 
 template<typename Pipe>
@@ -1303,15 +1285,24 @@ template<typename Pipe>
 auto pull_cycle<Pipe>::forward_to_time(time_point tp, time_point expire_before)
 -> void {
   sink_.forward_to_time(tp, expire_before);
+  next_tp_ = sink_.suggest_emit_tp();
 }
 
+
+template<typename Pipe>
+auto create_sink_for()
+-> std::enable_if_t<
+    std::is_same_v<expression::scalar_emit_type, typename Pipe::value_type>,
+    scalar_sink> {
+  return scalar_sink();
+}
 
 template<typename Pipe>
 auto create_sink_for([[maybe_unused]] const std::shared_ptr<const match_clause>& mc)
 -> std::enable_if_t<
     std::is_same_v<expression::scalar_emit_type, typename Pipe::value_type>,
     scalar_sink> {
-  return scalar_sink();
+  return create_sink_for<Pipe>();
 }
 
 template<typename Pipe>
@@ -1324,182 +1315,467 @@ auto create_sink_for(std::shared_ptr<const match_clause> mc)
 }
 
 
-template<typename PipeX, typename PipeY, typename Fn>
-template<typename FnArg>
-pair_merger_pipe<PipeX, PipeY, Fn>::pair_merger_pipe(PipeX&& x, PipeY&& y,
-    const std::shared_ptr<const match_clause>& mc,
-    std::shared_ptr<const match_clause> out_mc,
+scalar_merger_pipe::scalar_merger_pipe(
+    std::vector<scalar_objpipe>&& inputs,
     time_point::duration slack,
-    FnArg&& fn)
-: x_(std::move(x), create_sink_for<PipeX>(mc)),
-  y_(std::move(y), create_sink_for<PipeY>(mc)),
-  out_mc_(std::move(out_mc)),
-  fn_(std::forward<FnArg>(fn)),
+    fn_type fn)
+: fn_(std::move(fn)),
   slack_(slack)
-{}
-
-template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::wait() const -> objpipe_errc {
-  assert(!last_front_tp_.has_value());
-
-  std::optional<time_point> x_tp = x_.suggest_emit_tp();
-  if (!x_tp.has_value()) {
-    x_.read_more(true);
-    x_tp = x_.suggest_emit_tp();
-  }
-  assert(x_tp.has_value() || !x_.is_pullable());
-
-  std::optional<time_point> y_tp = y_.suggest_emit_tp();
-  if (!y_tp.has_value()) {
-    y_.read_more(true);
-    y_tp = y_.suggest_emit_tp();
-  }
-  assert(y_tp.has_value() || !y_.is_pullable());
-
-  if (x_tp.has_value() && y_tp.has_value())
-    return objpipe_errc::success;
-  else
-    return objpipe_errc::closed;
+{
+  inputs_.reserve(inputs.size());
+  std::transform(
+      std::make_move_iterator(inputs.begin()),
+      std::make_move_iterator(inputs.end()),
+      std::back_inserter(inputs_),
+      [](scalar_objpipe&& pipe) {
+        return pull_cycle<scalar_objpipe>(std::move(pipe), create_sink_for<scalar_objpipe>());
+      });
 }
 
-template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::is_pullable() const
+auto scalar_merger_pipe::wait()
+-> objpipe_errc {
+  if (pending_pop_) return objpipe_errc::success;
+
+  if (inputs_.empty()) return objpipe_errc::closed;
+  time_point_selector selector;
+  std::for_each(
+      inputs_.begin(),
+      inputs_.end(),
+      [&selector](pull_cycle<scalar_objpipe>& x) {
+        time_point_selector suggestion = x.suggest_emit_tp();
+        if (!suggestion.factual.has_value()) {
+          x.read_more(true);
+          suggestion = x.suggest_emit_tp();
+        }
+        selector = tps_min(selector, suggestion);
+      });
+
+  return (selector.get().has_value()
+      ? objpipe_errc::success
+      : objpipe_errc::closed);
+}
+
+auto scalar_merger_pipe::is_pullable() const
 noexcept
 -> bool {
-  return (x_.is_pullable() || x_.suggest_emit_tp().has_value())
-      && (y_.is_pullable() || y_.suggest_emit_tp().has_value());
+  return std::all_of(
+      inputs_.begin(), inputs_.end(),
+      [](const auto& x) {
+        return x.is_pullable() || x.suggest_emit_tp().get().has_value();
+      });
 }
 
-template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::front() const
+auto scalar_merger_pipe::front()
 -> transport_type {
-  assert(!last_front_tp_.has_value());
-
-  std::optional<time_point> x_tp = x_.suggest_emit_tp();
-  if (!x_tp.has_value()) {
-    x_.read_more(true);
-    x_tp = x_.suggest_emit_tp();
-  }
-  assert(x_tp.has_value() || !x_.is_pullable());
-
-  std::optional<time_point> y_tp = y_.suggest_emit_tp();
-  if (!y_tp.has_value()) {
-    y_.read_more(true);
-    y_tp = y_.suggest_emit_tp();
-  }
-  assert(y_tp.has_value() || !y_.is_pullable());
-
-  if (!x_tp.has_value() || !y_tp.has_value())
-    return transport_type(std::in_place_index<1>, objpipe_errc::closed);
-
-  const time_point tp = std::min(*x_tp, *y_tp);
-  last_front_tp_.emplace(tp);
-
-  auto result = merger_apply(
-      fn_,
-      x_.get(tp, tp - slack_, tp + slack_),
-      y_.get(tp, tp - slack_, tp + slack_),
-      out_mc_);
-  if (result.is_fact) { // Factual emit
-    x_.forward_to_time(tp, tp - slack_);
-    y_.forward_to_time(tp, tp - slack_);
-  }
-
-  return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  transport_type result = pull();
+  assert(result.has_value() || result.errc() != objpipe_errc::success);
+  pending_pop_ = true;
+  return result;
 }
 
-template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::pop_front()
+auto scalar_merger_pipe::pop_front()
 -> objpipe_errc {
-  if (!last_front_tp_.has_value()) {
-    transport_type front_result = front();
-    if (front_result.errc() != objpipe_errc::success)
-      return front_result.errc();
-  }
-  assert(last_front_tp_.has_value());
+  if (!pending_pop_) return pull().errc();
 
-  x_.mark_emitted(*last_front_tp_);
-  y_.mark_emitted(*last_front_tp_);
-  last_front_tp_.reset();
+  pending_pop_ = false;
   return objpipe_errc::success;
 }
 
-template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::pull()
+auto scalar_merger_pipe::pull(bool block)
 -> transport_type {
-  assert(!last_front_tp_.has_value());
+  assert(!pending_pop_);
 
-  std::optional<time_point> x_tp = x_.suggest_emit_tp();
-  if (!x_tp.has_value()) {
-    x_.read_more(true);
-    x_tp = x_.suggest_emit_tp();
-  }
-  assert(x_tp.has_value() || !x_.is_pullable());
-
-  std::optional<time_point> y_tp = y_.suggest_emit_tp();
-  if (!y_tp.has_value()) {
-    y_.read_more(true);
-    y_tp = y_.suggest_emit_tp();
-  }
-  assert(y_tp.has_value() || !y_.is_pullable());
-
-  if (!x_tp.has_value() || !y_tp.has_value())
+  if (inputs_.empty())
     return transport_type(std::in_place_index<1>, objpipe_errc::closed);
 
-  const time_point tp = std::min(*x_tp, *y_tp);
-  auto result = merger_apply(
-      fn_,
-      x_.get(tp, tp - slack_, tp + slack_),
-      y_.get(tp, tp - slack_, tp + slack_),
-      out_mc_);
-  if (result.is_fact) { // Factual emit
-    x_.forward_to_time(tp, tp - slack_);
-    y_.forward_to_time(tp, tp - slack_);
+  // Compute minimum time point.
+  // If all of the inputs fails to supply a time point,
+  // we're an empty objpipe.
+  time_point tp;
+  {
+    time_point_selector selector;
+    std::for_each(
+        inputs_.begin(), inputs_.end(),
+        [&selector, block](pull_cycle<scalar_objpipe>& x) {
+          time_point_selector input_selector = x.suggest_emit_tp();
+          if (!input_selector.factual.has_value()) {
+            x.read_more(block);
+            input_selector = x.suggest_emit_tp();
+          }
+
+          selector = tps_min(selector, input_selector);
+        });
+    if (!selector.get().has_value()) {
+      if (block
+          || std::none_of(
+              inputs_.begin(),
+              inputs_.end(),
+              [](const pull_cycle<scalar_objpipe>& x) {
+                return x.is_pullable();
+              }))
+        return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+      else
+        return transport_type(std::in_place_index<1>, objpipe_errc::success);
+    }
+
+    tp = *selector.get();
   }
 
-  x_.mark_emitted(tp);
-  y_.mark_emitted(tp);
+  merger_apply_scalar result(nullptr, true);
+
+  // Create argument set for function invocation.
+  // Also fill in result.is_fact, which is true iff all of the values are a fact.
+  std::vector<metric_value> args;
+  args.reserve(inputs_.size());
+  std::for_each(
+      inputs_.begin(),
+      inputs_.end(),
+      [&result, tp, &args, this](pull_cycle<scalar_objpipe>& x) {
+        scalar s = x.get(tp, tp - slack_, tp + slack_);
+        result.is_fact &= s.is_fact;
+        if (s.value.has_value())
+          args.push_back(std::move(*s.value));
+      });
+
+  // Invoke computation.
+  // Note that if any of the metric values is absent,
+  // the computation is skipped and an absent value is placed
+  // instead.
+  // (We detect this using the observation that the argument set is
+  // shorter than the input set.)
+  if (args.size() == inputs_.size()) result.value = fn_(args);
+
+  if (result.is_fact) {
+    // Drop everything at/before tp.
+    std::for_each(
+        inputs_.begin(),
+        inputs_.end(),
+        [tp, this](pull_cycle<scalar_objpipe>& x) {
+          x.forward_to_time(tp, tp - slack_);
+        });
+  } else {
+    // Mark time point as emitted.
+    std::for_each(
+        inputs_.begin(),
+        inputs_.end(),
+        [tp](pull_cycle<scalar_objpipe>& x) {
+          x.mark_emitted(tp);
+        });
+  }
+
   return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
 }
 
-template<typename PipeX, typename PipeY, typename Fn>
-auto pair_merger_pipe<PipeX, PipeY, Fn>::try_pull()
+auto scalar_merger_pipe::try_pull()
 -> transport_type {
-  assert(!last_front_tp_.has_value());
+  return pull(false);
+}
 
-  std::optional<time_point> x_tp = x_.suggest_emit_tp();
-  if (!x_tp.has_value()) {
-    x_.read_more(false);
-    x_tp = x_.suggest_emit_tp();
+
+vector_merger_pipe::vector_merger_pipe(
+    std::vector<std::variant<scalar_objpipe, vector_objpipe>>&& inputs,
+    std::shared_ptr<const match_clause> mc,
+    std::shared_ptr<const match_clause> out_mc,
+    time_point::duration slack,
+    fn_type fn)
+: fn_(std::move(fn)),
+  slack_(slack),
+  mc_(std::move(mc)),
+  out_mc_(std::move(out_mc))
+{
+  inputs_.reserve(inputs.size());
+  std::transform(
+      std::make_move_iterator(inputs.begin()),
+      std::make_move_iterator(inputs.end()),
+      std::back_inserter(inputs_),
+      [this](std::variant<scalar_objpipe, vector_objpipe>&& pipe) {
+        return std::visit(
+            overload(
+                [](scalar_objpipe&& pipe) -> input_type {
+                  return pull_cycle<scalar_objpipe>(std::move(pipe), create_sink_for<scalar_objpipe>());
+                },
+                [this](vector_objpipe&& pipe) -> input_type {
+                  return pull_cycle<vector_objpipe>(std::move(pipe), create_sink_for<vector_objpipe>(mc_));
+                }),
+            std::move(pipe));
+      });
+}
+
+auto vector_merger_pipe::wait()
+-> objpipe_errc {
+  if (pending_pop_) return objpipe_errc::success;
+
+  if (inputs_.empty()) return objpipe_errc::closed;
+  time_point_selector selector;
+  std::for_each(
+      inputs_.begin(),
+      inputs_.end(),
+      [&selector](auto& x) {
+        std::visit(
+            [&selector](auto& x) {
+              time_point_selector suggestion = x.suggest_emit_tp();
+              if (!suggestion.factual.has_value()) {
+                x.read_more(true);
+                suggestion = x.suggest_emit_tp();
+              }
+              selector = tps_min(selector, suggestion);
+            },
+            x);
+      });
+
+  return (selector.get().has_value()
+      ? objpipe_errc::success
+      : objpipe_errc::closed);
+}
+
+auto vector_merger_pipe::is_pullable() const
+noexcept
+-> bool {
+  return std::all_of(
+      inputs_.begin(), inputs_.end(),
+      [](const auto& x) {
+        return std::visit(
+            [](const auto& x) {
+              return x.is_pullable() || x.suggest_emit_tp().get().has_value();
+            },
+            x);
+      });
+}
+
+auto vector_merger_pipe::front()
+-> transport_type {
+  transport_type result = pull();
+  assert(result.has_value() || result.errc() != objpipe_errc::success);
+  pending_pop_ = true;
+  return result;
+}
+
+auto vector_merger_pipe::pop_front()
+-> objpipe_errc {
+  if (!pending_pop_) return pull().errc();
+
+  pending_pop_ = false;
+  return objpipe_errc::success;
+}
+
+auto vector_merger_pipe::pull(bool block)
+-> transport_type {
+  assert(!pending_pop_);
+
+  if (inputs_.empty())
+    return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+
+  for (;;) {
+    // Compute minimum time point.
+    // If all of the inputs fails to supply a time point,
+    // we're an empty objpipe.
+    time_point tp;
+    {
+      time_point_selector selector;
+      std::for_each(
+          inputs_.begin(), inputs_.end(),
+          [&selector, block](auto& x) {
+            time_point_selector input_selector = std::visit(
+                [block](auto& x) {
+                  time_point_selector input_selector = x.suggest_emit_tp();
+                  if (!input_selector.factual.has_value()) {
+                    x.read_more(block);
+                    input_selector = x.suggest_emit_tp();
+                  }
+                  return input_selector;
+                },
+                x);
+
+            selector = tps_min(selector, input_selector);
+          });
+      if (!selector.get().has_value()) {
+        if (block
+            || std::none_of(
+                inputs_.begin(),
+                inputs_.end(),
+                [](const auto& x) {
+                  return std::visit(
+                      [](const auto& x) {
+                        return x.is_pullable();
+                      },
+                      x);
+                }))
+          return transport_type(std::in_place_index<1>, objpipe_errc::closed);
+        else
+          return transport_type(std::in_place_index<1>, objpipe_errc::success);
+      }
+
+      tp = *selector.get();
+    }
+
+    // Create argument set for function invocation.
+    // Also fill in result.is_fact, which is true iff all of the values are a fact.
+    args_vector args;
+    args.reserve(inputs_.size());
+    bool is_fact = true;
+    merger_apply_vector::map_type::size_type bucket_count = 1;
+    std::for_each(
+        inputs_.begin(),
+        inputs_.end(),
+        [&](auto& x) {
+            std::visit(
+                overload(
+                    [&is_fact, tp, &args, this](pull_cycle<scalar_objpipe>& x) {
+                      scalar s = x.get(tp, tp - slack_, tp + slack_);
+                      is_fact &= s.is_fact;
+                      if (s.value.has_value())
+                        args.push_back(std::move(*s.value));
+                    },
+                    [&bucket_count, &is_fact, tp, &args, this](pull_cycle<vector_objpipe>& x) {
+                      tagged_vector s = x.get(tp, tp - slack_, tp + slack_);
+                      is_fact &= s.is_fact;
+                      bucket_count = std::max(bucket_count, s.values.bucket_count());
+                      args.push_back(std::move(s.values));
+                    }),
+                x);
+        });
+
+    merger_apply_vector result(bucket_count, out_mc_, out_mc_, is_fact);
+
+    // Invoke computation.
+    // Note that if any of the metric values is absent,
+    // the computation is skipped and an absent value is placed
+    // instead.
+    // (We detect this using the observation that the argument set is
+    // shorter than the input set.)
+    if (args.size() == inputs_.size()) apply_(result.values, std::move(args));
+
+    if (result.is_fact) {
+      // Drop everything at/before tp.
+      std::for_each(
+          inputs_.begin(),
+          inputs_.end(),
+          [tp, this](auto& x) {
+            std::visit(
+                [&](auto& x) {
+                  x.forward_to_time(tp, tp - slack_);
+                },
+                x);
+          });
+    } else {
+      // Mark time point as emitted.
+      std::for_each(
+          inputs_.begin(),
+          inputs_.end(),
+          [tp](auto& x) {
+            std::visit(
+                [&](auto& x) {
+                  x.mark_emitted(tp);
+                },
+                x);
+          });
+    }
+
+    return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+  }
+}
+
+auto vector_merger_pipe::try_pull()
+-> transport_type {
+  return pull(false);
+}
+
+auto vector_merger_pipe::apply_(
+    merger_apply_vector::map_type& result,
+    const std::optional<tags>& tag_set,
+    std::vector<metric_value>& fn_args,
+    std::vector<metric_value>::iterator out_iter,
+    [[maybe_unused]] const args_vector& args,
+    args_vector::const_iterator in_iter)
+-> void {
+  // Equal position assertion.
+  assert((out_iter == fn_args.end()) == (in_iter == args.end()));
+
+  // Sentinel operation.
+  if (out_iter == fn_args.end()) {
+    assert(tag_set.has_value());
+
+    // Add computed value to result set.
+    merger_apply_vector::map_type::iterator pos;
+    bool is_new_value;
+    std::tie(pos, is_new_value) = result.emplace(*tag_set, fn_(fn_args));
+
+    // Invalidate collisions by setting them to empty.
+    if (!is_new_value) pos->second = metric_value();
+    return;
   }
 
-  std::optional<time_point> y_tp = y_.suggest_emit_tp();
-  if (!y_tp.has_value()) {
-    y_.read_more(false);
-    y_tp = y_.suggest_emit_tp();
-  }
+  // Recurse, with current values filled in.
+  std::visit(
+      overload(
+          [&](const metric_value& v) {
+            *out_iter = v;
+            ++out_iter;
+            ++in_iter;
 
-  if (!x_tp.has_value() || !y_tp.has_value()) {
-    if (!x_.is_pullable() && !y_.is_pullable())
-      return transport_type(std::in_place_index<1>, objpipe_errc::closed);
-    else
-      return transport_type(std::in_place_index<1>, objpipe_errc::success);
-  }
+            apply_(
+                result,
+                tag_set,
+                fn_args,
+                std::move(out_iter),
+                args,
+                std::move(in_iter));
+          },
+          [&](const tagged_vector::map_type& m) {
+            if (tag_set.has_value()) {
+              auto elem_iter = m.find(*tag_set);
+              if (elem_iter == m.end()) return;
+              *out_iter = elem_iter->second;
+              ++out_iter;
+              ++in_iter;
 
-  const time_point tp = std::min(*x_tp, *y_tp);
-  auto result = merger_apply(
-      fn_,
-      x_.get(tp, tp - slack_, tp + slack_),
-      y_.get(tp, tp - slack_, tp + slack_),
-      out_mc_);
-  if (result.is_fact) { // Factual emit
-    x_.forward_to_time(tp, tp - slack_);
-    y_.forward_to_time(tp, tp - slack_);
-  }
+              apply_(
+                  result,
+                  mc_->reduce(*tag_set, elem_iter->first),
+                  fn_args,
+                  std::move(out_iter),
+                  args,
+                  std::move(in_iter));
+            } else {
+              std::for_each(
+                  m.begin(),
+                  m.end(),
+                  [&, in_iter, out_iter](const auto& pair) {
+                    tags next_tag_set = (tag_set.has_value()
+                        ? mc_->reduce(*tag_set, pair.first)
+                        : pair.first);
+                    *out_iter = pair.second;
 
-  x_.mark_emitted(tp);
-  y_.mark_emitted(tp);
-  return transport_type(std::in_place_index<0>, std::move(result).as_emit(tp));
+                    apply_(
+                        result,
+                        pair.first,
+                        fn_args,
+                        std::next(out_iter),
+                        args,
+                        std::next(in_iter));
+                  });
+            }
+          }),
+      *in_iter);
+}
+
+auto vector_merger_pipe::apply_(
+    merger_apply_vector::map_type& out,
+    args_vector&& args)
+-> void {
+  std::vector<metric_value> fn_args;
+  fn_args.resize(args.size());
+
+  apply_(out, {}, fn_args, fn_args.begin(), args, args.begin());
+}
+
+
+auto wrap_fn_(metric_value(*fn)(const metric_value&, const metric_value&)) ->
+std::function<metric_value(const std::vector<metric_value>&)> {
+  return [fn](const std::vector<metric_value>& args) {
+    assert(args.size() == 2);
+    return std::invoke(fn, args[0], args[1]);
+  };
 }
 
 
@@ -1507,19 +1783,23 @@ auto pair_merger_pipe<PipeX, PipeY, Fn>::try_pull()
 
 
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
-    std::shared_ptr<const match_clause> mc,
-    std::shared_ptr<const match_clause> out_mc,
+    [[maybe_unused]] std::shared_ptr<const match_clause> mc,
+    [[maybe_unused]] std::shared_ptr<const match_clause> out_mc,
     time_point::duration slack,
     expression::scalar_objpipe&& x,
     expression::scalar_objpipe&& y)
 -> expression::scalar_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::scalar_objpipe,
-      expression::scalar_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<expression::scalar_objpipe> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
-      .iterate();
+  return objpipe::detail::adapter(scalar_merger_pipe(std::move(args), slack, wrap_fn_(fn)))
+      .filter(
+          [](const std::optional<expression::scalar_emit_type>& opt) {
+            return opt.has_value();
+          })
+      .deref();
 }
 
 auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
@@ -1529,12 +1809,12 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     expression::vector_objpipe&& x,
     expression::scalar_objpipe&& y)
 -> expression::vector_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::vector_objpipe,
-      expression::scalar_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(args), mc, out_mc, slack, wrap_fn_(fn)))
       .iterate();
 }
 
@@ -1545,12 +1825,12 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     expression::scalar_objpipe&& x,
     expression::vector_objpipe&& y)
 -> expression::vector_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::scalar_objpipe,
-      expression::vector_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(args), mc, out_mc, slack, wrap_fn_(fn)))
       .iterate();
 }
 
@@ -1561,12 +1841,12 @@ auto make_merger(metric_value(*fn)(const metric_value&, const metric_value&),
     expression::vector_objpipe&& x,
     expression::vector_objpipe&& y)
 -> expression::vector_objpipe {
-  using impl_type = pair_merger_pipe<
-      expression::vector_objpipe,
-      expression::vector_objpipe,
-      metric_value(*)(const metric_value&, const metric_value&)>;
+  std::vector<std::variant<expression::scalar_objpipe, expression::vector_objpipe>> args;
+  args.reserve(2);
+  args.push_back(std::move(x));
+  args.push_back(std::move(y));
 
-  return objpipe::detail::adapter(impl_type(std::move(x), std::move(y), mc, out_mc, slack, fn))
+  return objpipe::detail::adapter(vector_merger_pipe(std::move(args), mc, out_mc, slack, wrap_fn_(fn)))
       .iterate();
 }
 
