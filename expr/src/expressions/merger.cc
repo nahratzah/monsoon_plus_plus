@@ -2009,32 +2009,6 @@ auto pull_cycle<Pipe>::forward_to_time(time_point tp, time_point expire_before)
 }
 
 
-template<typename Pipe>
-auto create_sink_for()
--> std::enable_if_t<
-    std::is_same_v<expression::scalar_emit_type, typename Pipe::value_type>,
-    scalar_sink> {
-  return scalar_sink();
-}
-
-template<typename Pipe>
-auto create_sink_for([[maybe_unused]] const std::shared_ptr<const match_clause>& mc)
--> std::enable_if_t<
-    std::is_same_v<expression::scalar_emit_type, typename Pipe::value_type>,
-    scalar_sink> {
-  return create_sink_for<Pipe>();
-}
-
-template<typename Pipe>
-auto create_sink_for(std::shared_ptr<const match_clause> mc)
--> std::enable_if_t<
-    std::is_same_v<expression::vector_emit_type, typename Pipe::value_type>,
-    vector_sink> {
-  assert(mc != nullptr);
-  return vector_sink(std::move(mc));
-}
-
-
 scalar_merger_pipe::scalar_merger_pipe(
     std::vector<scalar_objpipe>&& inputs,
     time_point::duration slack,
@@ -2048,7 +2022,7 @@ scalar_merger_pipe::scalar_merger_pipe(
       std::make_move_iterator(inputs.end()),
       std::back_inserter(inputs_),
       [](scalar_objpipe&& pipe) {
-        return pull_cycle<scalar_objpipe>(std::move(pipe), create_sink_for<scalar_objpipe>());
+        return pull_cycle<scalar_objpipe>(std::move(pipe), scalar_sink());
       });
 }
 
@@ -2145,10 +2119,10 @@ vector_merger_pipe::vector_merger_pipe(
         return std::visit(
             overload(
                 [](scalar_objpipe&& pipe) -> input_type {
-                  return pull_cycle<scalar_objpipe>(std::move(pipe), create_sink_for<scalar_objpipe>());
+                  return pull_cycle<scalar_objpipe>(std::move(pipe), scalar_sink());
                 },
                 [this](vector_objpipe&& pipe) -> input_type {
-                  return pull_cycle<vector_objpipe>(std::move(pipe), create_sink_for<vector_objpipe>(mc_));
+                  return pull_cycle<vector_objpipe>(std::move(pipe), vector_sink(mc_));
                 }),
             std::move(pipe));
       });
