@@ -720,10 +720,6 @@ class push_cycle
     : ptr_(std::move(ptr))
     {}
 
-    ~acceptor() noexcept {
-      if (ptr_ != nullptr) ptr_->close_();
-    }
-
     template<typename T>
     auto operator()(T&& next)
     -> std::enable_if_t<
@@ -786,28 +782,11 @@ class push_cycle
         .ioc_push(policy, acceptor(std::shared_ptr<push_cycle>(owner, this)));
   }
 
-  auto get(time_point tp, time_point min_interp_tp, time_point max_interp_tp) const {
-    return this->sink_type::get(tp, min_interp_tp, max_interp_tp, acceptor_closed_);
-  }
-
  private:
   auto mtx_() const
   noexcept
   -> std::mutex& {
     return merger_impl_.mtx;
-  }
-
-  auto close_()
-  noexcept
-  -> void {
-    try {
-      std::unique_lock<std::mutex> lck{ mtx_() };
-      assert(!acceptor_closed_);
-      acceptor_closed_ = true;
-      maybe_emit_(lck);
-    } catch (...) {
-      push_exception_(std::current_exception());
-    }
   }
 
   auto push_exception_(std::exception_ptr exptr)
@@ -829,7 +808,6 @@ class push_cycle
   sink_type sink_;
   time_point_selector next_tp_;
   MergerImpl& merger_impl_;
-  bool acceptor_closed_ = false;
 };
 
 
@@ -853,6 +831,15 @@ class scalar_merger_push
   {}
 
   scalar_merger_push(scalar_merger_push&&) = delete;
+
+  ~scalar_merger_push() noexcept {
+    try {
+      std::unique_lock<std::mutex> lck{ mtx };
+      maybe_emit(lck, true);
+    } catch (...) {
+      acceptor_.push_exception(std::current_exception());
+    }
+  }
 
   auto start(std::vector<scalar_objpipe>&& inputs, const objpipe::existingthread_push& policy)
   -> void {
@@ -894,9 +881,11 @@ class scalar_merger_push
     return closed_;
   }
 
-  auto maybe_emit([[maybe_unused]] const std::unique_lock<std::mutex>& lck)
+  auto maybe_emit([[maybe_unused]] const std::unique_lock<std::mutex>& lck, bool closed = false)
   -> void {
-    for (;;) {
+    assert(lck.owns_lock() && lck.mutex() == &mtx);
+
+    while (!this->closed_) {
       // Compute minimum time point.
       // If all of the inputs fail to supply a time point,
       // we're in need of more data.
@@ -923,8 +912,8 @@ class scalar_merger_push
       std::for_each(
           inputs_.begin(),
           inputs_.end(),
-          [&result, tp, &args, this](push_cycle<scalar_objpipe, scalar_merger_push>& x) {
-            scalar s = x.get(tp, tp - slack_, tp + slack_);
+          [&result, tp, &args, this, closed](push_cycle<scalar_objpipe, scalar_merger_push>& x) {
+            scalar s = x.get(tp, tp - slack_, tp + slack_, closed);
             result.is_fact &= s.is_fact;
             if (s.value.has_value())
               args.push_back(std::move(*s.value));
@@ -956,7 +945,8 @@ class scalar_merger_push
             });
       }
 
-      acceptor_(std::move(result).as_emit(tp));
+      objpipe::objpipe_errc e = acceptor_(std::move(result).as_emit(tp));
+      if (e != objpipe::objpipe_errc::success) closed_ = true;
     }
   }
 
