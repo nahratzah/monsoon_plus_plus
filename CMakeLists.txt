@@ -90,6 +90,11 @@ if(NOT objpipe_DIR)
   add_subdirectory(contrib/objpipe)
 endif()
 
+find_package(instrumentation)
+if(NOT instrumentation_DIR)
+  add_subdirectory(contrib/instrumentation)
+endif()
+
 # Add module directories.
 add_subdirectory (lib)
 add_subdirectory (intf)

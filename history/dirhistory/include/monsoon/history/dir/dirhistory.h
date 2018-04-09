@@ -3,6 +3,7 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/history/collect_history.h>
+#include <instrumentation/gauge.h>
 #include <vector>
 #include <memory>
 
@@ -60,6 +61,8 @@ class monsoon_dirhistory_export_ dirhistory
   std::vector<std::shared_ptr<tsdata>> files_;
   std::shared_ptr<tsdata> write_file_; // May be null.
   const bool writable_;
+
+  instrumentation::gauge<std::int64_t> file_count_;
 };
 
 

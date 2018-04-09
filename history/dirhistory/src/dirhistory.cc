@@ -18,6 +18,7 @@
 #include <vector>
 #include <list>
 #include <monsoon/history/collect_history.h>
+#include <monsoon/history/instrumentation.h>
 #include <monsoon/history/dir/tsdata.h>
 #include <monsoon/interpolate.h>
 #include <objpipe/callback.h>
@@ -718,7 +719,11 @@ auto interpolation_based_emit(
 
 dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
 : dir_(std::move(dir)),
-  writable_(open_for_write)
+  writable_(open_for_write),
+  file_count_("files",
+      [this]() { return files_.size(); },
+      monsoon::history_instrumentation,
+      instrumentation::tags().with("path", this->dir_.native()))
 {
   using filesystem::perms;
 

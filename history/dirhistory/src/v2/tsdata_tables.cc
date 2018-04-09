@@ -16,10 +16,20 @@
 #include <queue>
 #include <objpipe/callback.h>
 #include <objpipe/merge.h>
+#include <monsoon/history/instrumentation.h>
+#include <instrumentation/timing_accumulate.h>
+#include <instrumentation/timing.h>
+#include <instrumentation/time_track.h>
+#include <instrumentation/group.h>
+#include <instrumentation/counter.h>
+#include <string_view>
 
 namespace monsoon {
 namespace history {
 namespace v2 {
+
+
+using namespace std::string_view_literals;
 
 
 tsdata_v2_tables::tsdata_v2_tables(file_segment<file_data_tables>&& data,
@@ -112,11 +122,38 @@ void tsdata_v2_tables::push_back(const time_series&) {
 namespace {
 
 
+instrumentation::timing_accumulate tsdata_v2_tables_decode_timing(
+    "decode",
+    monsoon::history_instrumentation,
+    instrumentation::tags()
+        .with("file_type", "tsdata_v2"sv)
+        .with("operation", "column_read"sv));
+instrumentation::timing_accumulate tsdata_v2_tables_less_timing(
+    "decode",
+    monsoon::history_instrumentation,
+    instrumentation::tags()
+        .with("file_type", "tsdata_v2"sv)
+        .with("operation", "compare"sv));
+instrumentation::timing_accumulate tsdata_v2_tables_merge_timing(
+    "decode",
+    monsoon::history_instrumentation,
+    instrumentation::tags()
+        .with("file_type", "tsdata_v2"sv)
+        .with("operation", "merge"sv));
+instrumentation::timing tsdata_v2_tables_new_objpipe_timing(
+    "decode",
+    monsoon::history_instrumentation,
+    instrumentation::tags()
+        .with("file_type", "tsdata_v2"sv)
+        .with("operation", "new_objpipe"sv));
+
 auto emit_type_less = [](const tsdata_v2_tables::emit_type& x, const tsdata_v2_tables::emit_type& y) noexcept -> bool {
+  instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_less_timing };
   return std::get<0>(x) < std::get<0>(y); // Compare time points.
 };
 
 auto emit_type_merge = [](tsdata_v2_tables::emit_type&& x, tsdata_v2_tables::emit_type&& y) -> tsdata_v2_tables::emit_type&& {
+  instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_merge_timing };
 #if __cplusplus >= 201703
   std::get<1>(x).merge(std::get<1>(y));
 #else
@@ -137,6 +174,7 @@ auto emit_fdtblock_pipe(
 
   return objpipe::new_callback<emit_type>(
       [=](auto cb) {
+        instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_decode_timing };
         auto tp_iter = time_points_ptr->begin();
         auto mv_iter = mv_column_ptr->begin();
 
@@ -154,7 +192,7 @@ auto emit_fdtblock_pipe(
                 std::piecewise_construct,
                 std::forward_as_tuple(group_name_ptr, metric_name_ptr),
                 std::forward_as_tuple(**mv_iter));
-            cb(emit_type(*tp_iter, std::move(map)));
+            tt.do_untracked(cb, emit_type(*tp_iter, std::move(map)));
           }
         }
       });
@@ -232,6 +270,9 @@ auto tsdata_v2_tables::emit(
     const path_matcher& metric_filter)
     const
 -> objpipe::reader<emit_type> {
+  static instrumentation::group metric_grp("tsdata_v2_tables", monsoon::history_instrumentation);
+
+  instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_new_objpipe_timing };
   const std::shared_ptr<const file_data_tables> file_data_tables =
       data_.get();
 
@@ -245,14 +286,20 @@ auto tsdata_v2_tables::emit(
       });
 
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
+    static instrumentation::counter stat("emit", metric_grp, instrumentation::tags().with("style", "linear"sv));
+    ++stat;
     return block_chain.iterate();
   } else { // Parallel iteration of blocks.
     if (is_distinct()) { // Merge only.
+      static instrumentation::counter stat("emit", metric_grp, instrumentation::tags().with("style", "distinct_merge"sv));
+      ++stat;
       return objpipe::merge(
           block_chain.begin(),
           block_chain.end(),
           emit_type_less);
     } else {
+      static instrumentation::counter stat("emit", metric_grp, instrumentation::tags().with("style", "full_merge"sv));
+      ++stat;
       return objpipe::merge_combine(
           block_chain.begin(),
           block_chain.end(),
