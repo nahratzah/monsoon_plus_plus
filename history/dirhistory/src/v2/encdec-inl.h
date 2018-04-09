@@ -151,11 +151,11 @@ auto dictionary<T, H>::operator=(dictionary&& other)
 template<typename T, typename H>
 std::uint32_t dictionary<T, H>::encode(view_type v) {
   if constexpr(std::is_same_v<std::string, T>) {
-    auto ptr = encode_map_.get().find(std::string(v.begin(), v.end()));
-    if (ptr != encode_map_.get().end()) return ptr->second;
+    auto ptr = encode_map_->find(std::string(v.begin(), v.end()));
+    if (ptr != encode_map_->end()) return ptr->second;
   } else {
-    auto ptr = encode_map_.get().find(v);
-    if (ptr != encode_map_.get().end()) return ptr->second;
+    auto ptr = encode_map_->find(v);
+    if (ptr != encode_map_->end()) return ptr->second;
   }
 
   if (decode_map_.size() > 0xffffffffu)
@@ -168,9 +168,9 @@ std::uint32_t dictionary<T, H>::encode(view_type v) {
     decode_map_.push_back(v);
   try {
     if constexpr(std::is_same_v<std::string, T>)
-      encode_map_.get().emplace(std::string(v.begin(), v.end()), new_idx);
+      encode_map_->emplace(std::string(v.begin(), v.end()), new_idx);
     else
-      encode_map_.get().emplace(v, new_idx);
+      encode_map_->emplace(v, new_idx);
   } catch (...) {
     decode_map_.pop_back();
     throw;
@@ -280,8 +280,8 @@ std::uint32_t dictionary<std::vector<std::string>, H>::encode(const std::vector<
         });
   }
 
-  auto ptr = encode_map_.get().find(v);
-  if (ptr != encode_map_.get().end()) return ptr->second;
+  auto ptr = encode_map_->find(v);
+  if (ptr != encode_map_->end()) return ptr->second;
 
   if (decode_map_.size() > 0xffffffffu)
     throw xdr::xdr_exception("dictionary too large");
@@ -289,7 +289,7 @@ std::uint32_t dictionary<std::vector<std::string>, H>::encode(const std::vector<
 
   decode_map_.push_back(v);
   try {
-    encode_map_.get().emplace(std::move(v), new_idx);
+    encode_map_->emplace(std::move(v), new_idx);
   } catch (...) {
     decode_map_.pop_back();
     throw;
