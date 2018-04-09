@@ -12,6 +12,7 @@ install (FILES
   include/monsoon/lib_export_.h
   include/monsoon/hash_support.h
   include/monsoon/overload.h
+  include/monsoon/memoid.h
   DESTINATION include/monsoon)
 
 add_subdirectory (misc)

@@ -113,22 +113,38 @@ void file_segment<T>::update_addr(file_segment_ptr ptr) noexcept {
 template<typename T, typename H>
 dictionary<T, H>::dictionary()
 : decode_map_(),
-  encode_map_(create_encode_map_future_(*this))
+  encode_map_(create_encode_map_future_())
 {}
 
 template<typename T, typename H>
 dictionary<T, H>::dictionary(const dictionary& other)
 : decode_map_(other.decode_map_),
-  encode_map_(create_encode_map_future_(*this)),
+  encode_map_(create_encode_map_future_()),
   update_start_(other.update_start_)
+{}
+
+template<typename T, typename H>
+dictionary<T, H>::dictionary(dictionary&& other)
+: decode_map_(std::move(other.decode_map_)),
+  encode_map_(create_encode_map_future_()),
+  update_start_(std::move(other.update_start_))
 {}
 
 template<typename T, typename H>
 auto dictionary<T, H>::operator=(const dictionary& other)
 -> dictionary& {
   decode_map_ = other.decode_map_;
-  encode_map_ = create_encode_map_future_(*this);
+  encode_map_.reset();
   update_start_ = other.update_start_;
+  return *this;
+}
+
+template<typename T, typename H>
+auto dictionary<T, H>::operator=(dictionary&& other)
+-> dictionary& {
+  decode_map_ = std::move(other.decode_map_);
+  encode_map_.reset();
+  update_start_ = std::move(other.update_start_);
   return *this;
 }
 
@@ -172,8 +188,7 @@ auto dictionary<T, H>::decode(std::uint32_t idx) const -> view_type {
 template<typename T, typename H>
 template<typename SerFn>
 void dictionary<T, H>::decode_update(xdr::xdr_istream& in, SerFn fn) {
-  if (encode_map_.wait_for(std::chrono::seconds(0)) != std::future_status::deferred)
-    encode_map_ = create_encode_map_future_(*this);
+  encode_map_.reset();
 
   const std::uint32_t offset = in.get_uint32();
   if (offset != decode_map_.size())
@@ -202,44 +217,53 @@ bool dictionary<T, H>::update_pending() const noexcept {
 }
 
 template<typename T, typename H>
-auto dictionary<T, H>::create_encode_map_future_(const dictionary& self)
--> std::future<std::unordered_map<T, std::uint32_t, H>> {
-  // We may not capture self, because of the move constructor, but
-  // capturing the iterators is safe, since move won't invalidate them.
-  auto b = self.decode_map_.begin();
-  auto e = self.decode_map_.end();
-
-  return std::async(
-      std::launch::deferred,
-      [b, e]() mutable {
-        std::unordered_map<T, std::uint32_t, H> result;
-        typename std::vector<T>::size_type idx = 0;
-        while (b != e)
-          result.emplace(*b++, idx++);
-        return result;
-      });
+auto dictionary<T, H>::create_encode_map_future_()
+-> std::function<std::unordered_map<T, std::uint32_t, H>()> {
+  return [this]() {
+    std::unordered_map<T, std::uint32_t, H> result;
+    typename std::vector<T>::size_type idx = 0;
+    for (const auto& e : decode_map_)
+      result.emplace(e, idx++);
+    return result;
+  };
 }
 
 
 template<typename H>
 dictionary<std::vector<std::string>, H>::dictionary()
 : decode_map_(),
-  encode_map_(create_encode_map_future_(*this))
+  encode_map_(create_encode_map_future_())
 {}
 
 template<typename H>
 dictionary<std::vector<std::string>, H>::dictionary(const dictionary& other)
 : decode_map_(other.decode_map_),
-  encode_map_(create_encode_map_future_(*this)),
+  encode_map_(create_encode_map_future_()),
   update_start_(other.update_start_)
+{}
+
+template<typename H>
+dictionary<std::vector<std::string>, H>::dictionary(dictionary&& other)
+: decode_map_(std::move(other.decode_map_)),
+  encode_map_(create_encode_map_future_()),
+  update_start_(std::move(other.update_start_))
 {}
 
 template<typename H>
 auto dictionary<std::vector<std::string>, H>::operator=(const dictionary& other)
 -> dictionary& {
   decode_map_ = other.decode_map_;
-  encode_map_ = create_encode_map_future_(*this);
+  encode_map_.reset();
   update_start_ = other.update_start_;
+  return *this;
+}
+
+template<typename H>
+auto dictionary<std::vector<std::string>, H>::operator=(dictionary&& other)
+-> dictionary& {
+  decode_map_ = std::move(other.decode_map_);
+  encode_map_.reset();
+  update_start_ = std::move(other.update_start_);
   return *this;
 }
 
@@ -283,8 +307,7 @@ auto dictionary<std::vector<std::string>, H>::decode(std::uint32_t idx) const ->
 template<typename H>
 template<typename SerFn>
 void dictionary<std::vector<std::string>, H>::decode_update(xdr::xdr_istream& in, SerFn fn) {
-  if (encode_map_.wait_for(std::chrono::seconds(0)) != std::future_status::deferred)
-    encode_map_ = create_encode_map_future_(*this);
+  encode_map_.reset();
 
   const std::uint32_t offset = in.get_uint32();
   if (offset != decode_map_.size())
@@ -313,22 +336,15 @@ bool dictionary<std::vector<std::string>, H>::update_pending() const noexcept {
 }
 
 template<typename H>
-auto dictionary<std::vector<std::string>, H>::create_encode_map_future_(const dictionary& self)
--> std::future<std::unordered_map<std::vector<std::string>, std::uint32_t, H>> {
-  // We may not capture self, because of the move constructor, but
-  // capturing the iterators is safe, since move won't invalidate them.
-  auto b = self.decode_map_.begin();
-  auto e = self.decode_map_.end();
-
-  return std::async(
-      std::launch::deferred,
-      [b, e]() mutable {
-        std::unordered_map<std::vector<std::string>, std::uint32_t, H> result;
-        std::vector<std::vector<std::string>>::size_type idx = 0;
-        while (b != e)
-          result.emplace(*b++, idx++);
-        return result;
-      });
+auto dictionary<std::vector<std::string>, H>::create_encode_map_future_()
+-> std::function<std::unordered_map<std::vector<std::string>, std::uint32_t, H>()> {
+  return [this]() {
+    std::unordered_map<std::vector<std::string>, std::uint32_t, H> result;
+    std::vector<std::vector<std::string>>::size_type idx = 0;
+    for (const auto& e : decode_map_)
+      result.emplace(e, idx++);
+    return result;
+  };
 }
 
 

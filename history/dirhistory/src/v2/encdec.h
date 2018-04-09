@@ -6,6 +6,7 @@
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/time_point.h>
+#include <monsoon/memoid.h>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -22,7 +23,6 @@
 #include <monsoon/io/stream.h>
 #include <mutex>
 #include <memory>
-#include <future>
 
 namespace monsoon {
 namespace history {
@@ -179,10 +179,10 @@ class monsoon_dirhistory_local_ dictionary {
 
  public:
   dictionary();
-  dictionary(dictionary&&) noexcept = default;
+  dictionary(dictionary&&);
   dictionary(const dictionary& other);
 
-  dictionary& operator=(dictionary&& other) noexcept = default;
+  dictionary& operator=(dictionary&& other);
   dictionary& operator=(const dictionary& other);
 
   std::uint32_t encode(view_type);
@@ -196,10 +196,10 @@ class monsoon_dirhistory_local_ dictionary {
   bool update_pending() const noexcept;
 
  private:
-  static auto create_encode_map_future_(const dictionary& self) -> std::future<std::unordered_map<T, std::uint32_t, Hasher>>;
+  auto create_encode_map_future_() -> std::function<std::unordered_map<T, std::uint32_t, Hasher>()>;
 
   std::vector<T> decode_map_;
-  std::future<std::unordered_map<T, std::uint32_t, Hasher>> encode_map_;
+  monsoon::memoid<std::unordered_map<T, std::uint32_t, Hasher>> encode_map_;
   std::uint32_t update_start_ = 0;
 };
 
@@ -207,10 +207,10 @@ template<typename Hasher>
 class monsoon_dirhistory_local_ dictionary<std::vector<std::string>, Hasher> {
  public:
   dictionary();
-  dictionary(dictionary&&) noexcept = default;
+  dictionary(dictionary&&);
   dictionary(const dictionary& other);
 
-  dictionary& operator=(dictionary&& other) noexcept = default;
+  dictionary& operator=(dictionary&& other);
   dictionary& operator=(const dictionary& other);
 
   template<typename T, typename Alloc>
@@ -225,10 +225,10 @@ class monsoon_dirhistory_local_ dictionary<std::vector<std::string>, Hasher> {
   bool update_pending() const noexcept;
 
  private:
-  static auto create_encode_map_future_(const dictionary& self) -> std::future<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>>;
+  auto create_encode_map_future_() -> std::function<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>()>;
 
   std::vector<std::vector<std::string>> decode_map_;
-  std::future<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>> encode_map_;
+  monsoon::memoid<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>> encode_map_;
   std::uint32_t update_start_ = 0;
 };
 
