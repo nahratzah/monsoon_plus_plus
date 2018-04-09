@@ -257,7 +257,7 @@ inline auto xdr_istream::get_collection(SerFn fn, C& c) -> C& {
   std::uint32_t len = get_uint32();
   if constexpr(can_reserve<C>)
     c.reserve(c.size() + len);
-  return get_collection_n(len, std::move(fn), std::forward<C>(c));
+  return get_collection_n(len, std::move(fn), c);
 }
 
 template<typename SerFn, typename Acceptor>
