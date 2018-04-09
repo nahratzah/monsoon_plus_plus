@@ -22,6 +22,7 @@
 #include <monsoon/io/stream.h>
 #include <mutex>
 #include <memory>
+#include <future>
 
 namespace monsoon {
 namespace history {
@@ -177,6 +178,13 @@ class monsoon_dirhistory_local_ dictionary {
         const T&>;
 
  public:
+  dictionary();
+  dictionary(dictionary&&) noexcept = default;
+  dictionary(const dictionary& other);
+
+  dictionary& operator=(dictionary&& other) noexcept = default;
+  dictionary& operator=(const dictionary& other);
+
   std::uint32_t encode(view_type);
   view_type decode(std::uint32_t) const;
 
@@ -188,14 +196,23 @@ class monsoon_dirhistory_local_ dictionary {
   bool update_pending() const noexcept;
 
  private:
+  static auto create_encode_map_future_(const dictionary& self) -> std::future<std::unordered_map<T, std::uint32_t, Hasher>>;
+
   std::vector<T> decode_map_;
-  std::unordered_map<T, std::uint32_t, Hasher> encode_map_;
+  std::future<std::unordered_map<T, std::uint32_t, Hasher>> encode_map_;
   std::uint32_t update_start_ = 0;
 };
 
 template<typename Hasher>
 class monsoon_dirhistory_local_ dictionary<std::vector<std::string>, Hasher> {
  public:
+  dictionary();
+  dictionary(dictionary&&) noexcept = default;
+  dictionary(const dictionary& other);
+
+  dictionary& operator=(dictionary&& other) noexcept = default;
+  dictionary& operator=(const dictionary& other);
+
   template<typename T, typename Alloc>
   std::uint32_t encode(const std::vector<T, Alloc>&);
   const std::vector<std::string>& decode(std::uint32_t) const;
@@ -208,8 +225,10 @@ class monsoon_dirhistory_local_ dictionary<std::vector<std::string>, Hasher> {
   bool update_pending() const noexcept;
 
  private:
+  static auto create_encode_map_future_(const dictionary& self) -> std::future<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>>;
+
   std::vector<std::vector<std::string>> decode_map_;
-  std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher> encode_map_;
+  std::future<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>> encode_map_;
   std::uint32_t update_start_ = 0;
 };
 

@@ -111,13 +111,35 @@ void file_segment<T>::update_addr(file_segment_ptr ptr) noexcept {
 
 
 template<typename T, typename H>
+dictionary<T, H>::dictionary()
+: decode_map_(),
+  encode_map_(create_encode_map_future_(*this))
+{}
+
+template<typename T, typename H>
+dictionary<T, H>::dictionary(const dictionary& other)
+: decode_map_(other.decode_map_),
+  encode_map_(create_encode_map_future_(*this)),
+  update_start_(other.update_start_)
+{}
+
+template<typename T, typename H>
+auto dictionary<T, H>::operator=(const dictionary& other)
+-> dictionary& {
+  decode_map_ = other.decode_map_;
+  encode_map_ = create_encode_map_future_(*this);
+  update_start_ = other.update_start_;
+  return *this;
+}
+
+template<typename T, typename H>
 std::uint32_t dictionary<T, H>::encode(view_type v) {
   if constexpr(std::is_same_v<std::string, T>) {
-    auto ptr = encode_map_.find(std::string(v.begin(), v.end()));
-    if (ptr != encode_map_.end()) return ptr->second;
+    auto ptr = encode_map_.get().find(std::string(v.begin(), v.end()));
+    if (ptr != encode_map_.get().end()) return ptr->second;
   } else {
-    auto ptr = encode_map_.find(v);
-    if (ptr != encode_map_.end()) return ptr->second;
+    auto ptr = encode_map_.get().find(v);
+    if (ptr != encode_map_.get().end()) return ptr->second;
   }
 
   if (decode_map_.size() > 0xffffffffu)
@@ -130,9 +152,9 @@ std::uint32_t dictionary<T, H>::encode(view_type v) {
     decode_map_.push_back(v);
   try {
     if constexpr(std::is_same_v<std::string, T>)
-      encode_map_.emplace(std::string(v.begin(), v.end()), new_idx);
+      encode_map_.get().emplace(std::string(v.begin(), v.end()), new_idx);
     else
-      encode_map_.emplace(v, new_idx);
+      encode_map_.get().emplace(v, new_idx);
   } catch (...) {
     decode_map_.pop_back();
     throw;
@@ -150,25 +172,16 @@ auto dictionary<T, H>::decode(std::uint32_t idx) const -> view_type {
 template<typename T, typename H>
 template<typename SerFn>
 void dictionary<T, H>::decode_update(xdr::xdr_istream& in, SerFn fn) {
+  if (encode_map_.wait_for(std::chrono::seconds(0)) != std::future_status::deferred)
+    encode_map_ = create_encode_map_future_(*this);
+
   const std::uint32_t offset = in.get_uint32();
   if (offset != decode_map_.size())
     throw xdr::xdr_exception("dictionary updates must be contiguous");
 
-  in.accept_collection(
-      fn,
-      [this, &offset](const T& v) {
-        auto idx = decode_map_.size();
-        if (idx > 0xffffffffu)
-          throw xdr::xdr_exception("dictionary too large");
-
-        decode_map_.push_back(v);
-        try {
-          encode_map_.emplace(v, idx);
-        } catch (...) {
-          decode_map_.pop_back();
-          throw;
-        }
-      });
+  in.get_collection(fn, decode_map_);
+  if (decode_map_.size() > 0xffffffffu)
+    throw xdr::xdr_exception("dictionary too large");
   update_start_ = decode_map_.size();
 }
 
@@ -188,6 +201,47 @@ bool dictionary<T, H>::update_pending() const noexcept {
   return update_start_ < decode_map_.size();
 }
 
+template<typename T, typename H>
+auto dictionary<T, H>::create_encode_map_future_(const dictionary& self)
+-> std::future<std::unordered_map<T, std::uint32_t, H>> {
+  // We may not capture self, because of the move constructor, but
+  // capturing the iterators is safe, since move won't invalidate them.
+  auto b = self.decode_map_.begin();
+  auto e = self.decode_map_.end();
+
+  return std::async(
+      std::launch::deferred,
+      [b, e]() mutable {
+        std::unordered_map<T, std::uint32_t, H> result;
+        typename std::vector<T>::size_type idx = 0;
+        while (b != e)
+          result.emplace(*b++, idx++);
+        return result;
+      });
+}
+
+
+template<typename H>
+dictionary<std::vector<std::string>, H>::dictionary()
+: decode_map_(),
+  encode_map_(create_encode_map_future_(*this))
+{}
+
+template<typename H>
+dictionary<std::vector<std::string>, H>::dictionary(const dictionary& other)
+: decode_map_(other.decode_map_),
+  encode_map_(create_encode_map_future_(*this)),
+  update_start_(other.update_start_)
+{}
+
+template<typename H>
+auto dictionary<std::vector<std::string>, H>::operator=(const dictionary& other)
+-> dictionary& {
+  decode_map_ = other.decode_map_;
+  encode_map_ = create_encode_map_future_(*this);
+  update_start_ = other.update_start_;
+  return *this;
+}
 
 template<typename H>
 template<typename T, typename Alloc>
@@ -202,8 +256,8 @@ std::uint32_t dictionary<std::vector<std::string>, H>::encode(const std::vector<
         });
   }
 
-  auto ptr = encode_map_.find(v);
-  if (ptr != encode_map_.end()) return ptr->second;
+  auto ptr = encode_map_.get().find(v);
+  if (ptr != encode_map_.get().end()) return ptr->second;
 
   if (decode_map_.size() > 0xffffffffu)
     throw xdr::xdr_exception("dictionary too large");
@@ -211,7 +265,7 @@ std::uint32_t dictionary<std::vector<std::string>, H>::encode(const std::vector<
 
   decode_map_.push_back(v);
   try {
-    encode_map_.emplace(std::move(v), new_idx);
+    encode_map_.get().emplace(std::move(v), new_idx);
   } catch (...) {
     decode_map_.pop_back();
     throw;
@@ -229,25 +283,16 @@ auto dictionary<std::vector<std::string>, H>::decode(std::uint32_t idx) const ->
 template<typename H>
 template<typename SerFn>
 void dictionary<std::vector<std::string>, H>::decode_update(xdr::xdr_istream& in, SerFn fn) {
+  if (encode_map_.wait_for(std::chrono::seconds(0)) != std::future_status::deferred)
+    encode_map_ = create_encode_map_future_(*this);
+
   const std::uint32_t offset = in.get_uint32();
   if (offset != decode_map_.size())
     throw xdr::xdr_exception("dictionary updates must be contiguous");
 
-  in.accept_collection(
-      fn,
-      [this, &offset](const std::vector<std::string>& v) {
-        auto idx = decode_map_.size();
-        if (idx > 0xffffffffu)
-          throw xdr::xdr_exception("dictionary too large");
-
-        decode_map_.push_back(v);
-        try {
-          encode_map_.emplace(v, idx);
-        } catch (...) {
-          decode_map_.pop_back();
-          throw;
-        }
-      });
+  in.get_collection(fn, decode_map_);
+  if (decode_map_.size() > 0xffffffffu)
+    throw xdr::xdr_exception("dictionary too large");
   update_start_ = decode_map_.size();
 }
 
@@ -265,6 +310,25 @@ void dictionary<std::vector<std::string>, H>::encode_update(xdr::xdr_ostream& ou
 template<typename H>
 bool dictionary<std::vector<std::string>, H>::update_pending() const noexcept {
   return update_start_ < decode_map_.size();
+}
+
+template<typename H>
+auto dictionary<std::vector<std::string>, H>::create_encode_map_future_(const dictionary& self)
+-> std::future<std::unordered_map<std::vector<std::string>, std::uint32_t, H>> {
+  // We may not capture self, because of the move constructor, but
+  // capturing the iterators is safe, since move won't invalidate them.
+  auto b = self.decode_map_.begin();
+  auto e = self.decode_map_.end();
+
+  return std::async(
+      std::launch::deferred,
+      [b, e]() mutable {
+        std::unordered_map<std::vector<std::string>, std::uint32_t, H> result;
+        std::vector<std::vector<std::string>>::size_type idx = 0;
+        while (b != e)
+          result.emplace(*b++, idx++);
+        return result;
+      });
 }
 
 
