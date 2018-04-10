@@ -1,6 +1,7 @@
 #include "dictionary.h"
 #include "encdec.h"
 #include <stdexcept>
+#include <iterator>
 
 namespace monsoon::history::v2 {
 namespace {
