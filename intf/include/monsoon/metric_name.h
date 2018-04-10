@@ -24,8 +24,9 @@ class monsoon_intf_export_ metric_name
   metric_name() = default;
 
  private:
-  explicit metric_name(const path_common& p) noexcept : path_common(p) {}
-  explicit metric_name(path_common&& p) noexcept : path_common(std::move(p)) {}
+  struct explicit_pc {};
+  explicit metric_name(const path_common& p, [[maybe_unused]] explicit_pc pc) noexcept : path_common(p) {}
+  explicit metric_name(path_common&& p, [[maybe_unused]] explicit_pc pc) noexcept : path_common(std::move(p)) {}
 
  public:
   ///\brief Construct metric name from common path.

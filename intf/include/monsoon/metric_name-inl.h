@@ -6,12 +6,12 @@ namespace monsoon {
 
 inline auto metric_name::from_path(const path_common& p) noexcept
 -> metric_name {
-  return metric_name(p);
+  return metric_name(p, explicit_pc());
 }
 
 inline auto metric_name::from_path(path_common&& p) noexcept
 -> metric_name {
-  return metric_name(std::move(p));
+  return metric_name(std::move(p), explicit_pc());
 }
 
 inline metric_name::metric_name(const path_type& p)

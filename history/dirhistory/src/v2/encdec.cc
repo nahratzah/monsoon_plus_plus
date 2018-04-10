@@ -136,7 +136,7 @@ void encode_histogram(monsoon::xdr::xdr_ostream& out, const histogram& hist) {
 }
 
 metric_value decode_metric_value(monsoon::xdr::xdr_istream& in,
-    const dictionary<std::string>& dict) {
+    const strval_dictionary& dict) {
   switch (in.get_uint32()) {
     default:
       throw xdr::xdr_exception();
@@ -150,7 +150,7 @@ metric_value decode_metric_value(monsoon::xdr::xdr_istream& in,
       return metric_value(in.get_flt64());
       break;
     case static_cast<std::uint32_t>(metrickind::STRING):
-      return metric_value(dict.decode(in.get_uint32()));
+      return metric_value(dict[in.get_uint32()]);
       break;
     case static_cast<std::uint32_t>(metrickind::HISTOGRAM):
       return metric_value(decode_histogram(in));
@@ -162,7 +162,7 @@ metric_value decode_metric_value(monsoon::xdr::xdr_istream& in,
 }
 
 void encode_metric_value(monsoon::xdr::xdr_ostream& out,
-    const metric_value& value, dictionary<std::string>& dict) {
+    const metric_value& value, strval_dictionary& dict) {
   visit(
       overload(
           [&out](const metric_value::empty&) {
@@ -191,7 +191,7 @@ void encode_metric_value(monsoon::xdr::xdr_ostream& out,
           },
           [&out, &dict](const std::string_view& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
-            out.put_uint32(dict.encode(v));
+            out.put_uint32(dict[v]);
           },
           [&out](const histogram& v) {
             out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
@@ -218,8 +218,8 @@ auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
           [&dict](xdr::xdr_istream& in) {
             const std::uint32_t path_ref = in.get_uint32();
             return std::make_pair(
-                metric_name(dict.pdd.decode(path_ref)),
-                decode_metric_value(in, dict.sdd));
+                metric_name(dict.pdd()[path_ref]),
+                decode_metric_value(in, dict.sdd()));
           }));
 }
 
@@ -229,8 +229,8 @@ file_segment_ptr encode_record_metrics(encdec_writer& out,
   auto xdr = out.begin();
   xdr.put_collection(
       [&dict](xdr::xdr_ostream& out, const auto& entry) {
-        out.put_uint32(dict.pdd.encode(std::get<0>(entry).get_path()));
-        encode_metric_value(out, std::get<1>(entry), dict.sdd);
+        out.put_uint32(dict.pdd()[std::get<0>(entry)]);
+        encode_metric_value(out, std::get<1>(entry), dict.sdd());
       },
       metrics.begin(), metrics.end());
   xdr.close();
@@ -259,8 +259,8 @@ auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
             std::inserter(*result, result->end()),
             [&dict, &ctx](const auto& group_tuple) {
               group_name key = group_name(
-                  simple_group(dict.pdd.decode(std::get<0>(group_tuple))),
-                  dict.tdd.decode(std::get<1>(group_tuple)));
+                  dict.pdd()[std::get<0>(group_tuple)],
+                  dict.tdd()[std::get<1>(group_tuple)]);
               auto fs = file_segment<time_series_value::metric_map>(
                   ctx,
                   std::get<2>(group_tuple),
@@ -278,8 +278,8 @@ file_segment_ptr encode_record_array(encdec_writer& out,
   std::for_each(
       groups.begin(), groups.end(),
       [&out, &mapping, &dict](const time_series_value& entry) {
-        auto path_ref = dict.pdd.encode(entry.get_name().get_path().get_path());
-        auto tags_ref = dict.tdd.encode(entry.get_name().get_tags());
+        auto path_ref = dict.pdd()[entry.get_name().get_path()];
+        auto tags_ref = dict.tdd()[entry.get_name().get_tags()];
         mapping[path_ref].emplace(
             tags_ref,
             encode_record_metrics(out, entry.get_metrics(), dict));
@@ -299,86 +299,6 @@ file_segment_ptr encode_record_array(encdec_writer& out,
       mapping.begin(), mapping.end());
   xdr.close();
   return xdr.ptr();
-}
-
-void dictionary_delta::decode_update(xdr::xdr_istream& in) {
-  using namespace std::placeholders;
-
-  sdd.decode_update(in, [](xdr::xdr_istream& in) { return in.get_string(); });
-  pdd.decode_update(
-      in,
-      [this](xdr::xdr_istream& in) {
-        return in.template get_collection<std::vector<std::string>>(
-            [this](xdr::xdr_istream& in) {
-              std::string_view sv = sdd.decode(in.get_uint32());
-              return std::string(sv.begin(), sv.end());
-            });
-      });
-  tdd.decode_update(
-      in,
-      [this](xdr::xdr_istream& in) {
-        auto keys = in.template get_collection<std::vector<std::uint32_t>>(
-            std::bind(&xdr::xdr_istream::get_uint32, _1));
-        auto values = in.template get_collection<std::vector<metric_value>>(
-            [this](xdr::xdr_istream& in) {
-              return decode_metric_value(in, sdd);
-            });
-        if (keys.size() != values.size())
-          throw xdr::xdr_exception("tag dictionary length mismatch");
-
-        std::vector<std::pair<std::string_view, metric_value>> tag_map;
-        tag_map.reserve(keys.size());
-        std::transform(
-            keys.begin(), keys.end(), std::make_move_iterator(values.begin()),
-            std::inserter(tag_map, tag_map.end()),
-            [this](std::uint32_t str_ref, metric_value&& mv) {
-              return std::make_pair(sdd.decode(str_ref), std::move(mv));
-            });
-        return tags(std::move(tag_map));
-      });
-}
-
-void dictionary_delta::encode_update(xdr::xdr_ostream& out) {
-  // Pre-compute everything but sdd, since their computation will modify sdd.
-  // They have to be written out after sdd though.
-  xdr::xdr_bytevector_ostream<> pre_computed;
-
-  pdd.encode_update(
-      pre_computed,
-      [this](xdr::xdr_ostream& out, const std::vector<std::string>& v) {
-        out.put_collection(
-            [this](xdr::xdr_ostream& out, const std::string& s) {
-              out.put_uint32(this->sdd.encode(s));
-            },
-            v.begin(), v.end());
-      });
-  tdd.encode_update(
-      pre_computed,
-      [this](xdr::xdr_ostream& out, const tags& v) {
-        // First pass: encode metric name keys (using dictionary).
-        out.put_collection(
-            [this](xdr::xdr_ostream& out, const auto& entry) {
-              out.put_uint32(sdd.encode(entry.first));
-            },
-            v.begin(), v.end());
-        // Second pass: encode metric values.
-        out.put_collection(
-            [this](xdr::xdr_ostream& out, const auto& entry) {
-              encode_metric_value(out, entry.second, sdd);
-            },
-            v.begin(), v.end());
-      });
-
-  sdd.encode_update(
-      out,
-      [](xdr::xdr_ostream& out, const auto& v) {
-        out.put_string(v);
-      });
-  pre_computed.copy_to(out);
-}
-
-bool dictionary_delta::update_pending() const noexcept {
-  return sdd.update_pending() || pdd.update_pending() || tdd.update_pending();
 }
 
 auto decode_tsdata(xdr::xdr_istream& in, const encdec_ctx& ctx)
@@ -528,13 +448,13 @@ auto decode_tables(xdr::xdr_istream& in,
                 }));
       },
       [&dict, &result, &ctx](auto&& v) {
-        const auto path = simple_group(dict->pdd.decode(std::get<0>(v)));
+        const simple_group path = dict->pdd()[std::get<0>(v)];
 
         std::transform(std::get<1>(v).begin(), std::get<1>(v).end(),
             std::inserter(*result, result->end()),
             [&path, &dict, &ctx](const auto& tag_map_entry) {
               return std::make_pair(
-                  group_name(path, dict->tdd.decode(std::get<0>(tag_map_entry))),
+                  group_name(path, dict->tdd()[std::get<0>(tag_map_entry)]),
                   file_segment<group_table>(
                       ctx,
                       std::get<1>(tag_map_entry),
@@ -552,8 +472,8 @@ void encode_tables(xdr::xdr_ostream& out,
       tmp;
   std::for_each(groups.begin(), groups.end(),
       [&tmp, &dict](const auto& group) {
-        const auto path_ref = dict.pdd.encode(std::get<0>(group).get_path().get_path());
-        const auto tag_ref = dict.tdd.encode(std::get<0>(group).get_tags());
+        const auto path_ref = dict.pdd()[std::get<0>(group).get_path()];
+        const auto tag_ref = dict.tdd()[std::get<0>(group).get_tags()];
         const auto& ptr = std::get<1>(group);
 
         tmp[path_ref].emplace(tag_ref, ptr);
@@ -584,13 +504,13 @@ auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
   auto presence = decode_bitset(in);
   auto metric_map = in.get_collection<metric_map_type>(
       [&dict, &ctx](xdr::xdr_istream& in) {
-        auto name = metric_name(dict->pdd.decode(in.get_uint32()));
+        metric_name name = dict->pdd()[in.get_uint32()];
         return std::make_tuple(
             std::move(name),
             file_segment<metric_table>(
                 ctx,
                 decode_file_segment(in),
-                std::bind(&decode_metric_table, _1, std::shared_ptr<const dictionary<std::string>>(dict, &dict->sdd))));
+                std::bind(&decode_metric_table, _1, std::shared_ptr<const strval_dictionary>(dict, &dict->sdd()))));
       });
 
   return std::make_shared<group_table>(std::move(presence), std::move(metric_map));
@@ -604,7 +524,7 @@ void encode_group_table(xdr::xdr_ostream& out,
 
   out.put_collection(
       [&dict](xdr::xdr_ostream& out, const auto& mm_entry) {
-        out.put_uint32(dict.pdd.encode(std::get<0>(mm_entry).get_path()));
+        out.put_uint32(dict.pdd()[std::get<0>(mm_entry)]);
         encode_file_segment(out, std::get<1>(mm_entry));
       },
       metrics_map.begin(), metrics_map.end());
@@ -631,7 +551,7 @@ std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
 
 monsoon_dirhistory_local_
 std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
-    const std::shared_ptr<const dictionary<std::string>>& dict) {
+    const std::shared_ptr<const strval_dictionary>& dict) {
   auto result = std::make_shared<metric_table>();
   std::vector<bool> presence;
 
@@ -677,7 +597,7 @@ std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
   update_presence(decode_mt(in, &xdr::xdr_istream::get_flt64, callback));
   update_presence(decode_mt(in,
           [&dict](xdr::xdr_istream& in) {
-            return dict->decode(in.get_uint32());
+            return (*dict)[in.get_uint32()];
           },
           callback));
   update_presence(decode_mt(in, &decode_histogram, callback));
@@ -726,7 +646,7 @@ template<> struct monsoon_dirhistory_local_ mt<bool> {
 monsoon_dirhistory_local_
 void write_metric_table(xdr::xdr_ostream& out,
     const std::vector<std::optional<metric_value>>& metrics,
-    dictionary<std::string>& dict) {
+    strval_dictionary& dict) {
   using namespace std::placeholders;
 
   mt<bool> mt_bool{ std::vector<bool>(metrics.size(), false), {} };
@@ -812,7 +732,7 @@ void write_metric_table(xdr::xdr_ostream& out,
   mt_dbl.encode(out, &xdr::xdr_ostream::put_flt64);
   mt_str.encode(out,
       [&dict](xdr::xdr_ostream& out, const auto& v) {
-        out.put_uint32(dict.encode(v));
+        out.put_uint32(dict[v]);
       });
   mt_hist.encode(out, &encode_histogram);
   encode_bitset(out, mt_empty);

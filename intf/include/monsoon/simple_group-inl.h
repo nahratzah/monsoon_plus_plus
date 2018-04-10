@@ -6,12 +6,12 @@ namespace monsoon {
 
 inline auto simple_group::from_path(const path_common& p) noexcept
 -> simple_group {
-  return simple_group(p);
+  return simple_group(p, explicit_pc());
 }
 
 inline auto simple_group::from_path(path_common&& p) noexcept
 -> simple_group {
-  return simple_group(std::move(p));
+  return simple_group(std::move(p), explicit_pc());
 }
 
 inline simple_group::simple_group(const path_type& p)

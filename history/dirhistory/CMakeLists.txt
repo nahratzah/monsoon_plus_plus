@@ -26,6 +26,7 @@ add_library (monsoon_dirhistory
   src/tsdata.cc
   src/v0/tsdata.cc
   src/v1/tsdata.cc
+  src/v2/dictionary.cc
   src/v2/encdec.cc
   src/v2/tsdata.cc
   src/v2/tsdata_tables.cc

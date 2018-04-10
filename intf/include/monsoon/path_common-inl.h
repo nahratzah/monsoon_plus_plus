@@ -87,8 +87,18 @@ inline path_common::path_common(Iter b, Iter e)
 
 template<typename Iter>
 inline path_common::path_common(Iter b, Iter e, std::input_iterator_tag) {
-  path_type tmp = path_type(b, e);
-  *this = path_common(tmp);
+  if constexpr(std::is_same_v<typename std::iterator_traits<Iter>::value_type, std::string_view>) {
+    path_type tmp;
+    std::for_each(
+        b, e,
+        [&tmp](std::string_view v) {
+          tmp.emplace_back(v.begin(), v.end());
+        });
+    *this = path_common(tmp);
+  } else {
+    path_type tmp = path_type(b, e);
+    *this = path_common(tmp);
+  }
 }
 
 template<typename Iter>
