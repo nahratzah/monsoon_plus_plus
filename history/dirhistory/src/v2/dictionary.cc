@@ -1,9 +1,157 @@
 #include "dictionary.h"
 #include "encdec.h"
 #include <stdexcept>
-#include <boost/iterator/transform_iterator.hpp>
 
 namespace monsoon::history::v2 {
+namespace {
+
+
+// Transformation iterator that maintains the iterator category.
+template<typename Iter, typename Fn>
+class transform_iterator {
+ private:
+  using fn_result_type = decltype(std::invoke(std::declval<Fn>(), *std::declval<Iter>()));
+  using functor = std::conditional_t<
+      std::is_copy_assignable_v<Fn> && std::is_copy_constructible_v<Fn>,
+      Fn,
+      std::function<fn_result_type(decltype(*std::declval<Iter>()))>>;
+
+ public:
+  using iterator_category = typename std::iterator_traits<Iter>::iterator_category;
+  using difference_type = typename std::iterator_traits<Iter>::difference_type;
+  using value_type = std::remove_cv_t<std::remove_reference_t<fn_result_type>>;
+  using reference = fn_result_type;
+
+ private:
+  class proxy {
+   public:
+    proxy(reference v)
+    : v_(std::move(v))
+    {}
+
+    auto operator*() const
+    -> std::remove_reference_t<reference>& {
+      return v_;
+    }
+
+    auto operator->() const
+    -> std::remove_reference_t<reference>* {
+      return std::addressof(v_);
+    }
+
+   private:
+    reference v_;
+  };
+
+ public:
+  using pointer = std::conditional_t<
+      std::is_reference_v<reference>,
+      std::add_pointer_t<std::remove_reference_t<reference>>,
+      proxy>;
+
+  template<typename IterArg, typename FnArg>
+  transform_iterator(IterArg&& iter, FnArg&& fn)
+  : iter_(std::forward<IterArg>(iter)),
+    fn_(std::forward<FnArg>(fn))
+  {}
+
+  auto operator++()
+  -> transform_iterator& {
+    ++iter_;
+    return *this;
+  }
+
+  auto operator++(int)
+  -> transform_iterator {
+    return transform_iterator(iter_++, fn_);
+  }
+
+  template<typename C>
+  auto operator+=(C&& c)
+  -> transform_iterator& {
+    iter_ += std::forward<C>(c);
+    return *this;
+  }
+
+  template<typename C>
+  auto operator-=(C&& c)
+  -> transform_iterator& {
+    iter_ -= std::forward<C>(c);
+    return *this;
+  }
+
+  template<typename C>
+  auto operator[](C&& c) const
+  -> reference {
+    return std::invoke(fn_, iter_[std::forward<C>(c)]);
+  }
+
+  auto operator*() const
+  -> reference {
+    return std::invoke(fn_, *iter_);
+  }
+
+  auto operator->() const
+  -> pointer {
+    if constexpr(std::is_reference_v<reference>)
+      return std::addressof(**this);
+    else
+      return pointer(**this);
+  }
+
+  auto operator==(const transform_iterator& y) const
+  -> decltype(std::declval<const Iter&>() == std::declval<const Iter&>()) {
+    return iter_ == y.iter_;
+  }
+
+  auto operator!=(const transform_iterator& y) const
+  -> decltype(std::declval<const Iter&>() != std::declval<const Iter&>()) {
+    return iter_ != y.iter_;
+  }
+
+  template<typename I = const Iter&, typename ResultType = decltype(std::declval<I>() < std::declval<I>())>
+  auto operator<(const transform_iterator& y) const
+  -> ResultType {
+    return iter_ < y.iter_;
+  }
+
+  template<typename I = const Iter&, typename ResultType = decltype(std::declval<I>() > std::declval<I>())>
+  auto operator>(const transform_iterator& y) const
+  -> ResultType {
+    return iter_ > y.iter_;
+  }
+
+  template<typename I = const Iter&, typename ResultType = decltype(std::declval<I>() <= std::declval<I>())>
+  auto operator<=(const transform_iterator& y) const
+  -> ResultType {
+    return iter_ <= y.iter_;
+  }
+
+  template<typename I = const Iter&, typename ResultType = decltype(std::declval<I>() >= std::declval<I>())>
+  auto operator>=(const transform_iterator& y) const
+  -> ResultType {
+    return iter_ >= y.iter_;
+  }
+
+  template<typename I = const Iter&, typename ResultType = decltype(std::declval<I>() - std::declval<I>())>
+  auto operator-(const transform_iterator& y) const
+  -> ResultType {
+    return iter_ - y.iter_;
+  }
+
+ private:
+  Iter iter_;
+  functor fn_;
+};
+
+template<typename Iter, typename Fn>
+auto make_transform_iterator(Iter&& iter, Fn&& fn)
+-> transform_iterator<std::decay_t<Iter>, std::decay_t<Fn>> {
+  return transform_iterator<std::decay_t<Iter>, std::decay_t<Fn>>(std::forward<Iter>(iter), std::forward<Fn>(fn));
+}
+
+
+} /* namespace monsoon::history::v2::<unnamed> */
 
 
 strval_dictionary::strval_dictionary()
@@ -115,16 +263,12 @@ auto strval_dictionary::make_inverse_() const
 
 
 path_dictionary::proxy::operator metric_name() const {
-  using boost::iterators::make_transform_iterator;
-
   return metric_name(
       make_transform_iterator(self_.values_[ref_].begin(), make_transform_fn_()),
       make_transform_iterator(self_.values_[ref_].end(), make_transform_fn_()));
 }
 
 path_dictionary::proxy::operator simple_group() const {
-  using boost::iterators::make_transform_iterator;
-
   return simple_group(
       make_transform_iterator(self_.values_[ref_].begin(), make_transform_fn_()),
       make_transform_iterator(self_.values_[ref_].end(), make_transform_fn_()));
@@ -302,8 +446,6 @@ tag_dictionary& tag_dictionary::operator=(tag_dictionary&& y) {
 
 auto tag_dictionary::operator[](std::uint32_t idx) const
 -> tags {
-  using boost::iterators::make_transform_iterator;
-
   const tag_data& data = values_.at(idx);
   return tags(
       make_transform_iterator(data.begin(), make_transform_fn_()),
