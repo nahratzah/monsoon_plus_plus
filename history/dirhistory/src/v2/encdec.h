@@ -2,6 +2,7 @@
 #define V2_ENCDEC_H
 
 #include "file_segment_ptr.h"
+#include "dictionary.h"
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -170,87 +171,6 @@ class monsoon_dirhistory_local_ file_segment {
   mutable std::weak_ptr<const T> decode_result_;
 };
 
-template<typename T, typename Hasher = std::hash<T>>
-class monsoon_dirhistory_local_ dictionary {
- private:
-  using view_type = std::conditional_t<std::is_same_v<T, std::string>,
-        std::string_view,
-        const T&>;
-
- public:
-  dictionary();
-  dictionary(dictionary&&);
-  dictionary(const dictionary& other);
-
-  dictionary& operator=(dictionary&& other);
-  dictionary& operator=(const dictionary& other);
-
-  std::uint32_t encode(view_type);
-  view_type decode(std::uint32_t) const;
-
-  template<typename SerFn>
-  void decode_update(xdr::xdr_istream&, SerFn);
-  template<typename SerFn>
-  void encode_update(xdr::xdr_ostream&, SerFn);
-
-  bool update_pending() const noexcept;
-
- private:
-  auto create_encode_map_future_() -> std::function<std::unordered_map<T, std::uint32_t, Hasher>()>;
-
-  std::vector<T> decode_map_;
-  monsoon::memoid<std::unordered_map<T, std::uint32_t, Hasher>> encode_map_;
-  std::uint32_t update_start_ = 0;
-};
-
-template<typename Hasher>
-class monsoon_dirhistory_local_ dictionary<std::vector<std::string>, Hasher> {
- public:
-  dictionary();
-  dictionary(dictionary&&);
-  dictionary(const dictionary& other);
-
-  dictionary& operator=(dictionary&& other);
-  dictionary& operator=(const dictionary& other);
-
-  template<typename T, typename Alloc>
-  std::uint32_t encode(const std::vector<T, Alloc>&);
-  const std::vector<std::string>& decode(std::uint32_t) const;
-
-  template<typename SerFn>
-  void decode_update(xdr::xdr_istream&, SerFn);
-  template<typename SerFn>
-  void encode_update(xdr::xdr_ostream&, SerFn);
-
-  bool update_pending() const noexcept;
-
- private:
-  auto create_encode_map_future_() -> std::function<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>()>;
-
-  std::vector<std::vector<std::string>> decode_map_;
-  monsoon::memoid<std::unordered_map<std::vector<std::string>, std::uint32_t, Hasher>> encode_map_;
-  std::uint32_t update_start_ = 0;
-};
-
-class monsoon_dirhistory_local_ dictionary_delta {
- private:
-  struct strvector_hasher {
-    template<typename Alloc1, typename Alloc2, typename Char, typename CharT>
-    std::size_t operator()(
-        const std::vector<std::basic_string<Char, CharT, Alloc2>, Alloc1>&)
-    const noexcept;
-  };
-
- public:
-  void decode_update(xdr::xdr_istream&);
-  void encode_update(xdr::xdr_ostream&);
-  bool update_pending() const noexcept;
-
-  dictionary<std::string> sdd;
-  dictionary<std::vector<std::string>, strvector_hasher> pdd;
-  dictionary<tags> tdd;
-};
-
 /** The TSData structure of the 'list' implementation. */
 class monsoon_dirhistory_local_ tsdata_list
 : public std::enable_shared_from_this<tsdata_list>
@@ -353,10 +273,10 @@ void encode_histogram(xdr::xdr_ostream&, const histogram&);
 
 monsoon_dirhistory_local_
 metric_value decode_metric_value(xdr::xdr_istream&,
-    const dictionary<std::string>&);
+    const strval_dictionary&);
 monsoon_dirhistory_local_
 void encode_metric_value(xdr::xdr_ostream&,
-    const metric_value& value, dictionary<std::string>&);
+    const metric_value& value, strval_dictionary&);
 
 monsoon_dirhistory_local_
 file_segment_ptr decode_file_segment(xdr::xdr_istream&);
@@ -416,12 +336,12 @@ void encode_group_table(xdr::xdr_ostream&,
 
 monsoon_dirhistory_local_
 auto decode_metric_table(xdr::xdr_istream&,
-    const std::shared_ptr<const dictionary<std::string>>&)
+    const std::shared_ptr<const strval_dictionary>&)
   -> std::shared_ptr<metric_table>;
 monsoon_dirhistory_local_
 void write_metric_table(xdr::xdr_ostream&,
     const std::vector<std::optional<metric_value>>&,
-    dictionary<std::string>&);
+    strval_dictionary&);
 
 
 }}} /* namespace monsoon::history::v2 */

@@ -24,8 +24,9 @@ class monsoon_intf_export_ simple_group
   simple_group() = default;
 
  private:
-  explicit simple_group(const path_common& p) noexcept : path_common(p) {}
-  explicit simple_group(path_common&& p) noexcept : path_common(std::move(p)) {}
+  struct explicit_pc {};
+  explicit simple_group(const path_common& p, [[maybe_unused]] explicit_pc pc) noexcept : path_common(p) {}
+  explicit simple_group(path_common&& p, [[maybe_unused]] explicit_pc pc) noexcept : path_common(std::move(p)) {}
 
  public:
   ///\brief Construct simple group from common path.
