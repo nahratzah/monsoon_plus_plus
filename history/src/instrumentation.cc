@@ -4,7 +4,7 @@
 namespace monsoon {
 
 
-instrumentation::group history_instrumentation("history", monsoon_instrumentation);
+instrumentation::group&& history_instrumentation = instrumentation::make_group("history", monsoon_instrumentation);
 
 
 } /* namespace monsoon */

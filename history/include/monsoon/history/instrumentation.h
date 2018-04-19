@@ -8,7 +8,7 @@ namespace monsoon {
 
 
 monsoon_history_export_
-extern instrumentation::group history_instrumentation;
+extern instrumentation::group&& history_instrumentation;
 
 
 } /* namespace monsoon */

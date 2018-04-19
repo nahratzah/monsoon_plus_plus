@@ -12,7 +12,14 @@ namespace monsoon {
  * \ingroup intf
  */
 monsoon_intf_export_
-extern instrumentation::group monsoon_instrumentation;
+extern instrumentation::group&& monsoon_instrumentation;
+
+/**
+ * \brief All internal caches used by monsoon.
+ * \ingroup intf
+ */
+monsoon_intf_export_
+extern instrumentation::group&& cache_instrumentation;
 
 
 } /* namespace monsoon */

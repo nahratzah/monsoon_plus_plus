@@ -15,8 +15,13 @@
 #include <string>
 #include <instrumentation/visitor.h>
 #include <instrumentation/print_visitor.h>
+#include <instrumentation/group.h>
 #include <instrumentation/timing.h>
 #include <instrumentation/time_track.h>
+
+namespace {
+instrumentation::group&& instrumentation_main_group = instrumentation::make_group("");
+}
 
 auto open_dir(std::string dir)
 -> std::unique_ptr<monsoon::collect_history> {
@@ -62,7 +67,7 @@ auto print_scalar(monsoon::expression::scalar_objpipe&& pipe)
       .filter([](const auto& v) { return v.data.index() == 1u; })
       .transform(
           [](const auto& v) {
-            static instrumentation::timing t("example_output");
+            static instrumentation::timing t("example_output", instrumentation_main_group);
             instrumentation::time_track<instrumentation::timing> tt{ t };
 
             return (std::ostringstream() << v.tp << ": " << std::get<1>(v.data))

@@ -723,7 +723,7 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
   file_count_("files",
       [this]() { return files_.size(); },
       monsoon::history_instrumentation,
-      instrumentation::tags().with("path", this->dir_.native()))
+      instrumentation::tag_map({ {"path", this->dir_.native()} }))
 {
   using filesystem::perms;
 
