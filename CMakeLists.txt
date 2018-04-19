@@ -80,7 +80,12 @@ if (RT_LIB)
 endif()
 
 
-find_package(monsoon_cache)
+find_package(instrumentation 0.0)
+if(NOT instrumentation_DIR)
+  add_subdirectory(contrib/instrumentation)
+endif()
+
+find_package(monsoon_cache 0.1)
 if(NOT monsoon_cache_DIR)
   add_subdirectory(contrib/monsoon_cache)
 endif()

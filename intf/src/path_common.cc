@@ -1,6 +1,7 @@
 #include <monsoon/path_common.h>
 #include <monsoon/config_support.h>
 #include <monsoon/cache/impl.h>
+#include <monsoon/instrumentation.h>
 #include <algorithm>
 #include <utility>
 #include <ostream>
@@ -13,6 +14,7 @@ namespace monsoon {
 path_common::cache_type path_common::cache_() {
   static cache_type impl = path_common::cache_type::builder()
       .access_expire(std::chrono::minutes(10))
+      .stats("path_names", cache_instrumentation)
       .build(cache_create_());
   return impl;
 }
