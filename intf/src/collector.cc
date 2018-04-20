@@ -13,7 +13,7 @@ auto sync_collector::provides() const
   return { names_, {} };
 }
 
-auto sync_collector::run(objpipe::reader<time_point> tp_pipe)
+auto sync_collector::run(objpipe::reader<time_point> tp_pipe) const
 -> objpipe::reader<collection> {
   auto self = this->shared_from_this();
   return std::move(tp_pipe)

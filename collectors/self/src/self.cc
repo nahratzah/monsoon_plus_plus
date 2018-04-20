@@ -177,7 +177,7 @@ auto self::provides() const
   };
 }
 
-auto self::run(objpipe::reader<time_point> tp_pipe)
+auto self::run(objpipe::reader<time_point> tp_pipe) const
 -> objpipe::reader<collection> {
   const instrumentation::group* grp = &grp_;
 

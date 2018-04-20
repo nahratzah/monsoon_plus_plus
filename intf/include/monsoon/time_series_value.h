@@ -24,6 +24,7 @@ class monsoon_intf_export_ time_series_value {
   time_series_value& operator=(const time_series_value&) = default;
   time_series_value& operator=(time_series_value&&) noexcept;
 
+  explicit time_series_value(group_name) noexcept;
   template<typename Iter> time_series_value(group_name, Iter, Iter);
   time_series_value(group_name, metric_map) noexcept;
   time_series_value(group_name, std::initializer_list<metric_map::value_type>);

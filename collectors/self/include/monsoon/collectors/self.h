@@ -19,7 +19,7 @@ class self
   ~self() noexcept override;
 
   auto provides() const -> names_set override;
-  auto run(objpipe::reader<time_point> tp_pipe) -> objpipe::reader<collection> override;
+  auto run(objpipe::reader<time_point> tp_pipe) const -> objpipe::reader<collection> override;
 
  private:
   const instrumentation::group& grp_;
