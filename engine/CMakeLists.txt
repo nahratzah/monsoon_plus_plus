@@ -1,8 +1,6 @@
 project (monsoon_engine)
 
 add_library (monsoon_engine
-  src/context.cc
-  src/mutable_context.cc
   src/rule.cc
   src/build_task.cc
 )
@@ -19,10 +17,6 @@ install (TARGETS monsoon_engine DESTINATION lib)
 install (FILES
   include/monsoon/configuration-inl.h
   include/monsoon/configuration.h
-  include/monsoon/context.h
-  include/monsoon/expr_result-inl.h
-  include/monsoon/expr_result.h
-  include/monsoon/mutable_context.h
   include/monsoon/rule.h
   include/monsoon/build_task.h
   DESTINATION include/monsoon)
