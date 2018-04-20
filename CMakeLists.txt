@@ -101,6 +101,7 @@ add_subdirectory (intf)
 add_subdirectory (engine)
 add_subdirectory (history)
 add_subdirectory (expr)
+add_subdirectory (collectors)
 
 if (BUILD_EXAMPLES)
   add_subdirectory (examples)

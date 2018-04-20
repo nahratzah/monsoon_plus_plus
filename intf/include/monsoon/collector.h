@@ -14,6 +14,7 @@
 #include <objpipe/reader.h>
 #include <tuple>
 #include <functional>
+#include <utility>
 #include <memory>
 #include <set>
 #include <vector>
@@ -37,12 +38,34 @@ class monsoon_intf_export_ collector {
   };
 
   struct collection_element {
+    collection_element() = default;
+
+    collection_element(
+        group_name group,
+        metric_name metric,
+        metric_value value) noexcept
+    : group(std::move(group)),
+      metric(std::move(metric)),
+      value(std::move(value))
+    {}
+
     group_name group;
     metric_name metric;
     metric_value value;
   };
 
   struct collection {
+    collection() = default;
+
+    collection(
+        time_point tp,
+        std::vector<collection_element> elements,
+        bool is_complete) noexcept
+    : tp(std::move(tp)),
+      elements(std::move(elements)),
+      is_complete(is_complete)
+    {}
+
     time_point tp;
     std::vector<collection_element> elements;
     bool is_complete;
