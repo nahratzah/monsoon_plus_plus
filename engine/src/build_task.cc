@@ -37,6 +37,7 @@ auto make_time_series_(const collector::collection& c) -> time_series {
   return time_series(c.tp, ts_elems.begin(), ts_elems.end());
 }
 
+
 class history_multiplexer {
  public:
   explicit history_multiplexer(const std::vector<std::shared_ptr<collect_history>>& histories)
@@ -55,6 +56,7 @@ class history_multiplexer {
  private:
   std::vector<std::shared_ptr<collect_history>> histories_;
 };
+
 
 class time_multiplexer {
  private:
@@ -130,6 +132,255 @@ class time_multiplexer {
   sink sink_;
 };
 
+
+class collector_metricsource_converter_ {
+ private:
+  using map_type = std::tuple_element_t<1, metric_source::metric_emit>;
+
+  struct record {
+    record() = default;
+
+    record(const collector::collection& c)
+    : tp(c.tp)
+    {
+      this->merge(c);
+    }
+
+    auto merge(const collector::collection& c)
+    -> void {
+      assert(tp == c.tp);
+
+      for (const auto& elem : c.elements) {
+#if __cplusplus >= 201703
+        data.insert_or_assign(std::make_tuple(elem.group, elem.metric), elem.value);
+#else
+        data[std::make_tuple(elem.group, elem.metric)] = elem.value;
+#endif
+      }
+
+      complete |= c.is_complete;
+    }
+
+    time_point tp;
+    map_type data;
+    bool complete;
+  };
+
+ public:
+  auto accept(const collector::collection& c)
+  -> void {
+    assert(invariant());
+
+    if (queue_.empty() || queue_.back().tp < c.tp) {
+      queue_.emplace_back(c);
+    } else if (queue_.back().tp == c.tp) {
+      queue_.back().merge(c);
+    } else if (queue_.front().tp == c.tp) {
+      queue_.front().merge(c);
+    } else {
+      auto pos = std::lower_bound(
+          queue_.begin(), queue_.end(),
+          c,
+          [](const auto& x, const auto& y) { return x.tp < y.tp; });
+      assert(pos == queue_.end() || pos->tp >= c.tp);
+      if (pos != queue_.end() && pos->tp == c.tp)
+        pos->merge(c);
+      else
+        queue_.emplace(pos, c);
+    }
+
+    assert(invariant());
+  }
+
+  auto maybe_emit()
+  -> std::optional<metric_source::emit_type> {
+    assert(invariant());
+
+    std::optional<metric_source::emit_type> result;
+    if (!queue_.empty() && queue_.front().complete) {
+      result.emplace(
+          std::in_place_type<metric_source::metric_emit>,
+          std::move(queue_.front().tp),
+          std::move(queue_.front().data));
+      queue_.pop_front();
+
+      assert(invariant());
+    }
+
+    return result;
+  }
+
+  static auto speculative_entries(const collector::collection& c)
+  -> std::vector<metric_source::emit_type> {
+    std::vector<metric_source::emit_type> result;
+    result.reserve(c.elements.size());
+    const time_point tp = c.tp;
+
+    std::transform(
+        c.elements.begin(), c.elements.end(),
+        std::back_inserter(result),
+        [tp](const auto& element) -> metric_source::speculative_metric_emit {
+          return { tp, element.group, element.metric, element.value };
+        });
+    return result;
+  }
+
+ private:
+  ///\brief Invariant: queue must be ordered by time point and may not hold duplicate timepoints.
+  auto invariant() const
+  -> bool {
+    if (queue_.empty()) return true;
+
+    auto pred = queue_.begin();
+    auto succ = std::next(pred);
+    while (succ != queue_.end()) {
+      if (pred->tp >= succ->tp) return false;
+      ++pred;
+      ++succ;
+    }
+    return true;
+  }
+
+  std::deque<record> queue_;
+};
+
+template<typename Acceptor>
+class collector_metricsource_push_ {
+ public:
+  collector_metricsource_push_(Acceptor&& dst)
+  : dst_(std::move(dst))
+  {}
+
+  auto operator()(const collector::collection& c)
+  -> objpipe::objpipe_errc {
+    state_.accept(c);
+
+    auto emit = state_.maybe_emit();
+    if (!emit.has_value()) {
+      auto se = collector_metricsource_converter_::speculative_entries(c);
+      for (auto& x : se) {
+        const objpipe::objpipe_errc e = dst_(std::move(x));
+        if (e != objpipe::objpipe_errc::success)
+          return e;
+      }
+    } else {
+      do {
+        const objpipe::objpipe_errc e = dst_(*std::move(emit));
+        if (e != objpipe::objpipe_errc::success) return e;
+        emit = state_.maybe_emit();
+      } while (emit.has_value());
+    }
+
+    return objpipe::objpipe_errc::success;
+  }
+
+  auto push_exception(std::exception_ptr exptr)
+  noexcept
+  -> void {
+    dst_.push_exception(std::move(exptr));
+  }
+
+ private:
+  collector_metricsource_converter_ state_;
+  Acceptor dst_;
+};
+
+template<typename Source>
+class collector_metricsource_pipe_ {
+ private:
+  using transport_type = objpipe::detail::transport<metric_source::emit_type&&>;
+  using objpipe_errc = objpipe::objpipe_errc;
+
+ public:
+  collector_metricsource_pipe_(Source&& src)
+  : src_(std::move(src))
+  {}
+
+  auto is_pullable() noexcept
+  -> bool {
+    return !pending_.empty() || src_.is_pullable();
+  }
+
+  auto wait()
+  -> objpipe_errc {
+    if (!pending_.empty()) return objpipe_errc::success;
+    return front().errc();
+  }
+
+  auto front()
+  -> transport_type {
+    for (;;) {
+      if (!pending_.empty())
+        return transport_type(std::in_place_index<0>, std::move(pending_.front()));
+
+      auto src_val = objpipe::detail::adapt::raw_pull(src_);
+      if (src_val.errc() != objpipe_errc::success)
+        return transport_type(std::in_place_index<1>, src_val.errc());
+      state_.accept(src_val.ref());
+
+      auto emit = state_.maybe_emit();
+      if (emit.has_value()) {
+        pending_.push_back(*std::move(emit));
+      } else {
+        auto se = collector_metricsource_converter_::speculative_entries(src_val.ref());
+        pending_.insert(
+            pending_.end(),
+            std::make_move_iterator(se.begin()),
+            std::make_move_iterator(se.end()));
+      }
+    }
+  }
+
+  auto pop_front()
+  -> objpipe_errc {
+    if (pending_.empty()) {
+      objpipe_errc e = front().errc();
+      if (e != objpipe_errc::success) return e;
+    }
+
+    pending_.pop_front();
+    return objpipe_errc::success;
+  }
+
+  template<bool Enable = objpipe::detail::adapt::has_ioc_push<Source, objpipe::existingthread_push>>
+  auto can_push(const objpipe::existingthread_push& tag) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    return src_.can_push(tag);
+  }
+
+  template<bool Enable = objpipe::detail::adapt::has_ioc_push<Source, objpipe::singlethread_push>>
+  auto can_push(const objpipe::singlethread_push& tag) const
+  noexcept
+  -> std::enable_if_t<Enable, bool> {
+    return src_.can_push(tag);
+  }
+
+  template<typename Acceptor, bool Enable = objpipe::detail::adapt::has_ioc_push<Source, objpipe::existingthread_push>>
+  auto ioc_push(const objpipe::existingthread_push& tag, Acceptor&& acceptor) &&
+  noexcept
+  -> std::enable_if_t<Enable> {
+    using impl = collector_metricsource_push_<std::decay_t<Acceptor>>;
+
+    std::move(src_).ioc_push(tag, impl(std::forward<Acceptor>(acceptor)));
+  }
+
+  template<typename Acceptor, bool Enable = objpipe::detail::adapt::has_ioc_push<Source, objpipe::singlethread_push>>
+  auto ioc_push(const objpipe::singlethread_push& tag, Acceptor&& acceptor) &&
+  noexcept
+  -> std::enable_if_t<Enable> {
+    using impl = collector_metricsource_push_<std::decay_t<Acceptor>>;
+
+    std::move(src_).ioc_push(tag, impl(std::forward<Acceptor>(acceptor)));
+  }
+
+ private:
+  collector_metricsource_converter_ state_;
+  Source src_;
+  std::deque<metric_source::emit_type> pending_;
+};
+
+
 class collector_metric_source {
  private:
   class sink {
@@ -178,6 +429,14 @@ class collector_metric_source {
     std::vector<objpipe::interlock_writer<collector::collection>> sinks_;
   };
 
+  ///\brief Convert collection to metric_source::emit_type.
+  template<typename CollectionPipe>
+  static auto collection_to_msemit_(CollectionPipe&& pipe) {
+    using raw_pipe_t = objpipe::detail::adapter_underlying_type_t<std::decay_t<CollectionPipe>>;
+    using result_t = collector_metricsource_pipe_<raw_pipe_t>;
+    return objpipe::detail::adapter(result_t(std::forward<CollectionPipe>(pipe).underlying()));
+  }
+
  public:
   collector_metric_source(const collector& c)
   : c_(&c)
@@ -204,7 +463,10 @@ class collector_metric_source {
               [group_filter, tag_filter, metric_filter](collector::collection& c) -> void {
                 filter_collection_elements_(group_filter, tag_filter, metric_filter, c);
               })
-          .transform(&collector_metric_source::collection_to_msemit_);
+          .perform(
+              [](auto&& x) {
+                return collector_metric_source::collection_to_msemit_(std::forward<decltype(x)>(x));
+              });
     }
     return {};
   }
@@ -253,9 +515,6 @@ class collector_metric_source {
             }),
         c.elements.end());
   }
-
-  ///\brief Convert collection to metric_source::emit_type.
-  static auto collection_to_msemit_(const collector::collection& c) -> metric_source::emit_type;
 
   ///\brief Test if the given filters intersect with provided names.
   auto intersects_(
