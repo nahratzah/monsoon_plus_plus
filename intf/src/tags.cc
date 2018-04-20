@@ -14,7 +14,6 @@ namespace monsoon {
 
 tags::cache_type tags::cache_() {
   static cache_type impl = tags::cache_type::builder()
-      .access_expire(std::chrono::minutes(10))
       .stats("tags", cache_instrumentation)
       .build(cache_create_());
   return impl;

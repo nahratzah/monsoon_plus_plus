@@ -13,7 +13,6 @@ namespace monsoon {
 
 path_common::cache_type path_common::cache_() {
   static cache_type impl = path_common::cache_type::builder()
-      .access_expire(std::chrono::minutes(10))
       .stats("path_names", cache_instrumentation)
       .build(cache_create_());
   return impl;
