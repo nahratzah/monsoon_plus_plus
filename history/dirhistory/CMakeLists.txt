@@ -3,20 +3,13 @@ project (monsoon_dirhistory)
 find_path (STD_FILESYSTEM NAMES filesystem)
 mark_as_advanced (STD_FILESYSTEM)
 
-list (APPEND Boost_required_components context)
+list (APPEND Boost_required_components)
 mark_as_advanced (Boost_required_components)
 if (NOT STD_FILESYSTEM)
   list (APPEND Boost_required_components filesystem system)
 endif ()
 find_package (Boost COMPONENTS ${Boost_required_components} REQUIRED)
 
-include_directories (include)
-include_directories ($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
-include_directories ($<TARGET_PROPERTY:monsoon_misc,INTERFACE_INCLUDE_DIRECTORIES>)
-include_directories ($<TARGET_PROPERTY:monsoon_history,INTERFACE_INCLUDE_DIRECTORIES>)
-if (NOT STD_FILESYSTEM)
-  include_directories (${Boost_INCLUDE_DIR})
-endif ()
 add_library (monsoon_dirhistory
   src/raw_file_segment_reader.cc
   src/raw_file_segment_writer.cc
@@ -32,21 +25,18 @@ add_library (monsoon_dirhistory
   src/v2/tsdata_tables.cc
   src/v2/tsdata_list.cc
 )
-target_include_directories(monsoon_history PUBLIC include)
-if (NOT STD_FILESYSTEM)
-  target_include_directories(monsoon_history PUBLIC ${Boost_INCLUDE_DIR})
-endif()
-target_link_libraries (monsoon_dirhistory ${extra_libs})
-target_link_libraries (monsoon_dirhistory
+target_include_directories (monsoon_dirhistory PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries (monsoon_dirhistory PUBLIC
   monsoon_intf
   monsoon_misc
-  monsoon_history)
+  monsoon_history
+  objpipe)
 if (NOT STD_FILESYSTEM)
-  target_link_libraries (monsoon_dirhistory ${Boost_FILESYSTEM_LIBRARY})
-  target_link_libraries (monsoon_dirhistory ${Boost_SYSTEM_LIBRARY})
+  target_include_directories (monsoon_dirhistory PUBLIC ${Boost_INCLUDE_DIR})
+  target_link_libraries (monsoon_dirhistory PUBLIC ${Boost_FILESYSTEM_LIBRARY} ${Boost_SYSTEM_LIBRARY})
 endif ()
-target_link_libraries (monsoon_dirhistory ${Boost_CONTEXT_LIBRARY})
-target_link_libraries (monsoon_dirhistory ${Boost_COROUTINE2_LIBRARY})
 set_property (TARGET monsoon_dirhistory PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_dirhistory PROPERTY SOVERSION "0.0")
 

@@ -1,13 +1,7 @@
 project (monsoon_examples)
 
-include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
-include_directories($<TARGET_PROPERTY:monsoon_history,INTERFACE_INCLUDE_DIRECTORIES>)
-include_directories($<TARGET_PROPERTY:monsoon_dirhistory,INTERFACE_INCLUDE_DIRECTORIES>)
-
 add_executable (count count.cc)
-target_link_libraries (count monsoon_intf monsoon_history monsoon_dirhistory)
-target_link_libraries (count ${extra_libs})
+target_link_libraries (count PRIVATE monsoon_intf monsoon_history monsoon_dirhistory)
 
 add_executable (eval eval.cc)
-target_link_libraries (eval monsoon_intf monsoon_expr monsoon_history monsoon_dirhistory)
-target_link_libraries (eval ${extra_libs})
+target_link_libraries (eval PRIVATE monsoon_intf monsoon_expr monsoon_history monsoon_dirhistory)

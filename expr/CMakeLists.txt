@@ -1,7 +1,5 @@
 project (monsoon_expr)
 
-include_directories (include)
-include_directories($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_expr
   src/expression.cc
   src/expressions/merger.cc
@@ -12,14 +10,12 @@ add_library (monsoon_expr
   src/grammar/expression/ast.cc
   src/grammar/expression/rules.cc
 )
-target_link_libraries (monsoon_expr ${extra_libs})
-target_link_libraries (monsoon_expr monsoon_lib)
-target_link_libraries (monsoon_expr monsoon_intf)
-target_link_libraries (monsoon_expr objpipe)
-target_include_directories (monsoon_expr PUBLIC include)
-target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
-target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
-target_include_directories (monsoon_expr PUBLIC $<TARGET_PROPERTY:objpipe,INTERFACE_INCLUDE_DIRECTORIES>)
+target_link_libraries (monsoon_expr PRIVATE monsoon_lib)
+target_link_libraries (monsoon_expr PUBLIC monsoon_intf)
+target_link_libraries (monsoon_expr PUBLIC objpipe)
+target_include_directories (monsoon_expr PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
 set_property (TARGET monsoon_expr PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_expr PROPERTY SOVERSION "0.0")
 

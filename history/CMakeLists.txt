@@ -1,14 +1,13 @@
 project (monsoon_history)
 
-include_directories (include)
-include_directories ($<TARGET_PROPERTY:monsoon_intf,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_history
   src/collect_history.cc
   src/instrumentation.cc
 )
-target_include_directories(monsoon_history PUBLIC include)
-target_link_libraries (monsoon_history ${extra_libs})
-target_link_libraries (monsoon_history monsoon_intf)
+target_include_directories (monsoon_history PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_link_libraries (monsoon_history PUBLIC monsoon_intf)
 set_property (TARGET monsoon_history PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_history PROPERTY SOVERSION "0.0")
 

@@ -11,20 +11,6 @@ if (NOT STD_FILESYSTEM)
   find_package (Boost COMPONENTS filesystem REQUIRED)
 endif ()
 
-if (NOT WIN32)
-  CHECK_FUNCTION_EXISTS (mkstemp HAS_MKSTEMP)
-  mark_as_advanced (HAS_MKSTEMP)
-  if (HAS_MKSTEMP)
-    add_definitions(-DHAS_MKSTEMP)
-  else ()
-    message (WARNING "no mkstemp() function found")
-  endif ()
-endif ()
-
-include_directories (include)
-include_directories (${Boost_INCLUDE_DIR})
-include_directories (${ZLIB_INCLUDE_DIRS})
-include_directories ($<TARGET_PROPERTY:monsoon_lib,INTERFACE_INCLUDE_DIRECTORIES>)
 add_library (monsoon_misc
   src/fd.cc
   src/stream.cc
@@ -33,15 +19,27 @@ add_library (monsoon_misc
   src/xdr.cc
   src/gzip_stream.cc
 )
-target_include_directories(monsoon_misc PUBLIC include)
-target_link_libraries (monsoon_misc monsoon_lib)
+target_include_directories (monsoon_misc PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+target_include_directories (monsoon_misc PUBLIC ${Boost_INCLUDE_DIR})
+target_include_directories (monsoon_misc PRIVATE ${ZLIB_INCLUDE_DIRS})
 if (NOT STD_FILESYSTEM)
-  target_link_libraries (monsoon_misc ${Boost_FILESYSTEM_LIBRARY})
-  target_link_libraries (monsoon_misc ${Boost_SYSTEM_LIBRARY})
+  target_link_libraries (monsoon_misc PRIVATE ${Boost_FILESYSTEM_LIBRARY} ${Boost_SYSTEM_LIBRARY})
 endif ()
-target_link_libraries (monsoon_misc ${ZLIB_LIBRARIES})
+target_link_libraries (monsoon_misc PRIVATE ${ZLIB_LIBRARIES})
 set_property (TARGET monsoon_misc PROPERTY VERSION "0.0")
 set_property (TARGET monsoon_misc PROPERTY SOVERSION "0.0")
+
+if (NOT WIN32)
+  CHECK_FUNCTION_EXISTS (mkstemp HAS_MKSTEMP)
+  mark_as_advanced (HAS_MKSTEMP)
+  if (HAS_MKSTEMP)
+    target_compile_definitions(monsoon_misc PRIVATE HAS_MKSTEMP)
+  else ()
+    message (WARNING "no mkstemp() function found")
+  endif ()
+endif ()
 
 install (TARGETS monsoon_misc DESTINATION lib)
 install (FILES

@@ -8,9 +8,6 @@ enable_testing()
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(BUILD_EXAMPLES "Build example binaries" ON)
 
-# Declare list variables.
-list (APPEND extra_libs)  # Libs against which to link all libraries.
-
 # If on apple, use clang and libc++.
 if (APPLE)
   set (CMAKE_XCODE_ATTRIBUTE_GCC_VERSION "com.apple.compilers.llvm.clang.1_0")
@@ -72,13 +69,6 @@ if (CMAKE_USE_PTHREADS_INIT)
   # XXX is this the correct way for all OSes?
   list (APPEND CMAKE_REQUIRED_LIBRARIES "${CMAKE_THREAD_LIBS_INIT}")
 endif ()
-list (APPEND extra_libs ${CMAKE_THREAD_LIBS_INIT})
-# FreeBSD requires inclusion of librt, linux requires it for clock_gettime.
-find_library (RT_LIB rt)
-if (RT_LIB)
-  list (APPEND extra_libs ${RT_LIB})
-endif()
-
 
 find_package(instrumentation 0.0)
 if(NOT instrumentation_DIR)

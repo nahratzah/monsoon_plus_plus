@@ -3,9 +3,8 @@ find_package(UnitTest++)
 
 macro (do_test binary)
   add_executable (test_${binary} ${binary}.cc)
-  target_link_libraries (test_${binary} monsoon_lib)
-  target_link_libraries (test_${binary} ${extra_libs})
-  target_link_libraries (test_${binary} UnitTest++)
+  target_link_libraries (test_${binary} PRIVATE monsoon_lib)
+  target_link_libraries (test_${binary} PRIVATE UnitTest++)
   add_test (${binary} test_${binary})
 endmacro (do_test)
 
