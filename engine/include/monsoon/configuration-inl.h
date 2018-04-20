@@ -7,12 +7,12 @@ namespace monsoon {
 
 
 inline configuration::configuration(configuration&& other) noexcept
-: collectors_(std::move(other.collectors_))
+: collectors_(std::move(other.collectors_)),
   rules_(std::move(other.rules_))
 {}
 
 inline auto configuration::operator=(configuration&& other) noexcept
-->  configuration {
+-> configuration& {
   collectors_ = std::move(other.collectors_);
   rules_ = std::move(other.rules_);
   return *this;

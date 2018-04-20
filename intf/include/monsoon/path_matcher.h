@@ -124,6 +124,16 @@ class monsoon_intf_export_ path_matcher {
   matcher_vector matcher_;
 };
 
+/**
+ * \brief Test if two path matchers have overlap.
+ * \ingroup intf
+ * \relates path_matcher
+ * \details
+ * Two path matchers have overlap, if there exist any path, such that both matchers match.
+ */
+monsoon_intf_export_
+auto has_overlap(const path_matcher& x, const path_matcher& y) -> bool;
+
 ///\ingroup intf_io
 ///@{
 /**

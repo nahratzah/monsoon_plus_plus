@@ -137,6 +137,16 @@ class monsoon_intf_export_ tag_matcher {
   matcher_map matcher_;
 };
 
+/**
+ * \brief Test if two tag matchers have overlap.
+ * \ingroup intf
+ * \relates tag_matcher
+ * \details
+ * Two tag matchers have overlap, if there exist any tags, such that both matchers match.
+ */
+monsoon_intf_export_
+auto has_overlap(const tag_matcher& x, const tag_matcher& y) -> bool;
+
 ///\ingroup intf_io
 ///@{
 /**

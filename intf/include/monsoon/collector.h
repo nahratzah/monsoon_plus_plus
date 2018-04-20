@@ -88,7 +88,7 @@ class monsoon_intf_export_ collector {
    *
    * The yielded metrics must match the constraint returned by provides().
    */
-  virtual auto run(objpipe::reader<time_point> tp_pipe) -> objpipe::reader<collection> = 0;
+  virtual auto run(objpipe::reader<time_point> tp_pipe) const -> objpipe::reader<collection> = 0;
 };
 
 
@@ -115,10 +115,10 @@ class monsoon_intf_export_ sync_collector
   ~sync_collector() noexcept override;
 
   auto provides() const -> names_set override final;
-  auto run(objpipe::reader<time_point> tp_pipe) -> objpipe::reader<collection> override final;
+  auto run(objpipe::reader<time_point> tp_pipe) const -> objpipe::reader<collection> override final;
 
  private:
-  virtual auto do_collect() -> std::vector<collection_element> = 0;
+  virtual auto do_collect() const -> std::vector<collection_element> = 0;
 
   known_names_set names_;
 };

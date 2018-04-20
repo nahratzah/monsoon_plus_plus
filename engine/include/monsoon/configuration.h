@@ -2,6 +2,8 @@
 #define MONSOON_CONFIGURATION_H
 
 #include <monsoon/collector.h>
+#include <monsoon/rule.h>
+#include <monsoon/history/collect_history.h>
 #include <memory>
 #include <vector>
 

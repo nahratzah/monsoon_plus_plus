@@ -18,6 +18,10 @@ inline auto time_series_value::operator=(time_series_value&& other) noexcept
   return *this;
 }
 
+inline time_series_value::time_series_value(group_name name) noexcept
+: name_(std::move(name))
+{}
+
 template<typename Iter>
 time_series_value::time_series_value(group_name name, Iter b, Iter e)
 : name_(std::move(name)),
