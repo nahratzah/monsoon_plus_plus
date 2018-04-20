@@ -63,8 +63,7 @@ auto maybe_perform_validation_(
               // Try to match name against set of literal names.
               bool found = (names.known.count(
                       std::forward_as_tuple(
-                          elem.group.get_path(),
-                          elem.group.get_tags(),
+                          elem.group,
                           elem.metric)) != 0);
 
               // Try to match name against any of the matchers.
@@ -78,8 +77,10 @@ auto maybe_perform_validation_(
               }
 
               // Report name violation.
-              std::cerr << "BUG: collector::provides() failed to account for "
-                  << elem.group << "::" << elem.metric << std::endl;
+              if (!found) {
+                std::cerr << "BUG: collector::provides() failed to account for "
+                    << elem.group << "::" << elem.metric << std::endl;
+              }
             }
           });
 }
