@@ -13,7 +13,6 @@ add_library (monsoon_intf
   src/time_range.cc
   src/time_series_value.cc
   src/time_series.cc
-  src/push_processor.cc
   src/alert.cc
   src/interpolate.cc
   src/histogram.cc
@@ -53,7 +52,6 @@ install (FILES
   include/monsoon/metric_name.h
   include/monsoon/metric_value-inl.h
   include/monsoon/metric_value.h
-  include/monsoon/push_processor.h
   include/monsoon/simple_group-inl.h
   include/monsoon/simple_group.h
   include/monsoon/tags-inl.h
