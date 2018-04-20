@@ -10,6 +10,10 @@
 #include <utility>
 #include <vector>
 
+#ifndef NDEBUG
+# include <iostream>
+#endif
+
 namespace monsoon {
 namespace {
 
@@ -36,6 +40,50 @@ auto make_time_series_(const collector::collection& c) -> time_series {
 
   return time_series(c.tp, ts_elems.begin(), ts_elems.end());
 }
+
+
+#ifdef NDEBUG
+template<typename CollectorPipe>
+auto maybe_perform_validation_(
+    const collector::names_set& names,
+    CollectorPipe&& pipe)
+-> CollectorPipe&& {
+  return std::forward<CollectorPipe>(pipe);
+}
+#else
+template<typename CollectorPipe>
+auto maybe_perform_validation_(
+    const collector::names_set& names,
+    CollectorPipe&& pipe)
+-> auto {
+  return std::forward<CollectorPipe>(pipe)
+      .peek(
+          [names](const collector::collection& c) {
+            for (const auto& elem : c.elements) {
+              // Try to match name against set of literal names.
+              bool found = (names.known.count(
+                      std::forward_as_tuple(
+                          elem.group.get_path(),
+                          elem.group.get_tags(),
+                          elem.metric)) != 0);
+
+              // Try to match name against any of the matchers.
+              if (!found) {
+                for (const auto& matchers : names.unknown) {
+                  found = (std::get<0>(matchers)(elem.group.get_path())
+                      && std::get<1>(matchers)(elem.group.get_tags())
+                      && std::get<2>(matchers)(elem.metric));
+                  if (found) break;
+                }
+              }
+
+              // Report name violation.
+              std::cerr << "BUG: collector::provides() failed to account for "
+                  << elem.group << "::" << elem.metric << std::endl;
+            }
+          });
+}
+#endif
 
 
 class history_multiplexer {
@@ -447,6 +495,10 @@ class collector_metric_source {
         .perform(
             [this](auto&& pipe) {
               return c_->run(std::forward<decltype(pipe)>(pipe));
+            })
+        .perform(
+            [this](auto&& pipe) {
+              return maybe_perform_validation_(c_->provides(), std::forward<decltype(pipe)>(pipe));
             })
         .async(objpipe::existingthread_push())
         .push(std::move(sink_));
