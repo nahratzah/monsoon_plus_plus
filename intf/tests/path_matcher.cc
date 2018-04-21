@@ -176,6 +176,117 @@ TEST(predicate_on_metric_name) {
           .push_back_literal("bar")
           .push_back_literal("baz")
           (metric_name({ "foo", "bar", "baz" })));
+  CHECK_EQUAL(
+      true,
+      path_matcher()
+          .push_back_literal("foo")
+          .push_back_double_wildcard()
+          .push_back_wildcard()
+          .push_back_literal("baz")
+          (metric_name({ "foo", "bar", "baz" })));
+  CHECK_EQUAL(
+      false,
+      path_matcher()
+          .push_back_literal("foo")
+          .push_back_double_wildcard()
+          .push_back_wildcard()
+          .push_back_literal("baz")
+          (metric_name({ "foo", "baz" })));
+}
+
+TEST(overlap) {
+  CHECK_EQUAL(
+      true,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar"),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar")));
+
+  CHECK_EQUAL(
+      false,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar"),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("xxx")));
+
+  CHECK_EQUAL(
+      true,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar"),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_wildcard()));
+
+  CHECK_EQUAL(
+      true,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_wildcard(),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar")));
+
+  CHECK_EQUAL(
+      true,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar"),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_double_wildcard()
+              .push_back_literal("bar")));
+
+  CHECK_EQUAL(
+      true,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_double_wildcard()
+              .push_back_literal("bar"),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar")));
+
+  CHECK_EQUAL(
+      true,
+      has_overlap(
+          path_matcher()
+              .push_back_wildcard()
+              .push_back_double_wildcard()
+              .push_back_wildcard(),
+          path_matcher()
+              .push_back_literal("foo")
+              .push_back_literal("bar")));
+
+  CHECK_EQUAL(
+      false,
+      has_overlap(
+          path_matcher()
+              .push_back_wildcard()
+              .push_back_double_wildcard()
+              .push_back_wildcard(),
+          path_matcher()
+              .push_back_literal("bar")));
+
+  CHECK_EQUAL(
+      false,
+      has_overlap(
+          path_matcher()
+              .push_back_literal("bar"),
+          path_matcher()
+              .push_back_wildcard()
+              .push_back_double_wildcard()
+              .push_back_wildcard()));
 }
 
 int main() {
