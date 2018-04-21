@@ -4,6 +4,7 @@
 #include <cassert>
 #include <optional>
 #include <vector>
+#include <memory>
 #include <monsoon/metric_value.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/history/dir/dirhistory_export_.h>
@@ -31,6 +32,7 @@ class monsoon_dirhistory_local_ metric_table
   metric_table() = default;
   ~metric_table() noexcept;
 
+  static auto from_xdr(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> std::shared_ptr<metric_table>;
   auto decode(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> void;
 
   auto size() const

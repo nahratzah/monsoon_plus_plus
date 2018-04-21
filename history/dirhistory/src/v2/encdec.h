@@ -324,10 +324,6 @@ void encode_group_table(xdr::xdr_ostream&,
     dictionary_delta&);
 
 monsoon_dirhistory_local_
-auto decode_metric_table(xdr::xdr_istream&,
-    const std::shared_ptr<const strval_dictionary>&)
-  -> std::shared_ptr<metric_table>;
-monsoon_dirhistory_local_
 void write_metric_table(xdr::xdr_ostream&,
     const std::vector<std::optional<metric_value>>&,
     strval_dictionary&);

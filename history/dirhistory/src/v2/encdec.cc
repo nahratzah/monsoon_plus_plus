@@ -410,7 +410,7 @@ auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
             file_segment<metric_table>(
                 ctx,
                 decode_file_segment(in),
-                std::bind(&decode_metric_table, _1, std::shared_ptr<const strval_dictionary>(dict, &dict->sdd()))));
+                std::bind(&metric_table::from_xdr, _1, std::shared_ptr<const strval_dictionary>(dict, &dict->sdd()))));
       });
 
   return std::make_shared<group_table>(std::move(presence), std::move(metric_map));
@@ -428,33 +428,6 @@ void encode_group_table(xdr::xdr_ostream& out,
         encode_file_segment(out, std::get<1>(mm_entry));
       },
       metrics_map.begin(), metrics_map.end());
-}
-
-template<typename SerFn, typename Callback>
-std::vector<bool> decode_mt(xdr::xdr_istream& in, SerFn fn, Callback cb) {
-  std::vector<bool> bitset = decode_bitset(in);
-  std::vector<bool>::const_iterator bitset_iter = bitset.cbegin();
-  in.accept_collection(
-      fn,
-      [&cb, &bitset, &bitset_iter](auto&& v) {
-        bitset_iter = std::find(bitset_iter, bitset.cend(), true);
-        if (bitset_iter == bitset.cend())
-          return; // Silent discard too many items.
-
-        auto index = bitset_iter - bitset.cbegin();
-        assert(index >= 0);
-        cb(index, std::move(v));
-        ++bitset_iter;
-      });
-  return bitset;
-}
-
-monsoon_dirhistory_local_
-std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
-    const std::shared_ptr<const strval_dictionary>& dict) {
-  auto result = std::make_shared<metric_table>();
-  result->decode(in, dict);
-  return result;
 }
 
 template<typename T> struct monsoon_dirhistory_local_ mt {
