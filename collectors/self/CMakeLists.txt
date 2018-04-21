@@ -1,6 +1,6 @@
 project (monsoon_collectors_self)
 
-add_library (monsoon_collectors_self MODULE
+add_library (monsoon_collectors_self
   src/self.cc
 )
 target_link_libraries (monsoon_collectors_self PUBLIC monsoon_intf)
