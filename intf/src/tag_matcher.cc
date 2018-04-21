@@ -249,56 +249,44 @@ bool has_overlap(const tag_matcher& x, const tag_matcher& y) {
   using presence_match = tag_matcher::presence_match;
   using comparison_match = tag_matcher::comparison_match;
 
-  // Figure out the key intersection.
-  std::unordered_set<std::string> isect_keys;
-  for (const auto& x_pair : x) {
-    if (y.matcher_.find(x_pair.first) != y.end())
-      isect_keys.emplace(x_pair.first);
-  }
-
   // Compare ranges using intersecting keys.
-  for (const std::string& key : isect_keys) {
-    tag_matcher::matcher_map::const_iterator x_range_b, x_range_e, y_range_b, y_range_e;
-    std::tie(x_range_b, x_range_e) = x.matcher_.equal_range(key);
-    std::tie(y_range_b, y_range_e) = y.matcher_.equal_range(key);
+  // Note: cartesian product of ranges with the same key.
+  for (const auto& x_entry : x) {
+    tag_matcher::matcher_map::const_iterator y_range_b, y_range_e;
+    std::tie(y_range_b, y_range_e) = y.matcher_.equal_range(x_entry.first);
 
-    // Check if both ranges are compatible.
-    // Note: cartesian product of the ranges.
+    // Check if this x_entry is compatible with all y_entries with matching keys.
     const bool ranges_overlap = std::all_of(
-        x_range_b, x_range_e,
-        [&y_range_b, &y_range_e](const auto& x) {
-          return std::all_of(
-              y_range_b, y_range_e,
-              [&x](const auto& y) {
-                return std::visit(
-                    overload(
-                        // Both absent?
-                        []([[maybe_unused]] const absence_match& x, [[maybe_unused]] const absence_match& y) {
-                          return true;
-                        },
-                        // Fail: one absent, one present.
-                        []([[maybe_unused]] const absence_match& x, [[maybe_unused]] const auto& y) {
-                          return false;
-                        },
-                        []([[maybe_unused]] const auto& x, [[maybe_unused]] const absence_match& y) {
-                          return false;
-                        },
-                        // Presence matches with any presence.
-                        []([[maybe_unused]] const presence_match& x, [[maybe_unused]] const presence_match& y) {
-                          return true;
-                        },
-                        []([[maybe_unused]] const presence_match& x, [[maybe_unused]] const comparison_match& y) {
-                          return true;
-                        },
-                        []([[maybe_unused]] const comparison_match& x, [[maybe_unused]] const presence_match& y) {
-                          return true;
-                        },
-                        // Comparison match.
-                        [](const comparison_match& x, const comparison_match& y) {
-                          return has_overlap(x, y);
-                        }),
-                    x.second, y.second);
-              });
+        y_range_b, y_range_e,
+        [&x_entry](const auto& y_entry) {
+          return std::visit(
+              overload(
+                  // Both absent?
+                  []([[maybe_unused]] const absence_match& x, [[maybe_unused]] const absence_match& y) {
+                    return true;
+                  },
+                  // Fail: one absent, one present.
+                  []([[maybe_unused]] const absence_match& x, [[maybe_unused]] const auto& y) {
+                    return false;
+                  },
+                  []([[maybe_unused]] const auto& x, [[maybe_unused]] const absence_match& y) {
+                    return false;
+                  },
+                  // Presence matches with any presence.
+                  []([[maybe_unused]] const presence_match& x, [[maybe_unused]] const presence_match& y) {
+                    return true;
+                  },
+                  []([[maybe_unused]] const presence_match& x, [[maybe_unused]] const comparison_match& y) {
+                    return true;
+                  },
+                  []([[maybe_unused]] const comparison_match& x, [[maybe_unused]] const presence_match& y) {
+                    return true;
+                  },
+                  // Comparison match.
+                  [](const comparison_match& x, const comparison_match& y) {
+                    return has_overlap(x, y);
+                  }),
+              x_entry.second, y_entry.second);
         });
     if (!ranges_overlap) return false;
   }
