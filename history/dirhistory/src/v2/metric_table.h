@@ -29,10 +29,16 @@ class monsoon_dirhistory_local_ metric_table
   using const_iterator = iterator;
   using size_type = data_type::size_type;
 
-  metric_table() = default;
+  using dynamics::dynamics;
   ~metric_table() noexcept;
 
-  static auto from_xdr(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> std::shared_ptr<metric_table>;
+  [[deprecated]]
+  static auto from_xdr(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict)
+  -> std::shared_ptr<metric_table> {
+    return from_xdr(nullptr, in, dict);
+  }
+
+  static auto from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> std::shared_ptr<metric_table>;
   auto decode(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> void;
 
   auto size() const

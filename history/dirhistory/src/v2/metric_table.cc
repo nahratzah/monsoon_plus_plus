@@ -432,9 +432,9 @@ auto decode_apply(std::vector<std::optional<metric_value>, A>& c, const mt_data<
 
 metric_table::~metric_table() noexcept {}
 
-auto metric_table::from_xdr(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict)
+auto metric_table::from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict)
 -> std::shared_ptr<metric_table> {
-  std::shared_ptr<metric_table> tbl = std::make_shared<metric_table>();
+  std::shared_ptr<metric_table> tbl = std::make_shared<metric_table>(std::move(parent));
   tbl->decode(in, dict);
   return tbl;
 }

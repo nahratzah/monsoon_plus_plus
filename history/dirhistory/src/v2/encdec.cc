@@ -410,7 +410,9 @@ auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
             file_segment<metric_table>(
                 ctx,
                 decode_file_segment(in),
-                std::bind(&metric_table::from_xdr, _1, std::shared_ptr<const strval_dictionary>(dict, &dict->sdd()))));
+                [dict](xdr::xdr_istream& in) {
+                  return metric_table::from_xdr(in, std::shared_ptr<const strval_dictionary>(dict, &dict->sdd()));
+                }));
       });
 
   return std::make_shared<group_table>(std::move(presence), std::move(metric_map));
