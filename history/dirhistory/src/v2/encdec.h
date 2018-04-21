@@ -323,11 +323,6 @@ void encode_group_table(xdr::xdr_ostream&,
     const std::vector<std::pair<metric_name, file_segment_ptr>>&,
     dictionary_delta&);
 
-monsoon_dirhistory_local_
-void write_metric_table(xdr::xdr_ostream&,
-    const std::vector<std::optional<metric_value>>&,
-    strval_dictionary&);
-
 
 }}} /* namespace monsoon::history::v2 */
 

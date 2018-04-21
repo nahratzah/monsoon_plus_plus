@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 #include <memory>
+#include <utility>
 #include <monsoon/metric_value.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/history/dir/dirhistory_export_.h>
@@ -20,6 +21,8 @@ class monsoon_dirhistory_local_ metric_table
 {
  public:
   using value_type = std::optional<metric_value>;
+  using reference = value_type&;
+  using const_reference = const value_type&;
 
  private:
   using data_type = std::vector<value_type>;
@@ -40,6 +43,7 @@ class monsoon_dirhistory_local_ metric_table
 
   static auto from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> std::shared_ptr<metric_table>;
   auto decode(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> void;
+  auto encode(xdr::xdr_ostream& out, strval_dictionary& dict) -> void;
 
   auto size() const
   noexcept
@@ -82,6 +86,16 @@ class monsoon_dirhistory_local_ metric_table
   -> bool {
     assert(idx >= 0 && idx < data_.size());
     return data_[idx].has_value();
+  }
+
+  auto push_back(const value_type& v)
+  -> void {
+    data_.push_back(v);
+  }
+
+  auto push_back(value_type&& v)
+  -> void {
+    data_.push_back(std::move(v));
   }
 
  private:

@@ -220,6 +220,17 @@ class mt_data {
     return const_iterator(presence.end(), presence.begin(), presence.end(), values.end(), values.end());
   }
 
+  auto push_absence()
+  -> void {
+    presence.push_back(false);
+  }
+
+  auto push_presence(const T& v)
+  -> void {
+    presence.push_back(true);
+    values.push_back(v);
+  }
+
  private:
   bitset presence;
   std::vector<T> values;
@@ -265,6 +276,17 @@ class mt_data<std::string_view> {
     return const_iterator(presence.end(), presence.begin(), presence.end(), values.end(), values.end());
   }
 
+  auto push_absence()
+  -> void {
+    presence.push_back(false);
+  }
+
+  auto push_presence(const std::string_view& v)
+  -> void {
+    presence.push_back(true);
+    values.push_back(v);
+  }
+
  private:
   bitset presence;
   std::vector<std::string_view> values;
@@ -299,6 +321,17 @@ class mt_data<bool> {
 
   auto end() const -> const_iterator {
     return const_iterator(presence.end(), presence.begin(), presence.end(), values.end(), values.end());
+  }
+
+  auto push_absence()
+  -> void {
+    presence.push_back(false);
+  }
+
+  auto push_presence(const bool& v)
+  -> void {
+    presence.push_back(true);
+    values.push_back(v);
   }
 
  private:
@@ -346,6 +379,17 @@ class mt_data<void> {
     return const_iterator(presence.end(), presence.begin(), presence.end(), values.end(), values.end());
   }
 
+  auto push_absence()
+  -> void {
+    presence.push_back(false);
+  }
+
+  auto push_presence(const metric_value& v)
+  -> void {
+    presence.push_back(true);
+    values.push_back(v);
+  }
+
  private:
   bitset presence;
   std::vector<metric_value> values;
@@ -378,6 +422,16 @@ class mt_data<metric_value::empty> {
 
   auto end() const -> const_iterator {
     return const_iterator(presence.end(), presence.begin(), presence.end());
+  }
+
+  auto push_absence()
+  -> void {
+    presence.push_back(false);
+  }
+
+  auto push_presence([[maybe_unused]] const metric_value::empty& v)
+  -> void {
+    presence.push_back(true);
   }
 
  private:
@@ -427,6 +481,243 @@ auto decode_apply(std::vector<std::optional<metric_value>, A>& c, const mt_data<
 }
 
 
+class mt_enc {
+ public:
+  using mt_enc_data = std::tuple<
+      mt_data<bool>,
+      mt_data<std::int16_t>,
+      mt_data<std::int32_t>,
+      mt_data<std::int64_t>,
+      mt_data<double>,
+      mt_data<std::string_view>,
+      mt_data<histogram>,
+      mt_data<metric_value::empty>,
+      mt_data<void>>;
+
+  mt_enc() = default;
+  mt_enc(const mt_enc&) = delete;
+
+  auto push_back(const std::optional<metric_value>& mv) -> void {
+    if (mv.has_value())
+      push_back_(*mv);
+    else
+      push_absence();
+  }
+
+  auto push_back_(const metric_value& mv) -> void {
+    std::visit(
+        overload(
+            std::ref(*this),
+            [this, &mv]([[maybe_unused]] const auto& unrecognized) {
+              push_other(mv);
+            }),
+        mv.get());
+  }
+
+  auto push_other(const metric_value& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_absence();
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_presence(v); // emit
+
+    assert(invariant());
+  }
+
+  auto operator()(const metric_value::empty& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_absence();
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_presence(v); // emit
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto operator()(const bool& v) -> void {
+    std::get<mt_data<bool>>(data).push_presence(v); // emit
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_absence();
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto operator()(const metric_value::signed_type& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+
+    if (v >= std::numeric_limits<std::int16_t>::min()
+        && v <= std::numeric_limits<std::int16_t>::max()) {
+      std::get<mt_data<std::int16_t>>(data).push_presence(v); // emit
+      std::get<mt_data<std::int32_t>>(data).push_absence();
+      std::get<mt_data<std::int64_t>>(data).push_absence();
+      std::get<mt_data<double>>(data).push_absence();
+    } else if (v >= std::numeric_limits<std::int32_t>::min()
+        && v <= std::numeric_limits<std::int32_t>::max()) {
+      std::get<mt_data<std::int16_t>>(data).push_absence();
+      std::get<mt_data<std::int32_t>>(data).push_presence(v); // emit
+      std::get<mt_data<std::int64_t>>(data).push_absence();
+      std::get<mt_data<double>>(data).push_absence();
+    } else if (v >= std::numeric_limits<std::int64_t>::min()
+        && v <= std::numeric_limits<std::int64_t>::max()) {
+      std::get<mt_data<std::int16_t>>(data).push_absence();
+      std::get<mt_data<std::int32_t>>(data).push_absence();
+      std::get<mt_data<std::int64_t>>(data).push_presence(v); // emit
+      std::get<mt_data<double>>(data).push_absence();
+    } else { // Should never happen.
+      std::get<mt_data<std::int16_t>>(data).push_absence();
+      std::get<mt_data<std::int32_t>>(data).push_absence();
+      std::get<mt_data<std::int64_t>>(data).push_absence();
+      std::get<mt_data<double>>(data).push_presence(v); // emit
+    }
+
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto operator()(const metric_value::unsigned_type& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+
+    if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int16_t>::max())) {
+      std::get<mt_data<std::int16_t>>(data).push_presence(v); // emit
+      std::get<mt_data<std::int32_t>>(data).push_absence();
+      std::get<mt_data<std::int64_t>>(data).push_absence();
+      std::get<mt_data<double>>(data).push_absence();
+    } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int32_t>::max())) {
+      std::get<mt_data<std::int16_t>>(data).push_absence();
+      std::get<mt_data<std::int32_t>>(data).push_presence(v); // emit
+      std::get<mt_data<std::int64_t>>(data).push_absence();
+      std::get<mt_data<double>>(data).push_absence();
+    } else if (v <= static_cast<metric_value::unsigned_type>(std::numeric_limits<std::int64_t>::max())) {
+      std::get<mt_data<std::int16_t>>(data).push_absence();
+      std::get<mt_data<std::int32_t>>(data).push_absence();
+      std::get<mt_data<std::int64_t>>(data).push_presence(v); // emit
+      std::get<mt_data<double>>(data).push_absence();
+    } else { // Too large to represent as integer, store as floating point.
+      std::get<mt_data<std::int16_t>>(data).push_absence();
+      std::get<mt_data<std::int32_t>>(data).push_absence();
+      std::get<mt_data<std::int64_t>>(data).push_absence();
+      std::get<mt_data<double>>(data).push_presence(v); // emit
+    }
+
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto operator()(const metric_value::fp_type& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_presence(v); // emit
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto operator()(const std::string_view& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_absence();
+    std::get<mt_data<std::string_view>>(data).push_presence(v); // emit
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto operator()(const histogram& v) -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_absence();
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_presence(v); // emit
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto push_absence() -> void {
+    std::get<mt_data<bool>>(data).push_absence();
+    std::get<mt_data<std::int16_t>>(data).push_absence();
+    std::get<mt_data<std::int32_t>>(data).push_absence();
+    std::get<mt_data<std::int64_t>>(data).push_absence();
+    std::get<mt_data<double>>(data).push_absence();
+    std::get<mt_data<std::string_view>>(data).push_absence();
+    std::get<mt_data<histogram>>(data).push_absence();
+    std::get<mt_data<metric_value::empty>>(data).push_absence();
+    std::get<mt_data<void>>(data).push_absence();
+
+    assert(invariant());
+  }
+
+  auto write(xdr::xdr_ostream& out, strval_dictionary& dict) const
+  -> void {
+    assert(invariant());
+
+    std::get<mt_data<bool>>(data).encode(out);
+    std::get<mt_data<std::int16_t>>(data).encode(out);
+    std::get<mt_data<std::int32_t>>(data).encode(out);
+    std::get<mt_data<std::int64_t>>(data).encode(out);
+    std::get<mt_data<double>>(data).encode(out);
+    std::get<mt_data<std::string_view>>(data).encode(out, dict);
+    std::get<mt_data<histogram>>(data).encode(out);
+    std::get<mt_data<metric_value::empty>>(data).encode(out);
+    std::get<mt_data<void>>(data).encode(out, dict);
+  }
+
+ private:
+  auto invariant() const -> bool {
+    return invariant(std::make_index_sequence<std::tuple_size_v<mt_enc_data>>());
+  }
+
+  template<std::size_t... Idx>
+  auto invariant([[maybe_unused]] std::index_sequence<Idx...> indices) const
+  -> std::enable_if_t<sizeof...(Idx) < 2, bool> {
+    return true;
+  }
+
+  template<std::size_t Idx0, std::size_t Idx1, std::size_t... Idx>
+  auto invariant([[maybe_unused]] std::index_sequence<Idx0, Idx1, Idx...> indices) const
+  -> bool {
+    return std::get<Idx0>(data).size() == std::get<Idx1>(data).size()
+        && invariant(std::index_sequence<Idx1, Idx...>());
+  }
+
+  mt_enc_data data;
+};
+
+
 } /* namespace monsoon::history::v2::<unnamed> */
 
 
@@ -451,6 +742,14 @@ auto metric_table::decode(xdr::xdr_istream& in, const std::shared_ptr<const strv
   decode_apply(data_, decode_mt_data<histogram>(in));
   decode_apply(data_, decode_mt_data<metric_value::empty>(in));
   decode_apply(data_, decode_mt_data<void>(in, *dict));
+}
+
+auto metric_table::encode(xdr::xdr_ostream& out, strval_dictionary& dict) -> void {
+  mt_enc enc;
+  std::for_each(
+      data_.begin(), data_.end(),
+      [&enc](const std::optional<metric_value>& v) { enc.push_back(v); });
+  enc.write(out, dict);
 }
 
 
