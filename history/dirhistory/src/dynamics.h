@@ -26,6 +26,7 @@ class monsoon_dirhistory_local_ typed_dynamics
     assert(parent_ != nullptr);
   }
 
+ protected:
   auto parent() -> T& {
     assert(parent_ != nullptr);
     return *parent_;

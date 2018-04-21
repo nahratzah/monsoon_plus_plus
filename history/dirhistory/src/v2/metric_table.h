@@ -23,6 +23,8 @@ class monsoon_dirhistory_local_ metric_table
   using reference = value_type&;
   using const_reference = const value_type&;
 
+  static constexpr bool is_compressed = true;
+
  private:
   using data_type = std::vector<value_type>;
 
@@ -32,7 +34,7 @@ class monsoon_dirhistory_local_ metric_table
   using size_type = data_type::size_type;
 
   using typed_dynamics<void>::typed_dynamics;
-  ~metric_table() noexcept;
+  ~metric_table() noexcept override;
 
   [[deprecated]]
   static auto from_xdr(xdr::xdr_istream& in, const dictionary& dict)

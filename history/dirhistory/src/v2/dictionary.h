@@ -221,6 +221,8 @@ class monsoon_dirhistory_local_ dictionary
     return *this;
   }
 
+  ~dictionary() noexcept override;
+
   auto update_pending() const
   noexcept
   -> bool {

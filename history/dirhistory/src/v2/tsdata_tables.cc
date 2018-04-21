@@ -70,16 +70,16 @@ std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
       const group_name& gname = std::get<0>(tbl_grp);
       const std::shared_ptr<const group_table> grp_data =
           std::get<1>(tbl_grp).get();
-      const std::vector<bool>& presence = std::get<0>(*grp_data);
+      const bitset& presence = grp_data->presence();
 
       // Fill mmap with metric values over time.
       mmap.resize(presence.size());
       std::for_each(mmap.begin(), mmap.end(),
           std::bind(&time_series_value::metric_map::clear, _1));
-      for (const auto& metric_entry : std::get<1>(*grp_data)) {
-        const metric_name& mname = std::get<0>(metric_entry);
+      for (const auto& metric_entry : *grp_data) {
+        const metric_name& mname = metric_entry.name();
         const std::shared_ptr<const metric_table> mtbl =
-            std::get<1>(metric_entry).get();
+            metric_entry.get();
 
         // Fill mmap with a specific metric value over time.
         for (auto iter = std::make_tuple(mtbl->cbegin(), mmap.begin());
@@ -232,12 +232,12 @@ auto emit_fdtblock(
     auto group_name_ptr = std::get<0>(tbl_entry);
     auto group_table_ptr = std::get<1>(tbl_entry).get();
 
-    for (const auto& mv_map_entry : std::get<1>(*group_table_ptr)) {
-      if (!metric_filter(mv_map_entry.first))
+    for (const auto& mv_map_entry : *group_table_ptr) {
+      const auto& metric_name_ptr = mv_map_entry.name();
+      if (!metric_filter(metric_name_ptr))
         continue; // SKIP
 
-      auto metric_name_ptr = mv_map_entry.first;
-      std::shared_ptr<const metric_table> mv_column_ptr = mv_map_entry.second.get();
+      std::shared_ptr<const metric_table> mv_column_ptr = mv_map_entry.get();
 
       columns.emplace_back(
           emit_fdtblock_pipe(

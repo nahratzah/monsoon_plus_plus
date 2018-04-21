@@ -3,6 +3,7 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/io/fd.h>
+#include <monsoon/xdr/xdr.h>
 
 namespace monsoon {
 namespace history {
@@ -15,12 +16,30 @@ class monsoon_dirhistory_local_ file_segment_ptr {
   using size_type = io::fd::size_type;
 
   file_segment_ptr() = default;
-  file_segment_ptr(const file_segment_ptr&) = default;
-  file_segment_ptr& operator=(const file_segment_ptr&) = default;
-  file_segment_ptr(offset_type, size_type) noexcept;
+
+  file_segment_ptr(offset_type off, size_type len) noexcept
+  : off_(off),
+    len_(len)
+  {}
 
   offset_type offset() const noexcept { return off_; }
   size_type size() const noexcept { return len_; }
+
+  static auto from_xdr(xdr::xdr_istream& in) -> file_segment_ptr {
+    file_segment_ptr result;
+    result.decode(in);
+    return result;
+  }
+
+  auto decode(xdr::xdr_istream& in) -> void {
+    off_ = in.get_uint64();
+    len_ = in.get_uint64();
+  }
+
+  auto encode(xdr::xdr_ostream& out) const -> void {
+    out.put_uint64(off_);
+    out.put_uint64(len_);
+  }
 
  private:
   offset_type off_;

@@ -46,13 +46,6 @@ inline encdec_writer::xdr_writer::xdr_writer(encdec_writer& ecw, bool compress)
 {}
 
 
-inline file_segment_ptr::file_segment_ptr(offset_type off, size_type len)
-    noexcept
-: off_(off),
-  len_(len)
-{}
-
-
 template<typename T>
 file_segment<T>::file_segment() noexcept
 {}

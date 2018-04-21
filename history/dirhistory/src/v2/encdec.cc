@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <stack>
 #include <cstring>
+#include "group_table.h"
 
 namespace monsoon {
 namespace history {
@@ -101,14 +102,11 @@ void encode_bitset(xdr::xdr_ostream& out, const std::vector<bool>& bits) {
 }
 
 file_segment_ptr decode_file_segment(xdr::xdr_istream& in) {
-  const std::uint64_t offset = in.get_uint64();
-  const std::uint64_t len = in.get_uint64();
-  return file_segment_ptr(offset, len);
+  return file_segment_ptr::from_xdr(in);
 }
 
 void encode_file_segment(xdr::xdr_ostream& out, const file_segment_ptr& fsp) {
-  out.put_uint64(fsp.offset());
-  out.put_uint64(fsp.size());
+  fsp.encode(out);
 }
 
 auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
@@ -398,24 +396,7 @@ void encode_tables(xdr::xdr_ostream& out,
 auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
     const std::shared_ptr<const dictionary_delta>& dict)
 -> std::shared_ptr<group_table> {
-  using namespace std::placeholders;
-  using metric_map_type = std::tuple_element<1, group_table>::type;
-
-  auto presence = decode_bitset(in);
-  auto metric_map = in.get_collection<metric_map_type>(
-      [&dict, &ctx](xdr::xdr_istream& in) {
-        metric_name name = dict->pdd()[in.get_uint32()];
-        return std::make_tuple(
-            std::move(name),
-            file_segment<metric_table>(
-                ctx,
-                decode_file_segment(in),
-                [dict](xdr::xdr_istream& in) {
-                  return metric_table::from_xdr(in, *dict);
-                }));
-      });
-
-  return std::make_shared<group_table>(std::move(presence), std::move(metric_map));
+  return group_table::from_xdr(nullptr, in, std::const_pointer_cast<dictionary_delta>(dict), ctx);
 }
 
 void encode_group_table(xdr::xdr_ostream& out,
@@ -430,77 +411,6 @@ void encode_group_table(xdr::xdr_ostream& out,
         encode_file_segment(out, std::get<1>(mm_entry));
       },
       metrics_map.begin(), metrics_map.end());
-}
-
-
-encdec_ctx::encdec_ctx() noexcept {}
-
-encdec_ctx::encdec_ctx(const encdec_ctx& o)
-: fd_(o.fd_),
-  hdr_flags_(o.hdr_flags_)
-{}
-
-encdec_ctx::encdec_ctx(encdec_ctx&& o) noexcept
-: fd_(std::move(o.fd_)),
-  hdr_flags_(std::move(o.hdr_flags_))
-{}
-
-auto encdec_ctx::operator=(const encdec_ctx& o) -> encdec_ctx& {
-  fd_ = o.fd_;
-  hdr_flags_ = o.hdr_flags_;
-  return *this;
-}
-
-auto encdec_ctx::operator=(encdec_ctx&& o) noexcept -> encdec_ctx& {
-  fd_ = std::move(o.fd_);
-  hdr_flags_ = std::move(o.hdr_flags_);
-  return *this;
-}
-
-encdec_ctx::encdec_ctx(std::shared_ptr<io::fd> fd, std::uint32_t hdr_flags)
-  noexcept
-: fd_(std::move(fd)),
-  hdr_flags_(hdr_flags)
-{}
-
-encdec_ctx::~encdec_ctx() noexcept {}
-
-auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
-  const
--> xdr::xdr_stream_reader<io::ptr_stream_reader> {
-  auto rd = io::make_ptr_reader<raw_file_segment_reader>(
-      *fd_, ptr.offset(),
-      ptr.size());
-  if (compression) rd = decompress(std::move(rd), true);
-  return xdr::xdr_stream_reader<io::ptr_stream_reader>(std::move(rd));
-}
-
-auto encdec_ctx::decompress(io::ptr_stream_reader&& rd, bool validate) const
--> std::unique_ptr<io::stream_reader> {
-  switch (compression()) {
-    default:
-    case compression_type::LZO_1X1: // XXX implement reader
-    case compression_type::SNAPPY: // XXX implement reader
-      throw std::logic_error("Unsupported compression");
-    case compression_type::NONE:
-      return std::move(rd).get();
-    case compression_type::GZIP:
-      return io::new_gzip_decompression(std::move(rd), validate);
-  }
-}
-
-auto encdec_ctx::compress(io::ptr_stream_writer&& wr) const
--> std::unique_ptr<io::stream_writer> {
-  switch (compression()) {
-    default:
-    case compression_type::LZO_1X1: // XXX implement reader
-    case compression_type::SNAPPY: // XXX implement reader
-      throw std::logic_error("Unsupported compression");
-    case compression_type::NONE:
-      return std::move(wr).get();
-    case compression_type::GZIP:
-      return io::new_gzip_compression(std::move(wr));
-  }
 }
 
 

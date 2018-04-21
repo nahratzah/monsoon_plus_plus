@@ -20,14 +20,16 @@ add_library (monsoon_dirhistory
   src/dynamics.cc
   src/v0/tsdata.cc
   src/v1/tsdata.cc
+  src/v2/encdec_ctx.cc
   src/v2/xdr_primitives.cc
   src/v2/dictionary.cc
+  src/v2/metric_table.cc
+  src/v2/group_table.cc
   src/v2/encdec.cc
   src/v2/tsdata.cc
   src/v2/tsdata_tables.cc
   src/v2/tsdata_list.cc
   src/v2/bitset.cc
-  src/v2/metric_table.cc
 )
 target_include_directories (monsoon_dirhistory PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

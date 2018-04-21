@@ -568,4 +568,7 @@ auto tag_dictionary::make_inverse_() const
 }
 
 
+dictionary::~dictionary() noexcept {}
+
+
 } /* namespace monsoon::history::v2 */
