@@ -36,13 +36,17 @@ class monsoon_dirhistory_local_ metric_table
   ~metric_table() noexcept;
 
   [[deprecated]]
-  static auto from_xdr(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict)
+  static auto from_xdr(xdr::xdr_istream& in, const strval_dictionary& dict)
   -> std::shared_ptr<metric_table> {
     return from_xdr(nullptr, in, dict);
   }
 
-  static auto from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> std::shared_ptr<metric_table>;
-  auto decode(xdr::xdr_istream& in, const std::shared_ptr<const strval_dictionary>& dict) -> void;
+  static auto from_xdr(
+      std::shared_ptr<void> parent,
+      xdr::xdr_istream& in,
+      const strval_dictionary& dict)
+      -> std::shared_ptr<metric_table>;
+  auto decode(xdr::xdr_istream& in, const strval_dictionary& dict) -> void;
   auto encode(xdr::xdr_ostream& out, strval_dictionary& dict) -> void;
 
   auto size() const
