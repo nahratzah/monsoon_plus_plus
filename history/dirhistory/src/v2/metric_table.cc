@@ -207,6 +207,11 @@ class mt_data {
         values.cbegin(), values.cend());
   }
 
+  auto size() const noexcept
+  -> bitset::size_type {
+    return presence.size();
+  }
+
   auto begin() const -> const_iterator {
     return const_iterator(presence.begin(), presence.begin(), presence.end(), values.begin(), values.end());
   }
@@ -247,6 +252,11 @@ class mt_data<std::string_view> {
         values.cbegin(), values.cend());
   }
 
+  auto size() const noexcept
+  -> bitset::size_type {
+    return presence.size();
+  }
+
   auto begin() const -> const_iterator {
     return const_iterator(presence.begin(), presence.begin(), presence.end(), values.begin(), values.end());
   }
@@ -276,6 +286,11 @@ class mt_data<bool> {
   -> void {
     presence.encode(out);
     values.encode(out);
+  }
+
+  auto size() const noexcept
+  -> bitset::size_type {
+    return presence.size();
   }
 
   auto begin() const -> const_iterator {
@@ -318,6 +333,11 @@ class mt_data<void> {
         values.cbegin(), values.cend());
   }
 
+  auto size() const noexcept
+  -> bitset::size_type {
+    return presence.size();
+  }
+
   auto begin() const -> const_iterator {
     return const_iterator(presence.begin(), presence.begin(), presence.end(), values.begin(), values.end());
   }
@@ -345,6 +365,11 @@ class mt_data<metric_value::empty> {
   auto encode(xdr::xdr_ostream& out) const
   -> void {
     presence.encode(out);
+  }
+
+  auto size() const noexcept
+  -> bitset::size_type {
+    return presence.size();
   }
 
   auto begin() const -> const_iterator {
@@ -378,6 +403,8 @@ auto decode_mt_data(xdr::xdr_istream& in, const strval_dictionary& dict)
 template<typename A, typename T>
 auto decode_apply(std::vector<std::optional<metric_value>, A>& c, const mt_data<T>& x)
 -> void {
+  c.reserve(x.size());
+
   std::for_each(
       x.begin(), x.end(),
       [&c](const auto& x) {
@@ -389,6 +416,8 @@ auto decode_apply(std::vector<std::optional<metric_value>, A>& c, const mt_data<
 template<typename A>
 auto decode_apply(std::vector<std::optional<metric_value>, A>& c, const mt_data<metric_value::empty>& x)
 -> void {
+  c.reserve(x.size());
+
   std::for_each(
       x.begin(), x.end(),
       [&c](const auto& x) {
