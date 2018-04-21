@@ -172,7 +172,7 @@ auto emit_fdtblock_pipe(
     std::shared_ptr<const std::vector<time_point>> time_points_ptr,
     group_name group_name_ptr,
     metric_name metric_name_ptr,
-    std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr)
+    std::shared_ptr<const metric_table> mv_column_ptr)
 -> decltype(auto) {
   using emit_type = tsdata_v2_tables::emit_type;
 
@@ -209,7 +209,7 @@ using emit_fdtblock_pipe_t = decltype(
         std::declval<std::shared_ptr<const std::vector<time_point>>>(),
         std::declval<group_name>(),
         std::declval<metric_name>(),
-        std::declval<std::shared_ptr<const std::vector<std::optional<metric_value>>>>()));
+        std::declval<std::shared_ptr<const metric_table>>()));
 
 auto emit_fdtblock(
     std::shared_ptr<const file_data_tables_block> block,
@@ -237,7 +237,7 @@ auto emit_fdtblock(
         continue; // SKIP
 
       auto metric_name_ptr = mv_map_entry.first;
-      std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr = mv_map_entry.second.get();
+      std::shared_ptr<const metric_table> mv_column_ptr = mv_map_entry.second.get();
 
       columns.emplace_back(
           emit_fdtblock_pipe(

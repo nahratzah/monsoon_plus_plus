@@ -17,15 +17,6 @@ namespace history {
 namespace v2 {
 
 
-enum class metrickind : std::uint32_t {
-  BOOL = 0,
-  INT = 1,
-  FLOAT = 2,
-  STRING = 3,
-  HISTOGRAM = 4,
-  EMPTY = 0x7fffffff
-};
-
 time_point decode_timestamp(xdr::xdr_istream& in) {
   return time_point(in.get_int64());
 }
@@ -107,97 +98,6 @@ void encode_bitset(xdr::xdr_ostream& out, const std::vector<bool>& bits) {
 
   out.put_collection(std::bind(&xdr::xdr_ostream::put_uint16, _1, _2),
       counters.begin(), counters.end());
-}
-
-histogram decode_histogram(monsoon::xdr::xdr_istream& in) {
-  histogram result;
-  in.accept_collection(
-      [](monsoon::xdr::xdr_istream& in) {
-        const double lo = in.get_flt64();
-        const double hi = in.get_flt64();
-        const double count = in.get_flt64();
-        return std::make_tuple(histogram::range(lo, hi), count);
-      },
-      [&result](const std::tuple<histogram::range, double>& v) {
-        result.add(std::get<0>(v), std::get<1>(v));
-      });
-  return result;
-}
-
-void encode_histogram(monsoon::xdr::xdr_ostream& out, const histogram& hist) {
-  const auto& data = hist.data();
-  out.put_collection(
-      [](monsoon::xdr::xdr_ostream& out, const auto& hist_elem) {
-        out.put_flt64(std::get<0>(hist_elem).low());
-        out.put_flt64(std::get<0>(hist_elem).high());
-        out.put_flt64(std::get<1>(hist_elem));
-      },
-      data.begin(), data.end());
-}
-
-metric_value decode_metric_value(monsoon::xdr::xdr_istream& in,
-    const strval_dictionary& dict) {
-  switch (in.get_uint32()) {
-    default:
-      throw xdr::xdr_exception();
-    case static_cast<std::uint32_t>(metrickind::BOOL):
-      return metric_value(in.get_bool());
-      break;
-    case static_cast<std::uint32_t>(metrickind::INT):
-      return metric_value(in.get_int64());
-      break;
-    case static_cast<std::uint32_t>(metrickind::FLOAT):
-      return metric_value(in.get_flt64());
-      break;
-    case static_cast<std::uint32_t>(metrickind::STRING):
-      return metric_value(dict[in.get_uint32()]);
-      break;
-    case static_cast<std::uint32_t>(metrickind::HISTOGRAM):
-      return metric_value(decode_histogram(in));
-      break;
-    case static_cast<std::uint32_t>(metrickind::EMPTY):
-      return metric_value();
-      break;
-  }
-}
-
-void encode_metric_value(monsoon::xdr::xdr_ostream& out,
-    const metric_value& value, strval_dictionary& dict) {
-  visit(
-      overload(
-          [&out](const metric_value::empty&) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::EMPTY));
-          },
-          [&out](bool b) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::BOOL));
-            out.put_bool(b);
-          },
-          [&out](const metric_value::signed_type& v) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-            out.put_int64(v);
-          },
-          [&out](const metric_value::unsigned_type& v) {
-            if (v < static_cast<metric_value::unsigned_type>(std::numeric_limits<metric_value::signed_type>::max())) {
-              out.put_uint32(static_cast<std::uint32_t>(metrickind::INT));
-              out.put_int64(static_cast<std::int64_t>(v));
-            } else { // Can't be represented in signed type.
-              out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
-              out.put_flt64(v);
-            }
-          },
-          [&out](const metric_value::fp_type& v) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::FLOAT));
-            out.put_flt64(v);
-          },
-          [&out, &dict](const std::string_view& v) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::STRING));
-            out.put_uint32(dict[v]);
-          },
-          [&out](const histogram& v) {
-            out.put_uint32(static_cast<std::uint32_t>(metrickind::HISTOGRAM));
-            encode_histogram(out, v);
-          }),
-      value.get());
 }
 
 file_segment_ptr decode_file_segment(xdr::xdr_istream& in) {
@@ -553,72 +453,7 @@ monsoon_dirhistory_local_
 std::shared_ptr<metric_table> decode_metric_table(xdr::xdr_istream& in,
     const std::shared_ptr<const strval_dictionary>& dict) {
   auto result = std::make_shared<metric_table>();
-  std::vector<bool> presence;
-
-  auto callback = [&result](std::size_t index, auto&& v) {
-    if (result->size() <= index) {
-      result->reserve(index + 1u);
-      result->resize(index);
-      result->emplace_back(std::move(v));
-    } else {
-      if constexpr(std::is_same_v<metric_value, std::decay_t<decltype(v)>>)
-        (*result)[index] = std::move(v);
-      else
-        (*result)[index] = metric_value(std::move(v));
-    }
-  };
-
-  auto update_presence = [&presence](const std::vector<bool>& u) {
-    if (presence.size() < u.size())
-      presence.resize(u.size(), false);
-    std::transform(u.begin(), u.end(), presence.begin(), presence.begin(),
-        [](bool u, bool p) {
-          if (p && u) throw xdr::xdr_exception("presence collision");
-          return p || u;
-        });
-  };
-
-  { // Bools are stored in a second bitset.
-    auto bool_presence = decode_bitset(in);
-    auto bitset_iter = bool_presence.cbegin();
-    for (bool v : decode_bitset(in)) {
-      bitset_iter = std::find(bitset_iter, bool_presence.cend(), true);
-      if (bitset_iter == bool_presence.cend()) break; // Silent discard too many items.
-      auto index = bitset_iter - bool_presence.cbegin();
-      assert(index >= 0);
-      std::invoke(callback, index, v);
-      ++bitset_iter;
-    }
-    update_presence(std::move(bool_presence));
-  }
-  update_presence(decode_mt(in, &xdr::xdr_istream::get_int16, callback));
-  update_presence(decode_mt(in, &xdr::xdr_istream::get_int32, callback));
-  update_presence(decode_mt(in, &xdr::xdr_istream::get_int64, callback));
-  update_presence(decode_mt(in, &xdr::xdr_istream::get_flt64, callback));
-  update_presence(decode_mt(in,
-          [&dict](xdr::xdr_istream& in) {
-            return (*dict)[in.get_uint32()];
-          },
-          callback));
-  update_presence(decode_mt(in, &decode_histogram, callback));
-  /* empty handling */ {
-    const std::vector<bool> empty_bitset = decode_bitset(in);
-    update_presence(empty_bitset);
-
-    if (result->size() < empty_bitset.size()) result->resize(empty_bitset.size());
-    for (auto iter = empty_bitset.cbegin(); iter != empty_bitset.cend(); ++iter) {
-      if (*iter) {
-        const auto index = iter - empty_bitset.cbegin();
-        (*result)[index] = metric_value(); // Assigns the optional.
-      }
-    }
-  }
-  update_presence(decode_mt(in,
-          [&dict](xdr::xdr_istream& in) {
-            return decode_metric_value(in, *dict);
-          },
-          callback));
-
+  result->decode(in, dict);
   return result;
 }
 

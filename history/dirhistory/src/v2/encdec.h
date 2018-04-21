@@ -3,6 +3,8 @@
 
 #include "file_segment_ptr.h"
 #include "dictionary.h"
+#include "xdr_primitives.h"
+#include "metric_table.h"
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -209,7 +211,6 @@ class monsoon_dirhistory_local_ tsdata_list
   const encdec_ctx ctx_;
 };
 
-using metric_table = std::vector<std::optional<metric_value>>;
 using group_table = std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment<metric_table>>>;
 using tables = std::unordered_map<group_name, file_segment<group_table>>;
 using file_data_tables_block = std::tuple<std::vector<time_point>, file_segment<tables>>;
@@ -265,18 +266,6 @@ monsoon_dirhistory_local_
 std::vector<bool> decode_bitset(xdr::xdr_istream&);
 monsoon_dirhistory_local_
 void encode_bitset(xdr::xdr_ostream&, const std::vector<bool>&);
-
-monsoon_dirhistory_local_
-histogram decode_histogram(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_histogram(xdr::xdr_ostream&, const histogram&);
-
-monsoon_dirhistory_local_
-metric_value decode_metric_value(xdr::xdr_istream&,
-    const strval_dictionary&);
-monsoon_dirhistory_local_
-void encode_metric_value(xdr::xdr_ostream&,
-    const metric_value& value, strval_dictionary&);
 
 monsoon_dirhistory_local_
 file_segment_ptr decode_file_segment(xdr::xdr_istream&);
