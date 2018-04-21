@@ -36,7 +36,7 @@ auto group_table::decode(xdr::xdr_istream& in)
 auto group_table::read_(data_type::const_reference ptr) const
 -> std::shared_ptr<const metric_table> {
   auto xdr = get_ctx().new_reader(ptr.second, metric_table::is_compressed);
-  auto result = metric_table::from_xdr(std::const_pointer_cast<group_table>(shared_from_this()), xdr, *get_dictionary());
+  auto result = metric_table::from_xdr(std::const_pointer_cast<group_table>(shared_from_this()), xdr);
   if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
   xdr.close();
   return result;

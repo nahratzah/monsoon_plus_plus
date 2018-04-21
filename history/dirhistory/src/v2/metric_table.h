@@ -36,19 +36,12 @@ class monsoon_dirhistory_local_ metric_table
   using typed_dynamics<group_table>::typed_dynamics;
   ~metric_table() noexcept override;
 
-  [[deprecated]]
-  static auto from_xdr(xdr::xdr_istream& in, const dictionary& dict)
-  -> std::shared_ptr<metric_table> {
-    return from_xdr(nullptr, in, dict);
-  }
-
   static auto from_xdr(
       std::shared_ptr<group_table> parent,
-      xdr::xdr_istream& in,
-      const dictionary& dict)
+      xdr::xdr_istream& in)
       -> std::shared_ptr<metric_table>;
-  auto decode(xdr::xdr_istream& in, const dictionary& dict) -> void;
-  auto encode(xdr::xdr_ostream& out, dictionary& dict) -> void;
+  auto decode(xdr::xdr_istream& in) -> void;
+  auto encode(xdr::xdr_ostream& out) const -> void;
 
   auto size() const
   noexcept
