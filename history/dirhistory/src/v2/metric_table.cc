@@ -724,7 +724,7 @@ class mt_enc {
 
 metric_table::~metric_table() noexcept {}
 
-auto metric_table::from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const dictionary& dict)
+auto metric_table::from_xdr(std::shared_ptr<group_table> parent, xdr::xdr_istream& in, const dictionary& dict)
 -> std::shared_ptr<metric_table> {
   std::shared_ptr<metric_table> tbl = std::make_shared<metric_table>(std::move(parent));
   tbl->decode(in, dict);

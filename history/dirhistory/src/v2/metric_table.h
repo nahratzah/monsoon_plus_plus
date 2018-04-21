@@ -16,7 +16,7 @@ namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ metric_table
-: public typed_dynamics<void>
+: public typed_dynamics<group_table>
 {
  public:
   using value_type = std::optional<metric_value>;
@@ -33,7 +33,7 @@ class monsoon_dirhistory_local_ metric_table
   using const_iterator = iterator;
   using size_type = data_type::size_type;
 
-  using typed_dynamics<void>::typed_dynamics;
+  using typed_dynamics<group_table>::typed_dynamics;
   ~metric_table() noexcept override;
 
   [[deprecated]]
@@ -43,7 +43,7 @@ class monsoon_dirhistory_local_ metric_table
   }
 
   static auto from_xdr(
-      std::shared_ptr<void> parent,
+      std::shared_ptr<group_table> parent,
       xdr::xdr_istream& in,
       const dictionary& dict)
       -> std::shared_ptr<metric_table>;
