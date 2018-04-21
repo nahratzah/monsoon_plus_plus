@@ -15,7 +15,7 @@ class monsoon_dirhistory_local_ dynamics {
   : dynamics(nullptr)
   {}
 
-  dynamics(std::shared_ptr<void> parent)
+  explicit dynamics(std::shared_ptr<void> parent)
   : parent_(std::move(parent))
   {}
 

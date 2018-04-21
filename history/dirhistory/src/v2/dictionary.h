@@ -14,6 +14,7 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
 #include <monsoon/xdr/xdr.h>
+#include "../dynamics.h"
 
 namespace monsoon::history::v2 {
 
@@ -179,27 +180,38 @@ class monsoon_dirhistory_local_ tag_dictionary {
   std::uint32_t update_start_ = 0;
 };
 
-class monsoon_dirhistory_local_ dictionary {
+class monsoon_dirhistory_local_ dictionary
+: public dynamics
+{
  public:
+  [[deprecated]]
   dictionary()
-  : strval_(),
+  : dictionary(nullptr)
+  {}
+
+  explicit dictionary(std::shared_ptr<void> parent)
+  : dynamics(parent),
+    strval_(),
     paths_(this->strval_),
     tags_(this->strval_)
   {}
 
   dictionary(const dictionary& y)
-  : strval_(y.strval_),
+  : dynamics(y),
+    strval_(y.strval_),
     paths_(y.paths_, this->strval_),
     tags_(y.tags_, this->strval_)
   {}
 
   dictionary(dictionary&& y)
-  : strval_(std::move(y.strval_)),
+  : dynamics(std::move(y)),
+    strval_(std::move(y.strval_)),
     paths_(std::move(y.paths_), this->strval_),
     tags_(std::move(y.tags_), this->strval_)
   {}
 
   dictionary& operator=(const dictionary& y) {
+    this->dynamics::operator=(y);
     strval_ = y.strval_;
     paths_ = y.paths_;
     tags_ = y.tags_;
@@ -207,6 +219,7 @@ class monsoon_dirhistory_local_ dictionary {
   }
 
   dictionary& operator=(dictionary&& y) {
+    this->dynamics::operator=(std::move(y));
     strval_ = std::move(y.strval_);
     paths_ = std::move(y.paths_);
     tags_ = std::move(y.tags_);
