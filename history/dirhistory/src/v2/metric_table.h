@@ -9,15 +9,14 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/history/dir/dirhistory_export_.h>
-#include "dictionary.h"
+#include "fwd.h"
 #include "../dynamics.h"
 
 namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ metric_table
-: public typed_dynamics<void>,
-  public std::enable_shared_from_this<metric_table>
+: public typed_dynamics<void>
 {
  public:
   using value_type = std::optional<metric_value>;
@@ -36,7 +35,7 @@ class monsoon_dirhistory_local_ metric_table
   ~metric_table() noexcept;
 
   [[deprecated]]
-  static auto from_xdr(xdr::xdr_istream& in, const strval_dictionary& dict)
+  static auto from_xdr(xdr::xdr_istream& in, const dictionary& dict)
   -> std::shared_ptr<metric_table> {
     return from_xdr(nullptr, in, dict);
   }
@@ -44,10 +43,10 @@ class monsoon_dirhistory_local_ metric_table
   static auto from_xdr(
       std::shared_ptr<void> parent,
       xdr::xdr_istream& in,
-      const strval_dictionary& dict)
+      const dictionary& dict)
       -> std::shared_ptr<metric_table>;
-  auto decode(xdr::xdr_istream& in, const strval_dictionary& dict) -> void;
-  auto encode(xdr::xdr_ostream& out, strval_dictionary& dict) -> void;
+  auto decode(xdr::xdr_istream& in, const dictionary& dict) -> void;
+  auto encode(xdr::xdr_ostream& out, dictionary& dict) -> void;
 
   auto size() const
   noexcept

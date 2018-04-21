@@ -411,7 +411,7 @@ auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
                 ctx,
                 decode_file_segment(in),
                 [dict](xdr::xdr_istream& in) {
-                  return metric_table::from_xdr(in, dict->sdd());
+                  return metric_table::from_xdr(in, *dict);
                 }));
       });
 

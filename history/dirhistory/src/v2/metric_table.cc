@@ -1,5 +1,6 @@
 #include "metric_table.h"
 #include "bitset.h"
+#include "dictionary.h"
 #include "xdr_primitives.h"
 #include <iterator>
 
@@ -723,14 +724,14 @@ class mt_enc {
 
 metric_table::~metric_table() noexcept {}
 
-auto metric_table::from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const strval_dictionary& dict)
+auto metric_table::from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, const dictionary& dict)
 -> std::shared_ptr<metric_table> {
   std::shared_ptr<metric_table> tbl = std::make_shared<metric_table>(std::move(parent));
   tbl->decode(in, dict);
   return tbl;
 }
 
-auto metric_table::decode(xdr::xdr_istream& in, const strval_dictionary& dict)
+auto metric_table::decode(xdr::xdr_istream& in, const dictionary& dict)
 -> void {
   data_.clear();
   decode_apply(data_, decode_mt_data<bool>(in));
@@ -738,18 +739,18 @@ auto metric_table::decode(xdr::xdr_istream& in, const strval_dictionary& dict)
   decode_apply(data_, decode_mt_data<std::int32_t>(in));
   decode_apply(data_, decode_mt_data<std::int64_t>(in));
   decode_apply(data_, decode_mt_data<double>(in));
-  decode_apply(data_, decode_mt_data<std::string_view>(in, dict));
+  decode_apply(data_, decode_mt_data<std::string_view>(in, dict.sdd()));
   decode_apply(data_, decode_mt_data<histogram>(in));
   decode_apply(data_, decode_mt_data<metric_value::empty>(in));
-  decode_apply(data_, decode_mt_data<void>(in, dict));
+  decode_apply(data_, decode_mt_data<void>(in, dict.sdd()));
 }
 
-auto metric_table::encode(xdr::xdr_ostream& out, strval_dictionary& dict) -> void {
+auto metric_table::encode(xdr::xdr_ostream& out, dictionary& dict) -> void {
   mt_enc enc;
   std::for_each(
       data_.begin(), data_.end(),
       [&enc](const std::optional<metric_value>& v) { enc.push_back(v); });
-  enc.write(out, dict);
+  enc.write(out, dict.sdd());
 }
 
 
