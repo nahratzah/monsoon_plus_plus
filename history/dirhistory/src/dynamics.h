@@ -4,26 +4,59 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <memory>
 #include <utility>
+#include <cassert>
 
 namespace monsoon::history {
 
 
 class monsoon_dirhistory_local_ dynamics {
  public:
-  [[deprecated]]
-  dynamics()
-  : dynamics(nullptr)
-  {}
-
-  explicit dynamics(std::shared_ptr<void> parent)
-  : parent_(std::move(parent))
-  {}
-
   virtual ~dynamics() noexcept;
+};
+
+template<typename T>
+class monsoon_dirhistory_local_ typed_dynamics
+: dynamics
+{
+ public:
+  explicit typed_dynamics(std::shared_ptr<T> parent)
+  : dynamics(),
+    parent_(std::move(parent))
+  {
+    assert(parent_ != nullptr);
+  }
+
+  auto parent() -> T& {
+    assert(parent_ != nullptr);
+    return *parent_;
+  }
+
+  auto parent() const -> const T& {
+    assert(parent_ != nullptr);
+    return *parent_;
+  }
 
  private:
-  [[maybe_unused]]
-  std::shared_ptr<void> parent_;
+  std::shared_ptr<T> parent_;
+};
+
+template<>
+class monsoon_dirhistory_local_ typed_dynamics<void>
+: dynamics
+{
+ public:
+  [[deprecated]]
+  typed_dynamics()
+  : typed_dynamics(nullptr)
+  {}
+
+  explicit typed_dynamics(std::shared_ptr<const void> parent)
+  : dynamics(),
+    parent_(std::move(parent))
+  {}
+
+ private:
+  std::shared_ptr<const void> parent_;
 };
 
 

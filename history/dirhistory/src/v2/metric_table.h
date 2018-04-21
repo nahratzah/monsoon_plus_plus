@@ -16,7 +16,7 @@ namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ metric_table
-: public dynamics,
+: public typed_dynamics<void>,
   public std::enable_shared_from_this<metric_table>
 {
  public:
@@ -32,7 +32,7 @@ class monsoon_dirhistory_local_ metric_table
   using const_iterator = iterator;
   using size_type = data_type::size_type;
 
-  using dynamics::dynamics;
+  using typed_dynamics<void>::typed_dynamics;
   ~metric_table() noexcept;
 
   [[deprecated]]
