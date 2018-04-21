@@ -181,37 +181,32 @@ class monsoon_dirhistory_local_ tag_dictionary {
 };
 
 class monsoon_dirhistory_local_ dictionary
-: public typed_dynamics<void>
+: public dynamics
 {
  public:
-  [[deprecated]]
-  dictionary()
-  : dictionary(nullptr)
-  {}
-
-  explicit dictionary(std::shared_ptr<void> parent)
-  : typed_dynamics<void>(parent),
+  explicit dictionary()
+  : dynamics(),
     strval_(),
     paths_(this->strval_),
     tags_(this->strval_)
   {}
 
   dictionary(const dictionary& y)
-  : typed_dynamics<void>(y),
+  : dynamics(y),
     strval_(y.strval_),
     paths_(y.paths_, this->strval_),
     tags_(y.tags_, this->strval_)
   {}
 
   dictionary(dictionary&& y)
-  : typed_dynamics<void>(std::move(y)),
+  : dynamics(std::move(y)),
     strval_(std::move(y.strval_)),
     paths_(std::move(y.paths_), this->strval_),
     tags_(std::move(y.tags_), this->strval_)
   {}
 
   dictionary& operator=(const dictionary& y) {
-    this->typed_dynamics<void>::operator=(y);
+    this->dynamics::operator=(y);
     strval_ = y.strval_;
     paths_ = y.paths_;
     tags_ = y.tags_;
@@ -219,7 +214,7 @@ class monsoon_dirhistory_local_ dictionary
   }
 
   dictionary& operator=(dictionary&& y) {
-    this->typed_dynamics<void>::operator=(std::move(y));
+    this->dynamics::operator=(std::move(y));
     strval_ = std::move(y.strval_);
     paths_ = std::move(y.paths_);
     tags_ = std::move(y.tags_);
