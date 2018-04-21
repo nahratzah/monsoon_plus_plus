@@ -25,6 +25,7 @@ namespace monsoon {
  */
 class monsoon_intf_export_ tag_matcher {
   friend std::ostream& operator<<(std::ostream&, const tag_matcher&);
+  friend auto has_overlap(const tag_matcher& x, const tag_matcher& y) -> bool;
 
  public:
   /**
