@@ -6,6 +6,7 @@
 #include <monsoon/config_support.h>
 
 namespace monsoon {
+namespace {
 
 
 template<typename MatchIter, typename ValIter>
@@ -61,6 +62,93 @@ bool do_match(
   return true;
 }
 
+
+bool do_overlap(
+    path_matcher::const_iterator x_begin,
+    path_matcher::const_iterator x_end,
+    path_matcher::const_iterator y_begin,
+    path_matcher::const_iterator y_end) {
+  using literal = path_matcher::literal;
+  using wildcard = path_matcher::wildcard;
+  using double_wildcard = path_matcher::double_wildcard;
+
+  while (x_begin != x_end
+      && y_begin != y_end
+      && !std::holds_alternative<double_wildcard>(*x_begin)
+      && !std::holds_alternative<double_wildcard>(*y_begin)) {
+
+    bool match_one = std::visit(
+        overload(
+            [](const literal& x_lit, const literal& y_lit) -> bool {
+              return x_lit == y_lit;
+            },
+            [](const literal& x_lit, const wildcard& y_wc) -> bool {
+              return true;
+            },
+            [](const wildcard& x_wc, const literal& y_lit) -> bool {
+              return true;
+            },
+            [](const wildcard& x_wc, const wildcard& y_wc) -> bool {
+              return true;
+            },
+            [](const double_wildcard& x_dwc, const auto& y_dwc) -> bool {
+              assert(false); // Loop stops when reaching double wildcard.
+              return false;
+            },
+            [](const auto& x_dwc, const double_wildcard& y_dwc) -> bool {
+              assert(false); // Loop stops when reaching double wildcard.
+              return false;
+            },
+            [](const double_wildcard& x_dwc, const double_wildcard& y_dwc) -> bool {
+              assert(false); // Loop stops when reaching double wildcard.
+              return false;
+            }),
+        *x_begin, *y_begin);
+    if (!match_one) return false;
+
+    ++x_begin;
+    ++y_begin;
+  }
+
+  if (x_begin != x_end && std::holds_alternative<double_wildcard>(*x_begin)) {
+    ++x_begin;
+    // Greedy traversal.
+    path_matcher::const_iterator greedy_b = y_end;
+    for (;;) {
+      if (do_overlap(x_begin, x_end, greedy_b, y_end)) // Recursion.
+        return true;
+
+      if (greedy_b == y_begin) // Stop when all subsets have been tested.
+        return false;
+      --greedy_b;
+    }
+    // unreachable
+  }
+
+  if (y_begin != y_end && std::holds_alternative<double_wildcard>(*y_begin)) {
+    ++y_begin;
+    // Greedy traversal.
+    path_matcher::const_iterator greedy_b = x_end;
+    for (;;) {
+      if (do_overlap(greedy_b, x_end, y_begin, y_end)) // Recursion.
+        return true;
+
+      if (greedy_b == x_begin) // Stop when all subsets have been tested.
+        return false;
+      --greedy_b;
+    }
+    // unreachable
+  }
+
+  assert(x_begin == x_end || y_begin == y_end);
+  return (x_begin == x_end) // Exhausted all elements in x.
+      && (y_begin == y_end); // Exhausted all elements in y.
+}
+
+
+} /* namespace monsoon::<unnamed> */
+
+
 bool path_matcher::operator()(const simple_group& g) const {
   return do_match(matcher_.begin(), matcher_.end(), g.begin(), g.end());
 }
@@ -99,6 +187,11 @@ path_matcher& path_matcher::push_back_double_wildcard() {
     matcher_.emplace_back(std::in_place_type<double_wildcard>);
   }
   return *this;
+}
+
+
+auto has_overlap(const path_matcher& x, const path_matcher& y) -> bool {
+  return do_overlap(x.begin(), x.end(), y.begin(), y.end());
 }
 
 
