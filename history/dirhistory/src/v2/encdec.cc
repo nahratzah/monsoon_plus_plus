@@ -13,6 +13,7 @@
 #include <cstring>
 #include "group_table.h"
 #include "tables.h"
+#include "file_data_tables_block.h"
 
 namespace monsoon {
 namespace history {
@@ -293,29 +294,8 @@ auto tsdata_list::records(const dictionary_delta& dict) const
 }
 
 auto decode_file_data_tables_block(xdr::xdr_istream& in, const encdec_ctx& ctx)
--> file_data_tables_block {
-  using namespace std::placeholders;
-
-  auto timestamp = decode_timestamp_delta(in);
-  auto dict_ptr = decode_file_segment(in);
-  auto tables_data_ptr = decode_file_segment(in);
-
-  auto xdr = ctx.new_reader(dict_ptr);
-  std::shared_ptr<const dictionary_delta> dict;
-  {
-    auto tmp_dict = std::make_shared<dictionary_delta>();
-    tmp_dict->decode_update(xdr);
-    dict = std::move(tmp_dict);
-    if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
-    xdr.close();
-  }
-
-  return std::make_tuple(
-      std::move(timestamp),
-      file_segment<tables>(
-          ctx,
-          tables_data_ptr,
-          std::bind(&decode_tables, _1, ctx, std::move(dict))));
+-> std::shared_ptr<file_data_tables_block> {
+  return file_data_tables_block::from_xdr(nullptr, in, ctx);
 }
 
 monsoon_dirhistory_local_
@@ -326,12 +306,6 @@ auto decode_file_data_tables(xdr::xdr_istream& in, const encdec_ctx& ctx)
   return std::make_shared<file_data_tables>(
       in.get_collection<file_data_tables>(
           std::bind(&decode_file_data_tables_block, _1, std::cref(ctx))));
-}
-
-auto decode_tables(xdr::xdr_istream& in,
-    const encdec_ctx& ctx,
-    const std::shared_ptr<const dictionary_delta>& dict) -> std::shared_ptr<tables> {
-  return tables::from_xdr(nullptr, in, std::const_pointer_cast<dictionary_delta>(dict), ctx);
 }
 
 void encode_tables(xdr::xdr_ostream& out,

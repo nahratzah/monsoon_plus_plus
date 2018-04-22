@@ -1,6 +1,7 @@
 #include "tables.h"
 #include "group_table.h"
 #include "dictionary.h"
+#include "file_data_tables_block.h"
 #include <monsoon/history/dir/hdir_exception.h>
 
 namespace monsoon::history::v2 {
@@ -8,13 +9,26 @@ namespace monsoon::history::v2 {
 
 tables::~tables() noexcept {}
 
+auto tables::get_dictionary()
+-> std::shared_ptr<dictionary> {
+  return parent().get_dictionary();
+}
+
+auto tables::get_dictionary() const
+-> std::shared_ptr<const dictionary> {
+  return parent().get_dictionary();
+}
+
+auto tables::get_ctx() const
+-> const encdec_ctx& {
+  return parent().get_ctx();
+}
+
 auto tables::from_xdr(
-    std::shared_ptr<void> parent,
-    xdr::xdr_istream& in,
-    std::shared_ptr<dictionary> dict,
-    encdec_ctx ctx)
+    std::shared_ptr<file_data_tables_block> parent,
+    xdr::xdr_istream& in)
 -> std::shared_ptr<tables> {
-  auto tbl = std::make_shared<tables>(parent, dict, ctx);
+  auto tbl = std::make_shared<tables>(std::move(parent));
   tbl->decode(in);
   return tbl;
 }

@@ -20,7 +20,7 @@ namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ tables
-: public typed_dynamics<void>,
+: public typed_dynamics<file_data_tables_block>,
   public std::enable_shared_from_this<tables>
 {
  private:
@@ -74,38 +74,12 @@ class monsoon_dirhistory_local_ tables
       data_type::const_iterator>;
   using iterator = const_iterator;
 
-  [[deprecated]]
-  tables(
-      std::shared_ptr<dictionary> dict,
-      encdec_ctx ctx)
-  : tables(nullptr, std::move(dict), std::move(ctx))
-  {}
-
-  tables(
-      std::shared_ptr<void> parent,
-      std::shared_ptr<dictionary> dict,
-      encdec_ctx ctx)
-  : typed_dynamics<void>(std::move(parent)),
-    dict_(std::move(dict)),
-    ctx_(std::move(ctx))
-  {}
-
+  using typed_dynamics<file_data_tables_block>::typed_dynamics;
   ~tables() noexcept override;
 
-  auto get_dictionary()
-  -> std::shared_ptr<dictionary> {
-    return dict_;
-  }
-
-  auto get_dictionary() const
-  -> std::shared_ptr<const dictionary> {
-    return dict_;
-  }
-
-  auto get_ctx() const
-  -> const encdec_ctx& {
-    return ctx_;
-  }
+  auto get_dictionary() -> std::shared_ptr<dictionary>;
+  auto get_dictionary() const -> std::shared_ptr<const dictionary>;
+  auto get_ctx() const -> const encdec_ctx&;
 
   auto size() const
   noexcept
@@ -117,10 +91,8 @@ class monsoon_dirhistory_local_ tables
   auto end() const -> const_iterator;
 
   static auto from_xdr(
-      std::shared_ptr<void> parent,
-      xdr::xdr_istream& in,
-      std::shared_ptr<dictionary> dict,
-      encdec_ctx ctx)
+      std::shared_ptr<file_data_tables_block> parent,
+      xdr::xdr_istream& in)
       -> std::shared_ptr<tables>;
   auto decode(xdr::xdr_istream& in) -> void;
 
@@ -128,8 +100,6 @@ class monsoon_dirhistory_local_ tables
   auto read_(data_type::const_reference item) const -> std::shared_ptr<const group_table>;
 
   data_type data_;
-  std::shared_ptr<dictionary> dict_;
-  encdec_ctx ctx_;
 };
 
 
