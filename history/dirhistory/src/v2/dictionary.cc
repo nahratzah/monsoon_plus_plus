@@ -1,5 +1,5 @@
 #include "dictionary.h"
-#include "encdec.h"
+#include "xdr_primitives.h"
 #include <stdexcept>
 #include <iterator>
 
