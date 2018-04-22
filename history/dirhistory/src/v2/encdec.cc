@@ -365,12 +365,6 @@ void encode_tables(xdr::xdr_ostream& out,
       tmp.end());
 }
 
-auto decode_group_table(xdr::xdr_istream& in, const encdec_ctx& ctx,
-    const std::shared_ptr<const dictionary_delta>& dict)
--> std::shared_ptr<group_table> {
-  return group_table::from_xdr(nullptr, in, std::const_pointer_cast<dictionary_delta>(dict), ctx);
-}
-
 void encode_group_table(xdr::xdr_ostream& out,
     const std::vector<bool>& presence,
     std::unordered_map<metric_name, file_segment_ptr>& metrics_map,

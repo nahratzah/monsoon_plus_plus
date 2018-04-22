@@ -264,11 +264,6 @@ void encode_tables(xdr::xdr_ostream&,
     const std::unordered_map<group_name, file_segment_ptr>&,
     dictionary_delta&);
 
-[[deprecated]]
-monsoon_dirhistory_local_
-auto decode_group_table(xdr::xdr_istream&,
-    const encdec_ctx&, const std::shared_ptr<const dictionary_delta>&)
-  -> std::shared_ptr<group_table>;
 monsoon_dirhistory_local_
 void encode_group_table(xdr::xdr_ostream&,
     const std::vector<bool>&,

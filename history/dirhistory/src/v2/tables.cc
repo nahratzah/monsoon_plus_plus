@@ -48,7 +48,7 @@ auto tables::decode(xdr::xdr_istream& in) -> void {
 
 auto tables::read_(data_type::const_reference ptr) const -> std::shared_ptr<const group_table> {
   auto xdr = get_ctx().new_reader(ptr.second, group_table::is_compressed);
-  auto result = group_table::from_xdr(std::const_pointer_cast<tables>(shared_from_this()), xdr, std::const_pointer_cast<dictionary>(get_dictionary()), get_ctx());
+  auto result = group_table::from_xdr(std::const_pointer_cast<tables>(shared_from_this()), xdr);
   if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
   xdr.close();
   return result;

@@ -1,5 +1,6 @@
 #include "group_table.h"
 #include "metric_table.h"
+#include "tables.h"
 #include "dictionary.h"
 #include <monsoon/history/dir/hdir_exception.h>
 
@@ -8,13 +9,26 @@ namespace monsoon::history::v2 {
 
 group_table::~group_table() noexcept {}
 
+auto group_table::get_dictionary()
+-> std::shared_ptr<dictionary> {
+  return parent().get_dictionary();
+}
+
+auto group_table::get_dictionary() const
+-> std::shared_ptr<const dictionary> {
+  return parent().get_dictionary();
+}
+
+auto group_table::get_ctx() const
+-> const encdec_ctx& {
+  return parent().get_ctx();
+}
+
 auto group_table::from_xdr(
-    std::shared_ptr<void> parent,
-    xdr::xdr_istream& in,
-    std::shared_ptr<dictionary> dict,
-    encdec_ctx ctx)
+    std::shared_ptr<tables> parent,
+    xdr::xdr_istream& in)
 -> std::shared_ptr<group_table> {
-  auto tbl = std::make_shared<group_table>(parent, dict, ctx);
+  auto tbl = std::make_shared<group_table>(parent);
   tbl->decode(in);
   return tbl;
 }

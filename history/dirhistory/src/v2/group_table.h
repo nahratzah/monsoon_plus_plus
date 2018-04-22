@@ -19,7 +19,7 @@ namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ group_table
-: public typed_dynamics<void>,
+: public typed_dynamics<tables>,
   public std::enable_shared_from_this<group_table>
 {
  private:
@@ -51,33 +51,12 @@ class monsoon_dirhistory_local_ group_table
 
   static constexpr bool is_compressed = true;
 
-  [[deprecated]]
-  group_table(std::shared_ptr<dictionary> dict, encdec_ctx ctx)
-  : group_table(nullptr, std::move(dict), std::move(ctx))
-  {}
-
-  group_table(std::shared_ptr<void> parent, std::shared_ptr<dictionary> dict, encdec_ctx ctx)
-  : typed_dynamics<void>(std::move(parent)),
-    dict_(std::move(dict)),
-    ctx_(std::move(ctx))
-  {}
-
+  using typed_dynamics<tables>::typed_dynamics;
   ~group_table() noexcept override;
 
-  auto get_dictionary()
-  -> std::shared_ptr<dictionary> {
-    return dict_;
-  }
-
-  auto get_dictionary() const
-  -> std::shared_ptr<const dictionary> {
-    return dict_;
-  }
-
-  auto get_ctx() const
-  -> const encdec_ctx& {
-    return ctx_;
-  }
+  auto get_dictionary() -> std::shared_ptr<dictionary>;
+  auto get_dictionary() const -> std::shared_ptr<const dictionary>;
+  auto get_ctx() const -> const encdec_ctx&;
 
   auto size() const
   noexcept
@@ -94,12 +73,7 @@ class monsoon_dirhistory_local_ group_table
   auto begin() const -> const_iterator;
   auto end() const -> const_iterator;
 
-  static auto from_xdr(
-      std::shared_ptr<void> parent,
-      xdr::xdr_istream& in,
-      std::shared_ptr<dictionary> dict,
-      encdec_ctx ctx)
-      -> std::shared_ptr<group_table>;
+  static auto from_xdr(std::shared_ptr<tables> parent, xdr::xdr_istream& in) -> std::shared_ptr<group_table>;
   auto decode(xdr::xdr_istream& in) -> void;
 
  private:
@@ -107,8 +81,6 @@ class monsoon_dirhistory_local_ group_table
 
   bitset presence_;
   data_type data_;
-  std::shared_ptr<dictionary> dict_; // XXX: Shift to dynamics::parent lookup.
-  encdec_ctx ctx_; // XXX: Shift to dynamics::parent lookup.
 };
 
 
