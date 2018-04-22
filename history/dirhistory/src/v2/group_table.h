@@ -49,6 +49,8 @@ class monsoon_dirhistory_local_ group_table
       data_type::const_iterator>;
   using iterator = const_iterator;
 
+  static constexpr bool is_compressed = true;
+
   [[deprecated]]
   group_table(std::shared_ptr<dictionary> dict, encdec_ctx ctx)
   : group_table(nullptr, std::move(dict), std::move(ctx))

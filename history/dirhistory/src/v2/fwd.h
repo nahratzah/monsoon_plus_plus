@@ -7,6 +7,7 @@ namespace monsoon::history::v2 {
 class dictionary;
 class metric_table;
 class group_table;
+class tables;
 
 
 } /* namespace monsoon::history::v2 */

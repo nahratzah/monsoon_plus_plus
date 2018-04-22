@@ -12,6 +12,7 @@
 #include <stack>
 #include <cstring>
 #include "group_table.h"
+#include "tables.h"
 
 namespace monsoon {
 namespace history {
@@ -330,36 +331,7 @@ auto decode_file_data_tables(xdr::xdr_istream& in, const encdec_ctx& ctx)
 auto decode_tables(xdr::xdr_istream& in,
     const encdec_ctx& ctx,
     const std::shared_ptr<const dictionary_delta>& dict) -> std::shared_ptr<tables> {
-  using namespace std::placeholders;
-
-  auto result = std::make_shared<tables>();
-
-  in.accept_collection(
-      [](xdr::xdr_istream& in) {
-        auto path_ref = in.get_uint32();
-        return std::make_tuple(
-            path_ref,
-            in.template get_collection<std::vector<std::tuple<std::uint32_t, file_segment_ptr>>>(
-                [](xdr::xdr_istream& in) {
-                  auto tag_ref = in.get_uint32();
-                  return std::make_tuple(tag_ref, decode_file_segment(in));
-                }));
-      },
-      [&dict, &result, &ctx](auto&& v) {
-        const simple_group path = dict->pdd()[std::get<0>(v)];
-
-        std::transform(std::get<1>(v).begin(), std::get<1>(v).end(),
-            std::inserter(*result, result->end()),
-            [&path, &dict, &ctx](const auto& tag_map_entry) {
-              return std::make_pair(
-                  group_name(path, dict->tdd()[std::get<0>(tag_map_entry)]),
-                  file_segment<group_table>(
-                      ctx,
-                      std::get<1>(tag_map_entry),
-                      std::bind(&decode_group_table, _1, ctx, dict)));
-            });
-      });
-  return result;
+  return tables::from_xdr(nullptr, in, std::const_pointer_cast<dictionary_delta>(dict), ctx);
 }
 
 void encode_tables(xdr::xdr_ostream& out,

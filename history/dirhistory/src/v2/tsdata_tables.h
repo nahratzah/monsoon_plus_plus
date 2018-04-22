@@ -4,8 +4,6 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include "encdec.h"
 #include "tsdata.h"
-#include "group_table.h"
-#include "metric_table.h"
 #include "../tsdata_mime.h"
 
 namespace monsoon {

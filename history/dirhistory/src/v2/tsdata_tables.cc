@@ -23,6 +23,9 @@
 #include <instrumentation/group.h>
 #include <instrumentation/counter.h>
 #include <string_view>
+#include "group_table.h"
+#include "metric_table.h"
+#include "tables.h"
 
 namespace monsoon {
 namespace history {
@@ -66,10 +69,9 @@ std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
     tsdata.resize(timestamps.size());
     std::for_each(tsdata.begin(), tsdata.end(),
         std::bind(&time_series::tsv_set::clear, _1));
-    for (tables::const_reference tbl_grp : *tbl) {
-      const group_name& gname = std::get<0>(tbl_grp);
-      const std::shared_ptr<const group_table> grp_data =
-          std::get<1>(tbl_grp).get();
+    for (const auto& tbl_grp : *tbl) {
+      const group_name& gname = tbl_grp.name();
+      const std::shared_ptr<const group_table> grp_data = tbl_grp.get();
       const bitset& presence = grp_data->presence();
 
       // Fill mmap with metric values over time.
@@ -225,12 +227,12 @@ auto emit_fdtblock(
 
   std::vector<emit_fdtblock_pipe_t> columns;
   for (const auto& tbl_entry : *tbl_ptr) {
-    if (!group_filter(std::get<0>(tbl_entry).get_path())
-        || !tag_filter(std::get<0>(tbl_entry).get_tags()))
+    if (!group_filter(tbl_entry.path())
+        || !tag_filter(tbl_entry.tags()))
       continue; // SKIP
 
-    auto group_name_ptr = std::get<0>(tbl_entry);
-    auto group_table_ptr = std::get<1>(tbl_entry).get();
+    auto group_name_ptr = tbl_entry.name();
+    auto group_table_ptr = tbl_entry.get();
 
     for (const auto& mv_map_entry : *group_table_ptr) {
       const auto& metric_name_ptr = mv_map_entry.name();
