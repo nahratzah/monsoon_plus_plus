@@ -7,7 +7,7 @@ namespace monsoon::history::v2 {
 
 
 instrumentation::group& cache_grp() {
-  static auto impl = instrumentation::make_group("tsdata", history_instrumentation);
+  static auto impl = instrumentation::make_group("tsdata", history_instrumentation());
   return impl;
 }
 

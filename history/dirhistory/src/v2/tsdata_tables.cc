@@ -129,28 +129,28 @@ namespace {
 
 instrumentation::timing_accumulate tsdata_v2_tables_decode_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "column_read"sv}
     });
 instrumentation::timing_accumulate tsdata_v2_tables_less_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "compare"sv}
     });
 instrumentation::timing_accumulate tsdata_v2_tables_merge_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "merge"sv}
     });
 instrumentation::timing tsdata_v2_tables_new_objpipe_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "new_objpipe"sv}
@@ -273,7 +273,7 @@ auto tsdata_v2_tables::emit(
     const path_matcher& metric_filter)
     const
 -> objpipe::reader<emit_type> {
-  static instrumentation::group&& metric_grp = instrumentation::make_group("tsdata_v2_tables", monsoon::history_instrumentation);
+  static instrumentation::group&& metric_grp = instrumentation::make_group("tsdata_v2_tables", monsoon::history_instrumentation());
 
   instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_new_objpipe_timing };
   const std::shared_ptr<const file_data_tables> file_data_tables =

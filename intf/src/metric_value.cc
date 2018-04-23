@@ -34,7 +34,7 @@ thread_local string_cache_type string_cache = string_cache_type::builder()
     .not_thread_safe()
     .no_concurrency()
     .load_factor(4)
-    .stats("metric_value_str", cache_instrumentation, true)
+    .stats("metric_value_str", cache_instrumentation(), true)
     .build(string_cache_create());
 
 

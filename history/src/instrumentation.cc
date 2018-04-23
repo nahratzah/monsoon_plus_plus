@@ -4,7 +4,10 @@
 namespace monsoon {
 
 
-instrumentation::group&& history_instrumentation = instrumentation::make_group("history", monsoon_instrumentation);
+instrumentation::group& history_instrumentation() {
+  static auto impl = instrumentation::make_group("history", monsoon_instrumentation());
+  return impl;
+}
 
 
 } /* namespace monsoon */
