@@ -254,20 +254,6 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   return result;
 }
 
-void encode_group_table(xdr::xdr_ostream& out,
-    const bitset& presence,
-    std::unordered_map<metric_name, file_segment_ptr>& metrics_map,
-    dictionary_delta& dict) {
-  presence.encode(out);
-
-  out.put_collection(
-      [&dict](xdr::xdr_ostream& out, const auto& mm_entry) {
-        out.put_uint32(dict.pdd()[std::get<0>(mm_entry)]);
-        std::get<1>(mm_entry).encode(out);
-      },
-      metrics_map.begin(), metrics_map.end());
-}
-
 
 tsfile_header::tsfile_header(xdr::xdr_istream& in,
     std::shared_ptr<io::fd> fd) {

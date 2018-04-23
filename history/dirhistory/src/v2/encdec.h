@@ -229,13 +229,6 @@ auto encode_tsdata(encdec_writer&, const time_series&, dictionary_delta,
     std::optional<file_segment_ptr>)
   -> file_segment_ptr;
 
-[[deprecated]]
-monsoon_dirhistory_local_
-void encode_group_table(xdr::xdr_ostream&,
-    const bitset&,
-    const std::vector<std::pair<metric_name, file_segment_ptr>>&,
-    dictionary_delta&);
-
 
 }}} /* namespace monsoon::history::v2 */
 
