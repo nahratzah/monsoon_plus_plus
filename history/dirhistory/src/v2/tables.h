@@ -45,8 +45,8 @@ class monsoon_dirhistory_local_ tables
     auto operator()(const key_type& k) const
     noexcept
     -> std::size_t {
-      std::hash<std::uint32_t> int_hash;
-      return (73u * int_hash(k.grp_ref)) ^ (257u * int_hash(k.tag_ref));
+      std::hash<std::uint64_t> int_hash;
+      return int_hash(std::uint64_t(k.grp_ref) << 32 | std::uint64_t(k.tag_ref));
     }
   };
 
