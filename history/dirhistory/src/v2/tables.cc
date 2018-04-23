@@ -76,23 +76,4 @@ auto tables::read_(data_type::const_reference ptr) const -> std::shared_ptr<cons
 }
 
 
-auto tables::proxy::path() const
--> simple_group {
-  return owner_->get_dictionary()->pdd()[item_->first.grp_ref];
-}
-
-auto tables::proxy::tags() const
--> monsoon::tags {
-  return owner_->get_dictionary()->tdd()[item_->first.tag_ref];
-}
-
-auto tables::proxy::name() const
--> group_name {
-  auto dict = owner_->get_dictionary();
-  return group_name(
-      dict->pdd()[item_->first.grp_ref],
-      dict->tdd()[item_->first.tag_ref]);
-}
-
-
 } /* namespace monsoon::history::v2 */

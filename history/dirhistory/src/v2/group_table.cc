@@ -69,10 +69,4 @@ auto group_table::read_(data_type::const_reference ptr) const
 }
 
 
-auto group_table::proxy::name() const
--> metric_name {
-  return owner_->get_dictionary()->pdd()[item_->first];
-}
-
-
 } /* namespace monsoon::history::v2 */

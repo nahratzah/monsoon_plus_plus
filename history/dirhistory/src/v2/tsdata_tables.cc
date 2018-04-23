@@ -228,18 +228,12 @@ auto emit_fdtblock(
   const std::shared_ptr<const tables> tbl_ptr = block->get();
 
   std::vector<emit_fdtblock_pipe_t> columns;
-  for (const auto& tbl_entry : *tbl_ptr) {
-    if (!group_filter(tbl_entry.path())
-        || !tag_filter(tbl_entry.tags()))
-      continue; // SKIP
-
+  for (const auto& tbl_entry : tbl_ptr->filter(group_filter, tag_filter)) {
     auto group_name_ptr = tbl_entry.name();
     auto group_table_ptr = tbl_entry.get();
 
-    for (const auto& mv_map_entry : *group_table_ptr) {
+    for (const auto& mv_map_entry : group_table_ptr->filter(metric_filter)) {
       const auto& metric_name_ptr = mv_map_entry.name();
-      if (!metric_filter(metric_name_ptr))
-        continue; // SKIP
 
       std::shared_ptr<const metric_table> mv_column_ptr = mv_map_entry.get();
 
