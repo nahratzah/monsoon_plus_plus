@@ -13,7 +13,7 @@
 #include "../dynamics.h"
 #include <cstdint>
 #include <utility>
-#include <unordered_map>
+#include <vector>
 #include <memory>
 #include <boost/iterator/transform_iterator.hpp>
 
@@ -41,16 +41,7 @@ class monsoon_dirhistory_local_ tables
     }
   };
 
-  struct key_hash {
-    auto operator()(const key_type& k) const
-    noexcept
-    -> std::size_t {
-      std::hash<std::uint64_t> int_hash;
-      return int_hash(std::uint64_t(k.grp_ref) << 32 | std::uint64_t(k.tag_ref));
-    }
-  };
-
-  using data_type = std::unordered_map<key_type, file_segment_ptr, key_hash, std::equal_to<key_type>, cache_allocator<std::pair<const key_type, file_segment_ptr>>>;
+  using data_type = std::vector<std::pair<key_type, file_segment_ptr>, cache_allocator<std::pair<key_type, file_segment_ptr>>>;
 
  public:
   class proxy;

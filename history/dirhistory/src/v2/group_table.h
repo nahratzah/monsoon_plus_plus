@@ -4,7 +4,7 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/metric_name.h>
 #include <monsoon/memoid.h>
-#include <unordered_map>
+#include <vector>
 #include <cstdint>
 #include <memory>
 #include <utility>
@@ -24,7 +24,7 @@ class monsoon_dirhistory_local_ group_table
   public std::enable_shared_from_this<group_table>
 {
  private:
-  using data_type = std::unordered_map<std::uint32_t, file_segment_ptr, std::hash<std::uint32_t>, std::equal_to<std::uint32_t>, cache_allocator<std::pair<const std::uint32_t, file_segment_ptr>>>;
+  using data_type = std::vector<std::pair<std::uint32_t, file_segment_ptr>, cache_allocator<std::pair<std::uint32_t, file_segment_ptr>>>;
 
  public:
   using allocator_type = data_type::allocator_type;

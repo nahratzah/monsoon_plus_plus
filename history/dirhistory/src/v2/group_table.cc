@@ -3,6 +3,7 @@
 #include "tables.h"
 #include "dictionary.h"
 #include <monsoon/history/dir/hdir_exception.h>
+#include <algorithm>
 
 namespace monsoon::history::v2 {
 
@@ -45,6 +46,17 @@ auto group_table::decode(xdr::xdr_istream& in)
         return std::make_pair(metric_name_ref, ptr);
       },
       data_);
+
+  std::sort(data_.begin(), data_.end(),
+      [](const auto& x, const auto& y) noexcept {
+        return x.first < y.first;
+      });
+  data_.erase(
+      std::unique(data_.begin(), data_.end(),
+          [](const auto& x, const auto& y) noexcept {
+            return x.first == y.first;
+          }),
+      data_.end());
 }
 
 auto group_table::read_(data_type::const_reference ptr) const

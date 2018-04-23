@@ -4,6 +4,7 @@
 #include "file_data_tables_block.h"
 #include "cache.h"
 #include <monsoon/history/dir/hdir_exception.h>
+#include <algorithm>
 
 namespace monsoon::history::v2 {
 
@@ -52,13 +53,22 @@ auto tables::decode(xdr::xdr_istream& in) -> void {
         key.grp_ref = std::get<0>(v);
         for (const auto& t : std::get<1>(v)) {
           key.tag_ref = std::get<0>(t);
-#if __cplusplus >= 201703
-          data_.try_emplace(key, std::get<1>(t));
-#else
-          data_.emplace(key, std::get<1>(t));
-#endif
+          data_.emplace_back(key, std::get<1>(t));
         }
       });
+
+  std::sort(data_.begin(), data_.end(),
+      [](const auto& x, const auto& y) noexcept {
+        return (std::uint64_t(x.first.grp_ref) << 32 | x.first.tag_ref)
+            < (std::uint64_t(y.first.grp_ref) << 32 | y.first.tag_ref);
+      });
+  data_.erase(
+      std::unique(data_.begin(), data_.end(),
+          [](const auto& x, const auto& y) noexcept {
+            return (std::uint64_t(x.first.grp_ref) << 32 | x.first.tag_ref)
+                == (std::uint64_t(y.first.grp_ref) << 32 | y.first.tag_ref);
+          }),
+      data_.end());
 }
 
 auto tables::read_(data_type::const_reference ptr) const -> std::shared_ptr<const group_table> {
