@@ -21,14 +21,6 @@ namespace history {
 namespace v2 {
 
 
-time_point decode_timestamp(xdr::xdr_istream& in) {
-  return time_point(in.get_int64());
-}
-
-void encode_timestamp(xdr::xdr_ostream& out, time_point tp) {
-  out.put_int64(tp.millis_since_posix_epoch());
-}
-
 auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
 -> std::shared_ptr<time_series_value::metric_map> {
   return std::make_shared<time_series_value::metric_map>(

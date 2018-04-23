@@ -4,6 +4,7 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/metric_value.h>
 #include <monsoon/histogram.h>
+#include <monsoon/time_point.h>
 #include <monsoon/xdr/xdr.h>
 #include "dictionary.h"
 
@@ -30,6 +31,16 @@ auto decode_histogram(monsoon::xdr::xdr_istream& in)
 monsoon_dirhistory_local_
 auto encode_histogram(monsoon::xdr::xdr_ostream& in, const histogram& h)
 -> void;
+
+monsoon_dirhistory_local_
+inline time_point decode_timestamp(xdr::xdr_istream& in) {
+  return time_point(in.get_int64());
+}
+
+monsoon_dirhistory_local_
+inline void encode_timestamp(xdr::xdr_ostream& out, time_point tp) {
+  out.put_int64(tp.millis_since_posix_epoch());
+}
 
 
 } /* namespace monsoon::history::v2 */

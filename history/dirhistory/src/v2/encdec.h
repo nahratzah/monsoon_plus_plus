@@ -196,11 +196,6 @@ class monsoon_dirhistory_local_ tsfile_header {
 
 
 monsoon_dirhistory_local_
-time_point decode_timestamp(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_timestamp(xdr::xdr_ostream&, time_point);
-
-monsoon_dirhistory_local_
 auto decode_record_metrics(xdr::xdr_istream&, const dictionary_delta&)
   -> std::shared_ptr<time_series_value::metric_map>;
 monsoon_dirhistory_local_
