@@ -231,11 +231,6 @@ auto encode_tsdata(encdec_writer&, const time_series&, dictionary_delta,
 
 [[deprecated]]
 monsoon_dirhistory_local_
-auto decode_file_data_tables(xdr::xdr_istream&, const encdec_ctx&)
-  -> std::shared_ptr<file_data_tables>;
-
-[[deprecated]]
-monsoon_dirhistory_local_
 void encode_tables(xdr::xdr_ostream&,
     const std::unordered_map<group_name, file_segment_ptr>&,
     dictionary_delta&);

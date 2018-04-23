@@ -254,11 +254,6 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   return result;
 }
 
-auto decode_file_data_tables(xdr::xdr_istream& in, const encdec_ctx& ctx)
--> std::shared_ptr<file_data_tables> {
-  return file_data_tables::from_xdr(nullptr, in, ctx);
-}
-
 void encode_tables(xdr::xdr_ostream& out,
     const std::unordered_map<group_name, file_segment_ptr>& groups,
     dictionary_delta& dict) {
@@ -327,10 +322,15 @@ tsfile_header::tsfile_header(xdr::xdr_istream& in,
           false);
       break;
     case header_flags::KIND_TABLES:
-      fdt_ = file_segment<file_data_tables>(
-          encdec_ctx(fd, flags_),
-          fdt_ptr,
-          std::bind(&decode_file_data_tables, _1, encdec_ctx(fd, flags_)));
+      {
+        const auto flags = flags_;
+        fdt_ = file_segment<file_data_tables>(
+            encdec_ctx(fd, flags_),
+            fdt_ptr,
+            [fd, flags](xdr::xdr_istream& in) {
+              return file_data_tables::from_xdr(nullptr, in, encdec_ctx(fd, flags));
+            });
+      }
       break;
   }
 }
