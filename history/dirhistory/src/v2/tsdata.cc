@@ -82,7 +82,7 @@ std::shared_ptr<tsdata_v2> tsdata_v2::new_list_file(io::fd&& fd,
   xdr.put_uint32(fl); // flags
   xdr.put_uint32(0u); // reserved
   xdr.put_uint64(CHECKSUMMED_HDR_LEN); // file size
-  encode_file_segment(xdr, file_segment_ptr(0u, 0u)); // nullptr == empty
+  file_segment_ptr().encode(xdr); // nullptr == empty
   xdr.close();
 
   assert(data_len == HDR_LEN);
@@ -202,7 +202,7 @@ void tsdata_v2::update_hdr(time_point lo, time_point hi,
   xdr.put_uint32(flags_); // flags
   xdr.put_uint32(reserved_); // reserved
   xdr.put_uint64(new_file_len); // file size
-  encode_file_segment(xdr, fsp); // nullptr == empty
+  fsp.encode(xdr); // pointer to data
   xdr.close();
   fd_ptr->flush();
 

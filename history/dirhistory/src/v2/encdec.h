@@ -205,13 +205,6 @@ std::vector<time_point> decode_timestamp_delta(xdr::xdr_istream&);
 monsoon_dirhistory_local_
 void encode_timestamp_delta(xdr::xdr_ostream&, std::vector<time_point>&&);
 
-[[deprecated]]
-monsoon_dirhistory_local_
-file_segment_ptr decode_file_segment(xdr::xdr_istream&);
-[[deprecated]]
-monsoon_dirhistory_local_
-void encode_file_segment(xdr::xdr_ostream&, const file_segment_ptr&);
-
 monsoon_dirhistory_local_
 auto decode_record_metrics(xdr::xdr_istream&, const dictionary_delta&)
   -> std::shared_ptr<time_series_value::metric_map>;

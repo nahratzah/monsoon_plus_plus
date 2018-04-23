@@ -16,15 +16,15 @@ class monsoon_dirhistory_local_ file_segment_ptr {
   using offset_type = io::fd::offset_type;
   using size_type = io::fd::size_type;
 
-  file_segment_ptr() = default;
+  constexpr file_segment_ptr() noexcept = default;
 
-  file_segment_ptr(offset_type off, size_type len) noexcept
+  constexpr file_segment_ptr(offset_type off, size_type len) noexcept
   : off_(off),
     len_(len)
   {}
 
-  offset_type offset() const noexcept { return off_; }
-  size_type size() const noexcept { return len_; }
+  constexpr offset_type offset() const noexcept { return off_; }
+  constexpr size_type size() const noexcept { return len_; }
 
   static auto from_xdr(xdr::xdr_istream& in) -> file_segment_ptr {
     file_segment_ptr result;
@@ -42,21 +42,21 @@ class monsoon_dirhistory_local_ file_segment_ptr {
     out.put_uint64(len_);
   }
 
-  auto operator==(const file_segment_ptr& y) const
+  constexpr auto operator==(const file_segment_ptr& y) const
   noexcept
   -> bool {
     return off_ == y.off_ && len_ == y.len_;
   }
 
-  auto operator!=(const file_segment_ptr& y) const
+  constexpr auto operator!=(const file_segment_ptr& y) const
   noexcept
   -> bool {
     return !(*this == y);
   }
 
  private:
-  offset_type off_;
-  size_type len_;
+  offset_type off_ = 0;
+  size_type len_ = 0;
 };
 
 

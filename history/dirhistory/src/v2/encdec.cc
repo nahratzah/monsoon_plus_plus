@@ -64,14 +64,6 @@ void encode_timestamp_delta(xdr::xdr_ostream& out,
       tp_set.begin() + 1, tp_set.end());
 }
 
-file_segment_ptr decode_file_segment(xdr::xdr_istream& in) {
-  return file_segment_ptr::from_xdr(in);
-}
-
-void encode_file_segment(xdr::xdr_ostream& out, const file_segment_ptr& fsp) {
-  fsp.encode(out);
-}
-
 auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
 -> std::shared_ptr<time_series_value::metric_map> {
   return std::make_shared<time_series_value::metric_map>(
@@ -111,7 +103,7 @@ auto decode_record_array(xdr::xdr_istream& in, const encdec_ctx& ctx,
         return in.get_collection<std::vector<std::tuple<std::uint32_t, std::uint32_t, file_segment_ptr>>>(
             [path_ref](xdr::xdr_istream& in) {
               const auto tag_ref = in.get_uint32();
-              return std::make_tuple(path_ref, tag_ref, decode_file_segment(in));
+              return std::make_tuple(path_ref, tag_ref, file_segment_ptr::from_xdr(in));
             });
       },
       [&dict, &ctx, &result](auto&& group_list) {
@@ -153,7 +145,7 @@ file_segment_ptr encode_record_array(encdec_writer& out,
         out.put_collection(
             [](xdr::xdr_ostream& out, const auto& tag_entry) {
               out.put_uint32(tag_entry.first);
-              encode_file_segment(out, tag_entry.second);
+              tag_entry.second.encode(out);
             },
             path_entry.second.begin(), path_entry.second.end());
       },
@@ -167,9 +159,9 @@ auto decode_tsdata(xdr::xdr_istream& in, const encdec_ctx& ctx)
   using namespace std::placeholders;
 
   const auto ts = decode_timestamp(in);
-  const auto previous_ptr = in.get_optional(&decode_file_segment);
-  const auto dict_ptr = in.get_optional(&decode_file_segment);
-  const auto records_ptr = decode_file_segment(in);
+  const auto previous_ptr = in.get_optional(&file_segment_ptr::from_xdr);
+  const auto dict_ptr = in.get_optional(&file_segment_ptr::from_xdr);
+  const auto records_ptr = file_segment_ptr::from_xdr(in);
   const auto reserved = in.get_uint32();
 
   return std::make_shared<tsdata_list>(
@@ -192,9 +184,17 @@ auto encode_tsdata(encdec_writer& writer, const time_series& ts,
 
   auto xdr = writer.begin(false);
   encode_timestamp(xdr, ts.get_time());
-  xdr.put_optional(&encode_file_segment, pred);
-  xdr.put_optional(&encode_file_segment, dict_ptr);
-  encode_file_segment(xdr, records_ptr);
+  xdr.put_optional(
+      [](xdr::xdr_ostream& out, const file_segment_ptr& fptr) {
+        fptr.encode(out);
+      },
+      pred);
+  xdr.put_optional(
+      [](xdr::xdr_ostream& out, const file_segment_ptr& fptr) {
+        fptr.encode(out);
+      },
+      dict_ptr);
+  records_ptr.encode(xdr);
   xdr.put_uint32(0u); // reserved
   xdr.close();
   return xdr.ptr();
@@ -281,7 +281,7 @@ void encode_tables(xdr::xdr_ostream& out,
         out.put_collection(
             [](xdr::xdr_ostream& out, const auto& tag_map_entry) {
               out.put_uint32(std::get<0>(tag_map_entry));
-              encode_file_segment(out, std::get<1>(tag_map_entry));
+              std::get<1>(tag_map_entry).encode(out);
             },
             std::get<1>(path_map_entry).begin(),
             std::get<1>(path_map_entry).end());
@@ -299,7 +299,7 @@ void encode_group_table(xdr::xdr_ostream& out,
   out.put_collection(
       [&dict](xdr::xdr_ostream& out, const auto& mm_entry) {
         out.put_uint32(dict.pdd()[std::get<0>(mm_entry)]);
-        encode_file_segment(out, std::get<1>(mm_entry));
+        std::get<1>(mm_entry).encode(out);
       },
       metrics_map.begin(), metrics_map.end());
 }
@@ -315,7 +315,7 @@ tsfile_header::tsfile_header(xdr::xdr_istream& in,
   reserved_ = in.get_uint32();
   file_size_ = in.get_uint64();
 
-  auto fdt_ptr = decode_file_segment(in);
+  auto fdt_ptr = file_segment_ptr::from_xdr(in);
   switch (flags_ & header_flags::KIND_MASK) {
     default:
       throw xdr::xdr_exception("file kind not recognized");
