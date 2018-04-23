@@ -6,6 +6,7 @@
 #include "xdr_primitives.h"
 #include "fwd.h"
 #include "encdec_ctx.h"
+#include "bitset.h"
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -206,13 +207,6 @@ void encode_timestamp_delta(xdr::xdr_ostream&, std::vector<time_point>&&);
 
 [[deprecated]]
 monsoon_dirhistory_local_
-std::vector<bool> decode_bitset(xdr::xdr_istream&);
-[[deprecated]]
-monsoon_dirhistory_local_
-void encode_bitset(xdr::xdr_ostream&, const std::vector<bool>&);
-
-[[deprecated]]
-monsoon_dirhistory_local_
 file_segment_ptr decode_file_segment(xdr::xdr_istream&);
 [[deprecated]]
 monsoon_dirhistory_local_
@@ -253,9 +247,10 @@ void encode_tables(xdr::xdr_ostream&,
     const std::unordered_map<group_name, file_segment_ptr>&,
     dictionary_delta&);
 
+[[deprecated]]
 monsoon_dirhistory_local_
 void encode_group_table(xdr::xdr_ostream&,
-    const std::vector<bool>&,
+    const bitset&,
     const std::vector<std::pair<metric_name, file_segment_ptr>>&,
     dictionary_delta&);
 

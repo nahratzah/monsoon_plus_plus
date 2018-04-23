@@ -64,46 +64,6 @@ void encode_timestamp_delta(xdr::xdr_ostream& out,
       tp_set.begin() + 1, tp_set.end());
 }
 
-std::vector<bool> decode_bitset(xdr::xdr_istream& in) {
-  std::vector<bool> result;
-  bool current = true;
-  in.accept_collection(
-      [](xdr::xdr_istream& in) {
-        return in.get_uint16();
-      },
-      [&result, &current](std::uint16_t count) {
-        std::fill_n(std::back_inserter(result), count, current);
-        current = !current;
-      });
-  return result;
-}
-
-void encode_bitset(xdr::xdr_ostream& out, const std::vector<bool>& bits) {
-  using namespace std::placeholders;
-
-  bool current = true;
-  std::vector<std::uint16_t> counters;
-
-  auto bit_iter = bits.begin();
-  while (bit_iter != bits.end()) {
-    const auto end = std::find(bit_iter, bits.end(), !current);
-    auto count = end - bit_iter;
-
-    while (count > 0x7fff) {
-      counters.push_back(0x7fff);
-      counters.push_back(0);
-      count -= 0x7fff;
-    }
-    counters.push_back(count);
-
-    current = !current;
-    bit_iter = end;
-  }
-
-  out.put_collection(std::bind(&xdr::xdr_ostream::put_uint16, _1, _2),
-      counters.begin(), counters.end());
-}
-
 file_segment_ptr decode_file_segment(xdr::xdr_istream& in) {
   return file_segment_ptr::from_xdr(in);
 }
@@ -331,10 +291,10 @@ void encode_tables(xdr::xdr_ostream& out,
 }
 
 void encode_group_table(xdr::xdr_ostream& out,
-    const std::vector<bool>& presence,
+    const bitset& presence,
     std::unordered_map<metric_name, file_segment_ptr>& metrics_map,
     dictionary_delta& dict) {
-  encode_bitset(out, presence);
+  presence.encode(out);
 
   out.put_collection(
       [&dict](xdr::xdr_ostream& out, const auto& mm_entry) {
