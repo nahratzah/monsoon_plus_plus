@@ -14,29 +14,18 @@ namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ file_data_tables_block
-: public typed_dynamics<void>,
-  public std::enable_shared_from_this<file_data_tables_block>
+: public dynamics
 {
  public:
-  [[deprecated]]
-  explicit file_data_tables_block(encdec_ctx ctx)
-  : file_data_tables_block(nullptr, std::move(ctx))
-  {}
-
-  file_data_tables_block(std::shared_ptr<void> parent, encdec_ctx ctx)
-  : typed_dynamics<void>(std::move(parent)),
-    ctx_(std::move(ctx))
+  explicit file_data_tables_block(std::shared_ptr<file_data_tables> owner)
+  : owner_(owner)
   {}
 
   ~file_data_tables_block() noexcept override;
 
   auto get_dictionary() -> std::shared_ptr<dictionary>;
   auto get_dictionary() const -> std::shared_ptr<const dictionary>;
-
-  auto get_ctx() const
-  -> const encdec_ctx& {
-    return ctx_;
-  }
+  auto get_ctx() const -> const encdec_ctx&;
 
   auto timestamps() const
   -> const timestamp_delta& {
@@ -52,19 +41,18 @@ class monsoon_dirhistory_local_ file_data_tables_block
     return std::make_tuple(timestamps_.front(), timestamps_.back());
   }
 
-  static auto from_xdr(
-      std::shared_ptr<void> parent,
-      xdr::xdr_istream& in,
-      encdec_ctx ctx)
-      -> std::shared_ptr<file_data_tables_block>;
   auto decode(xdr::xdr_istream& in) -> void;
   auto encode(xdr::xdr_ostream& out) const -> void;
+
+ protected:
+  auto shared_from_this() -> std::shared_ptr<file_data_tables_block>;
+  auto shared_from_this() const -> std::shared_ptr<const file_data_tables_block>;
 
  private:
   timestamp_delta timestamps_;
   file_segment_ptr dict_;
   file_segment_ptr tables_;
-  encdec_ctx ctx_;
+  std::weak_ptr<file_data_tables> owner_;
 };
 
 

@@ -28,6 +28,7 @@
 #include "metric_table.h"
 #include "tables.h"
 #include "file_data_tables_block.h"
+#include "file_data_tables.h"
 
 namespace monsoon {
 namespace history {

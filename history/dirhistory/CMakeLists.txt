@@ -29,6 +29,7 @@ add_library (monsoon_dirhistory
   src/v2/group_table.cc
   src/v2/tables.cc
   src/v2/file_data_tables_block.cc
+  src/v2/file_data_tables.cc
   src/v2/encdec.cc
   src/v2/tsdata.cc
   src/v2/tsdata_tables.cc

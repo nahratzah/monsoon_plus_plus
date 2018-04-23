@@ -158,8 +158,6 @@ class monsoon_dirhistory_local_ tsdata_list
   const encdec_ctx ctx_;
 };
 
-using file_data_tables = std::vector<std::shared_ptr<file_data_tables_block>>;
-
 class monsoon_dirhistory_local_ tsfile_header {
  public:
   static constexpr std::size_t XDR_SIZE = 16 + 4 + 4 + 8 + 16;
@@ -245,10 +243,6 @@ auto encode_tsdata(encdec_writer&, const time_series&, dictionary_delta,
   -> file_segment_ptr;
 
 [[deprecated]]
-monsoon_dirhistory_local_
-auto decode_file_data_tables_block(xdr::xdr_istream&, const encdec_ctx&)
-  -> std::shared_ptr<file_data_tables_block>;
-
 monsoon_dirhistory_local_
 auto decode_file_data_tables(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<file_data_tables>;

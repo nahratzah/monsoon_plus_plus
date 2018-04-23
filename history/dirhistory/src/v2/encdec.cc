@@ -14,6 +14,7 @@
 #include "group_table.h"
 #include "tables.h"
 #include "file_data_tables_block.h"
+#include "file_data_tables.h"
 
 namespace monsoon {
 namespace history {
@@ -293,19 +294,9 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   return result;
 }
 
-auto decode_file_data_tables_block(xdr::xdr_istream& in, const encdec_ctx& ctx)
--> std::shared_ptr<file_data_tables_block> {
-  return file_data_tables_block::from_xdr(nullptr, in, ctx);
-}
-
-monsoon_dirhistory_local_
 auto decode_file_data_tables(xdr::xdr_istream& in, const encdec_ctx& ctx)
 -> std::shared_ptr<file_data_tables> {
-  using namespace std::placeholders;
-
-  return std::make_shared<file_data_tables>(
-      in.get_collection<file_data_tables>(
-          std::bind(&decode_file_data_tables_block, _1, std::cref(ctx))));
+  return file_data_tables::from_xdr(nullptr, in, ctx);
 }
 
 void encode_tables(xdr::xdr_ostream& out,

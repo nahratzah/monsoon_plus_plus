@@ -9,6 +9,7 @@ class metric_table;
 class group_table;
 class tables;
 class file_data_tables_block;
+class file_data_tables;
 
 
 } /* namespace monsoon::history::v2 */
