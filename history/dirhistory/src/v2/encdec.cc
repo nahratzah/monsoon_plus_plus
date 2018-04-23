@@ -29,41 +29,6 @@ void encode_timestamp(xdr::xdr_ostream& out, time_point tp) {
   out.put_int64(tp.millis_since_posix_epoch());
 }
 
-std::vector<time_point> decode_timestamp_delta(xdr::xdr_istream& in) {
-  std::vector<time_point> result;
-  result.push_back(time_point(in.get_int64()));
-  in.accept_collection(
-      [](xdr::xdr_istream& in) {
-        return time_point::duration(in.get_int32());
-      },
-      [&result](time_point::duration delta) {
-        result.push_back(result.back() + delta);
-      });
-  return result;
-}
-
-void encode_timestamp_delta(xdr::xdr_ostream& out,
-    std::vector<time_point>&& tp_set) {
-  if (tp_set.empty())
-    throw std::invalid_argument("empty time_point collection");
-  std::sort(tp_set.begin(), tp_set.end());
-
-  auto pred = tp_set.front().millis_since_posix_epoch();
-  out.put_int64(pred);
-  out.put_collection(
-      [&pred](xdr::xdr_ostream& out, const time_point& tp) {
-        const std::int64_t tp_millis = tp.millis_since_posix_epoch();
-        const std::int64_t delta = tp_millis - pred;
-        pred = tp_millis;
-        if (delta > 0x7fffffff || delta < -0x80000000) {
-          throw std::invalid_argument("time between successive timestamps "
-              "is too large");
-        }
-        out.put_int32(delta);
-      },
-      tp_set.begin() + 1, tp_set.end());
-}
-
 auto decode_record_metrics(xdr::xdr_istream& in, const dictionary_delta& dict)
 -> std::shared_ptr<time_series_value::metric_map> {
   return std::make_shared<time_series_value::metric_map>(
