@@ -18,7 +18,7 @@
 namespace monsoon::history::v2 {
 
 
-extern monsoon_dirhistory_local_ instrumentation::group&& cache_grp;
+monsoon_dirhistory_local_ instrumentation::group& cache_grp();
 
 template<typename T>
 using cache_allocator = monsoon::cache::cache_allocator<std::allocator<T>>;
@@ -135,8 +135,7 @@ struct monsoon_dirhistory_local_ dynamics_cache_create {
   template<typename Alloc, typename T, typename P>
   auto operator()(Alloc alloc, const cache_search_type<T, P>& cst) const
   -> std::shared_ptr<dynamics> {
-    static instrumentation::timing decode_duration{ "timing_duration", cache_grp, instrumentation::tag_map({ {"type", std::string_view(typeid(T).name())} }) };
-    instrumentation::time_track<instrumentation::timing> track_{ decode_duration };
+    instrumentation::time_track<instrumentation::timing> track_{ decode_duration<T> };
 
     auto xdr = cst.parent()->get_ctx().new_reader(cst.fptr(), T::is_compressed);
     auto result = std::allocate_shared<T>(alloc, std::const_pointer_cast<P>(cst.parent()), alloc);
@@ -151,6 +150,10 @@ struct monsoon_dirhistory_local_ dynamics_cache_create {
   -> std::shared_ptr<dynamics> {
     throw std::invalid_argument("cache key type is not suitable to create items");
   }
+
+ private:
+  template<typename T>
+  static inline instrumentation::timing decode_duration{ "timing_duration", cache_grp(), instrumentation::tag_map({ {"type", std::string_view(typeid(T).name())} }) };
 };
 
 using cache_type = monsoon::cache::extended_cache<
