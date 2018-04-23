@@ -4,14 +4,21 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include "../dynamics.h"
 #include "file_segment_ptr.h"
+#include <string_view>
+#include <typeinfo>
 #include <typeindex>
 #include <memory>
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/allocator.h>
 #include <monsoon/history/dir/hdir_exception.h>
+#include <instrumentation/group.h>
+#include <instrumentation/timing.h>
+#include <instrumentation/time_track.h>
 
 namespace monsoon::history::v2 {
 
+
+extern monsoon_dirhistory_local_ instrumentation::group&& cache_grp;
 
 template<typename T>
 using cache_allocator = monsoon::cache::cache_allocator<std::allocator<T>>;
@@ -128,6 +135,9 @@ struct monsoon_dirhistory_local_ dynamics_cache_create {
   template<typename Alloc, typename T, typename P>
   auto operator()(Alloc alloc, const cache_search_type<T, P>& cst) const
   -> std::shared_ptr<dynamics> {
+    static instrumentation::timing decode_duration{ "timing_duration", cache_grp, instrumentation::tag_map({ {"type", std::string_view(typeid(T).name())} }) };
+    instrumentation::time_track<instrumentation::timing> track_{ decode_duration };
+
     auto xdr = cst.parent()->get_ctx().new_reader(cst.fptr(), T::is_compressed);
     auto result = std::allocate_shared<T>(alloc, std::const_pointer_cast<P>(cst.parent()), alloc);
     result->decode(xdr);

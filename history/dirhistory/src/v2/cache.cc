@@ -4,13 +4,9 @@
 #include <instrumentation/group.h>
 
 namespace monsoon::history::v2 {
-namespace {
 
 
 instrumentation::group&& cache_grp = instrumentation::make_group("tsdata", history_instrumentation);
-
-
-} /* namespace monsoon::history::v2::<unnamed> */
 
 auto get_dynamics_cache_() -> cache_type& {
   static cache_type impl = cache_type::builder()
