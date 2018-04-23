@@ -254,37 +254,6 @@ auto tsdata_list::records(const dictionary_delta& dict) const
   return result;
 }
 
-void encode_tables(xdr::xdr_ostream& out,
-    const std::unordered_map<group_name, file_segment_ptr>& groups,
-    dictionary_delta& dict) {
-  // Recreate to-be-written structure in memory.
-  std::unordered_map<std::uint32_t, std::unordered_map<std::uint32_t, file_segment_ptr>>
-      tmp;
-  std::for_each(groups.begin(), groups.end(),
-      [&tmp, &dict](const auto& group) {
-        const auto path_ref = dict.pdd()[std::get<0>(group).get_path()];
-        const auto tag_ref = dict.tdd()[std::get<0>(group).get_tags()];
-        const auto& ptr = std::get<1>(group);
-
-        tmp[path_ref].emplace(tag_ref, ptr);
-      });
-
-  // Write the previously computed structure.
-  out.put_collection(
-      [](xdr::xdr_ostream& out, const auto& path_map_entry) {
-        out.put_uint32(std::get<0>(path_map_entry));
-        out.put_collection(
-            [](xdr::xdr_ostream& out, const auto& tag_map_entry) {
-              out.put_uint32(std::get<0>(tag_map_entry));
-              std::get<1>(tag_map_entry).encode(out);
-            },
-            std::get<1>(path_map_entry).begin(),
-            std::get<1>(path_map_entry).end());
-      },
-      tmp.begin(),
-      tmp.end());
-}
-
 void encode_group_table(xdr::xdr_ostream& out,
     const bitset& presence,
     std::unordered_map<metric_name, file_segment_ptr>& metrics_map,
