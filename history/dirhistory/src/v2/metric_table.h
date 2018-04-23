@@ -10,6 +10,7 @@
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include "fwd.h"
+#include "cache.h"
 #include "../dynamics.h"
 
 namespace monsoon::history::v2 {
@@ -26,14 +27,19 @@ class monsoon_dirhistory_local_ metric_table
   static constexpr bool is_compressed = true;
 
  private:
-  using data_type = std::vector<value_type>;
+  using data_type = std::vector<value_type, cache_allocator<value_type>>;
 
  public:
+  using allocator_type = data_type::allocator_type;
   using iterator = data_type::const_iterator;
   using const_iterator = iterator;
   using size_type = data_type::size_type;
 
-  using typed_dynamics<group_table>::typed_dynamics;
+  metric_table(std::shared_ptr<group_table> parent, allocator_type alloc = allocator_type())
+  : typed_dynamics<group_table>(std::move(parent)),
+    data_(alloc)
+  {}
+
   ~metric_table() noexcept override;
 
   static auto from_xdr(

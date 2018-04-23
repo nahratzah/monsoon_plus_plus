@@ -254,7 +254,7 @@ auto tsdata_list::dictionary() const -> std::shared_ptr<dictionary_delta> {
       dd_stack.push(std::move(pdd).value());
   }
 
-  auto dict = std::make_shared<dictionary_delta>();
+  auto dict = std::make_shared<dictionary_delta>(dictionary::allocator_type());
   while (!dd_stack.empty()) {
     auto xdr = ctx_.new_reader(dd_stack.top());
     dict->decode_update(xdr);

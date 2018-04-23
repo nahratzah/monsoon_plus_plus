@@ -9,6 +9,7 @@
 #include "fwd.h"
 #include "file_segment_ptr.h"
 #include "encdec_ctx.h"
+#include "cache.h"
 #include "../dynamics.h"
 #include <cstdint>
 #include <utility>
@@ -49,7 +50,7 @@ class monsoon_dirhistory_local_ tables
     }
   };
 
-  using data_type = std::unordered_map<key_type, file_segment_ptr, key_hash>;
+  using data_type = std::unordered_map<key_type, file_segment_ptr, key_hash, std::equal_to<key_type>, cache_allocator<std::pair<const key_type, file_segment_ptr>>>;
 
  public:
   class proxy;
@@ -68,13 +69,20 @@ class monsoon_dirhistory_local_ tables
   };
 
  public:
+  using allocator_type = data_type::allocator_type;
   using size_type = data_type::size_type;
   using const_iterator = boost::iterators::transform_iterator<
       proxy_tf_fn_,
       data_type::const_iterator>;
   using iterator = const_iterator;
 
-  using typed_dynamics<file_data_tables_block>::typed_dynamics;
+  static constexpr bool is_compressed = true;
+
+  tables(std::shared_ptr<file_data_tables_block> parent, allocator_type alloc = allocator_type())
+  : typed_dynamics<file_data_tables_block>(std::move(parent)),
+    data_(alloc)
+  {}
+
   ~tables() noexcept override;
 
   auto get_dictionary() -> std::shared_ptr<dictionary>;

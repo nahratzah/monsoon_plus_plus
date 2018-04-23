@@ -2,6 +2,7 @@
 #include "group_table.h"
 #include "dictionary.h"
 #include "file_data_tables_block.h"
+#include "cache.h"
 #include <monsoon/history/dir/hdir_exception.h>
 
 namespace monsoon::history::v2 {
@@ -61,11 +62,7 @@ auto tables::decode(xdr::xdr_istream& in) -> void {
 }
 
 auto tables::read_(data_type::const_reference ptr) const -> std::shared_ptr<const group_table> {
-  auto xdr = get_ctx().new_reader(ptr.second, group_table::is_compressed);
-  auto result = group_table::from_xdr(std::const_pointer_cast<tables>(shared_from_this()), xdr);
-  if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
-  xdr.close();
-  return result;
+  return get_dynamics_cache<group_table>(std::const_pointer_cast<tables>(shared_from_this()), ptr.second);
 }
 
 

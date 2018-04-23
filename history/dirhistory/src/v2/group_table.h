@@ -13,6 +13,7 @@
 #include "bitset.h"
 #include "encdec_ctx.h"
 #include "file_segment_ptr.h"
+#include "cache.h"
 #include "../dynamics.h"
 
 namespace monsoon::history::v2 {
@@ -23,9 +24,10 @@ class monsoon_dirhistory_local_ group_table
   public std::enable_shared_from_this<group_table>
 {
  private:
-  using data_type = std::unordered_map<std::uint32_t, file_segment_ptr>;
+  using data_type = std::unordered_map<std::uint32_t, file_segment_ptr, std::hash<std::uint32_t>, std::equal_to<std::uint32_t>, cache_allocator<std::pair<const std::uint32_t, file_segment_ptr>>>;
 
  public:
+  using allocator_type = data_type::allocator_type;
   using size_type = bitset::size_type;
 
   class proxy;
@@ -51,7 +53,12 @@ class monsoon_dirhistory_local_ group_table
 
   static constexpr bool is_compressed = true;
 
-  using typed_dynamics<tables>::typed_dynamics;
+  group_table(std::shared_ptr<tables> parent, allocator_type alloc = allocator_type())
+  : typed_dynamics<tables>(std::move(parent)),
+    presence_(alloc),
+    data_(alloc)
+  {}
+
   ~group_table() noexcept override;
 
   auto get_dictionary() -> std::shared_ptr<dictionary>;

@@ -1,6 +1,7 @@
 #include "file_data_tables_block.h"
 #include "dictionary.h"
 #include "tables.h"
+#include "cache.h"
 #include <monsoon/history/dir/hdir_exception.h>
 
 namespace monsoon::history::v2 {
@@ -10,12 +11,7 @@ file_data_tables_block::~file_data_tables_block() noexcept {}
 
 auto file_data_tables_block::get_dictionary()
 -> std::shared_ptr<dictionary> {
-  auto xdr = get_ctx().new_reader(dict_);
-  std::shared_ptr<dictionary> dict = std::make_shared<dictionary>();
-  dict->decode_update(xdr);
-  if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
-  xdr.close();
-  return dict;
+  return get_dynamics_cache<dictionary>(shared_from_this(), dict_);
 }
 
 auto file_data_tables_block::get_dictionary() const
@@ -25,11 +21,7 @@ auto file_data_tables_block::get_dictionary() const
 
 auto file_data_tables_block::get() const
 -> std::shared_ptr<const tables> {
-  auto xdr = get_ctx().new_reader(tables_);
-  std::shared_ptr<tables> tbl = tables::from_xdr(std::const_pointer_cast<file_data_tables_block>(shared_from_this()), xdr);
-  if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
-  xdr.close();
-  return tbl;
+  return get_dynamics_cache<tables>(std::const_pointer_cast<file_data_tables_block>(shared_from_this()), tables_);
 }
 
 auto file_data_tables_block::from_xdr(

@@ -155,8 +155,9 @@ auto make_transform_iterator(Iter&& iter, Fn&& fn)
 } /* namespace monsoon::history::v2::<unnamed> */
 
 
-strval_dictionary::strval_dictionary()
-: inverse_(std::bind(&strval_dictionary::make_inverse_, this))
+strval_dictionary::strval_dictionary(allocator_type alloc)
+: values_(alloc),
+  inverse_(std::bind(&strval_dictionary::make_inverse_, this))
 {}
 
 strval_dictionary::strval_dictionary(const strval_dictionary& y)
@@ -236,9 +237,11 @@ auto strval_dictionary::decode_update(xdr::xdr_istream& in) -> void {
     throw xdr::xdr_exception("dictionary updates must be contiguous");
 
   try {
+    std::allocator_traits<decltype(values_.get_allocator())>::rebind_alloc<char> alloc =
+        values_.get_allocator();
     in.get_collection(
-        [](xdr::xdr_istream& in) {
-          return in.get_string();
+        [&alloc](xdr::xdr_istream& in) {
+          return in.get_string(alloc);
         },
         values_);
     if (values_.size() > 0xffffffffU)
@@ -253,7 +256,7 @@ auto strval_dictionary::decode_update(xdr::xdr_istream& in) -> void {
 
 auto strval_dictionary::make_inverse_() const
 -> inverse_map {
-  inverse_map result;
+  inverse_map result(values_.get_allocator());
   result.reserve(values_.size());
 
   std::uint32_t idx = 0;
@@ -276,8 +279,9 @@ path_dictionary::proxy::operator simple_group() const {
 }
 
 
-path_dictionary::path_dictionary(strval_dictionary& str_tbl)
+path_dictionary::path_dictionary(strval_dictionary& str_tbl, allocator_type alloc)
 : str_tbl_(str_tbl),
+  values_(alloc),
   inverse_(std::bind(&path_dictionary::make_inverse_, this))
 {}
 
@@ -402,7 +406,7 @@ auto path_dictionary::decode_update(xdr::xdr_istream& in) -> void {
 
 auto path_dictionary::make_inverse_() const
 -> inverse_map {
-  inverse_map result;
+  inverse_map result(values_.get_allocator());
   result.reserve(values_.size());
 
   std::uint32_t idx = 0;
@@ -412,8 +416,9 @@ auto path_dictionary::make_inverse_() const
 }
 
 
-tag_dictionary::tag_dictionary(strval_dictionary& str_tbl)
+tag_dictionary::tag_dictionary(strval_dictionary& str_tbl, allocator_type alloc)
 : str_tbl_(str_tbl),
+  values_(alloc),
   inverse_(std::bind(&tag_dictionary::make_inverse_, this))
 {}
 
@@ -558,7 +563,7 @@ auto tag_dictionary::decode_update(xdr::xdr_istream& in) -> void {
 
 auto tag_dictionary::make_inverse_() const
 -> inverse_map {
-  inverse_map result;
+  inverse_map result(values_.get_allocator());
   result.reserve(values_.size());
 
   std::uint32_t idx = 0;

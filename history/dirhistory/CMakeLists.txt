@@ -20,6 +20,7 @@ add_library (monsoon_dirhistory
   src/dynamics.cc
   src/v0/tsdata.cc
   src/v1/tsdata.cc
+  src/v2/cache.cc
   src/v2/encdec_ctx.cc
   src/v2/xdr_primitives.cc
   src/v2/timestamp_delta.cc

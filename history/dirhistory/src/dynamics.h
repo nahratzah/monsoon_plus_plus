@@ -16,7 +16,7 @@ class monsoon_dirhistory_local_ dynamics {
 
 template<typename T>
 class monsoon_dirhistory_local_ typed_dynamics
-: dynamics
+: public dynamics
 {
  public:
   explicit typed_dynamics(std::shared_ptr<T> parent)
@@ -38,7 +38,7 @@ class monsoon_dirhistory_local_ typed_dynamics
 
 template<>
 class monsoon_dirhistory_local_ typed_dynamics<void>
-: dynamics
+: public dynamics
 {
  public:
   [[deprecated]]
