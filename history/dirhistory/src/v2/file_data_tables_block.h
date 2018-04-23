@@ -45,6 +45,13 @@ class monsoon_dirhistory_local_ file_data_tables_block
 
   auto get() const -> std::shared_ptr<const tables>;
 
+  auto time() const
+  noexcept
+  -> std::optional<std::tuple<time_point, time_point>> {
+    if (timestamps_.empty()) return {};
+    return std::make_tuple(timestamps_.front(), timestamps_.back());
+  }
+
   static auto from_xdr(
       std::shared_ptr<void> parent,
       xdr::xdr_istream& in,
