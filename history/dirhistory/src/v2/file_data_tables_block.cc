@@ -1,11 +1,20 @@
 #include "file_data_tables_block.h"
 #include "file_data_tables.h"
-#include "dictionary.h"
 #include "tables.h"
-#include "cache.h"
 #include <monsoon/history/dir/hdir_exception.h>
 
 namespace monsoon::history::v2 {
+
+
+auto decode(const cache_search_type<dictionary, file_data_tables_block>& cst, dictionary::allocator_type alloc)
+-> std::shared_ptr<dictionary> {
+  auto result = std::allocate_shared<dictionary>(alloc, alloc);
+  auto xdr = cst.parent()->get_ctx().new_reader(cst.fptr(), dictionary::is_compressed);
+  result->decode_update(xdr);
+  if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
+  xdr.close();
+  return result;
+}
 
 
 file_data_tables_block::~file_data_tables_block() noexcept {}
@@ -17,7 +26,7 @@ auto file_data_tables_block::get_dictionary()
 
 auto file_data_tables_block::get_dictionary() const
 -> std::shared_ptr<const dictionary> {
-  return const_cast<file_data_tables_block&>(*this).get_dictionary();
+  return get_dynamics_cache<dictionary>(shared_from_this(), dict_);
 }
 
 auto file_data_tables_block::get_ctx() const

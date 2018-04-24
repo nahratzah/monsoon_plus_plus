@@ -122,7 +122,7 @@ class monsoon_dirhistory_local_ file_segment {
 };
 
 /** The TSData structure of the 'list' implementation. */
-class monsoon_dirhistory_local_ tsdata_list
+class monsoon_dirhistory_local_ [[deprecated]] tsdata_list
 : public std::enable_shared_from_this<tsdata_list>
 {
  public:
@@ -195,25 +195,31 @@ class monsoon_dirhistory_local_ tsfile_header {
 };
 
 
+[[deprecated]]
 monsoon_dirhistory_local_
 auto decode_record_metrics(xdr::xdr_istream&, const dictionary_delta&)
   -> std::shared_ptr<time_series_value::metric_map>;
+[[deprecated]]
 monsoon_dirhistory_local_
 file_segment_ptr encode_record_metrics(encdec_writer&,
     const time_series_value::metric_map&,
     dictionary_delta&);
 
+[[deprecated]]
 monsoon_dirhistory_local_
 auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
   -> std::shared_ptr<tsdata_list::record_array>;
+[[deprecated]]
 monsoon_dirhistory_local_
 file_segment_ptr encode_record_array(encdec_writer&,
     const time_series::tsv_set&, dictionary_delta&);
 
+[[deprecated]]
 monsoon_dirhistory_local_
 auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
+[[deprecated]]
 monsoon_dirhistory_local_
 auto encode_tsdata(encdec_writer&, const time_series&, dictionary_delta,
     std::optional<file_segment_ptr>)

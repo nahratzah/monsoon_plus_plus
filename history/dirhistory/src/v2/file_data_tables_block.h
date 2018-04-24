@@ -4,6 +4,8 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include "fwd.h"
 #include "encdec_ctx.h"
+#include "cache.h"
+#include "dictionary.h"
 #include "timestamp_delta.h"
 #include "../dynamics.h"
 #include <memory>
@@ -11,6 +13,10 @@
 #include <monsoon/time_point.h>
 
 namespace monsoon::history::v2 {
+
+
+monsoon_dirhistory_local_
+auto decode(const cache_search_type<dictionary, file_data_tables_block>& cst, dictionary::allocator_type alloc) -> std::shared_ptr<dictionary>;
 
 
 class monsoon_dirhistory_local_ file_data_tables_block

@@ -223,13 +223,6 @@ class monsoon_dirhistory_local_ dictionary
 
   static constexpr bool is_compressed = true;
 
-  // Constructor used by the cache logic;
-  // since we don't care about the parent, we discard it.
-  template<typename T, typename = std::enable_if_t<std::is_base_of_v<dynamics, std::decay_t<T>>>>
-  explicit dictionary([[maybe_unused]] const std::shared_ptr<T>& ptr, allocator_type alloc = allocator_type())
-  : dictionary(alloc)
-  {}
-
   explicit dictionary(allocator_type alloc = allocator_type())
   : dynamics(),
     strval_(alloc),
@@ -332,12 +325,11 @@ class monsoon_dirhistory_local_ dictionary
     tags_.decode_update(in);
   }
 
-  auto decode(xdr::xdr_istream& in)
+  auto reset()
   -> void {
     strval_.reset();
     paths_.reset();
     tags_.reset();
-    decode_update(in);
   }
 
  private:

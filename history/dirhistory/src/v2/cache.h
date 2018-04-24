@@ -18,6 +18,20 @@
 namespace monsoon::history::v2 {
 
 
+template<typename, typename>
+class monsoon_dirhistory_local_ cache_search_type;
+
+template<typename T, typename P>
+auto decode(const cache_search_type<T, P>& cst, typename T::allocator_type alloc)
+-> std::shared_ptr<T> {
+  auto xdr = cst.parent()->get_ctx().new_reader(cst.fptr(), T::is_compressed);
+  auto result = std::allocate_shared<T>(alloc, std::const_pointer_cast<P>(cst.parent()), alloc);
+  result->decode(xdr);
+  if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
+  xdr.close();
+  return result;
+}
+
 monsoon_dirhistory_local_ instrumentation::group& cache_grp();
 
 template<typename T>
@@ -136,13 +150,7 @@ struct monsoon_dirhistory_local_ dynamics_cache_create {
   auto operator()(Alloc alloc, const cache_search_type<T, P>& cst) const
   -> std::shared_ptr<dynamics> {
     instrumentation::time_track<instrumentation::timing> track_{ decode_duration<T> };
-
-    auto xdr = cst.parent()->get_ctx().new_reader(cst.fptr(), T::is_compressed);
-    auto result = std::allocate_shared<T>(alloc, std::const_pointer_cast<P>(cst.parent()), alloc);
-    result->decode(xdr);
-    if (!xdr.at_end()) throw dirhistory_exception("xdr data remaining");
-    xdr.close();
-    return result;
+    return decode(cst, alloc);
   }
 
   template<typename Alloc>

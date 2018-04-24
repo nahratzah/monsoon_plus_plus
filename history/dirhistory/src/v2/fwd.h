@@ -10,6 +10,9 @@ class group_table;
 class tables;
 class file_data_tables_block;
 class file_data_tables;
+class record_metrics;
+class record_array;
+class tsdata_xdr;
 
 
 } /* namespace monsoon::history::v2 */
