@@ -56,7 +56,10 @@ auto tsdata_v2_list::direct_emit_cb_(
         std::get<0>(emit_data) = tp;
         std::get<1>(emit_data).clear();
 
-        for (const auto& [group_name, group_data] : *records) {
+        for (const auto& record : *records) {
+          const auto& group_name = std::get<0>(record);
+          const auto& group_data = std::get<1>(record);
+
           if (group_filter(group_name.get_path())
               && tag_filter(group_name.get_tags())) {
             for (const auto& [metric_name, metric_value] : *group_data.get()) {
