@@ -94,7 +94,7 @@ class monsoon_dirhistory_local_ encdec_writer::xdr_writer
  * The CRC32 is calculated over the data and the padding bytes.
  */
 template<typename T>
-class monsoon_dirhistory_local_ file_segment {
+class monsoon_dirhistory_local_ [[deprecated]] file_segment {
  public:
   using offset_type = file_segment_ptr::offset_type;
   using size_type = file_segment_ptr::size_type;
