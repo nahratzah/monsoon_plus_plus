@@ -212,50 +212,10 @@ auto tsdata_list::records(const dictionary_delta& dict) const
 }
 
 
-tsfile_header::tsfile_header(xdr::xdr_istream& in,
-    std::shared_ptr<io::fd> fd) {
-  using namespace std::placeholders;
-
-  first_ = decode_timestamp(in);
-  last_ = decode_timestamp(in);
-  flags_ = in.get_uint32();
-  reserved_ = in.get_uint32();
-  file_size_ = in.get_uint64();
-
-  auto fdt_ptr = file_segment_ptr::from_xdr(in);
-  switch (flags_ & header_flags::KIND_MASK) {
-    default:
-      throw xdr::xdr_exception("file kind not recognized");
-    case header_flags::KIND_LIST:
-      fdt_ = file_segment<tsdata_list>(
-          encdec_ctx(fd, flags_),
-          fdt_ptr,
-          std::bind(&decode_tsdata, _1, encdec_ctx(fd, flags_)),
-          false);
-      break;
-    case header_flags::KIND_TABLES:
-      {
-        const auto flags = flags_;
-        fdt_ = file_segment<file_data_tables>(
-            encdec_ctx(fd, flags_),
-            fdt_ptr,
-            [fd, flags](xdr::xdr_istream& in) {
-              return file_data_tables::from_xdr(nullptr, in, encdec_ctx(fd, flags));
-            });
-      }
-      break;
-  }
-}
-
-tsfile_header::~tsfile_header() noexcept {}
-
-
 file_segment_ptr encdec_writer::commit(const std::uint8_t* buf,
     std::size_t len, bool compress) {
-  const auto fd_ptr = ctx_.fd();
-
   io::fd::size_type dlen, slen;
-  auto wr = io::make_ptr_writer<raw_file_segment_writer>(*fd_ptr, off_, &dlen, &slen);
+  auto wr = io::make_ptr_writer<raw_file_segment_writer>(ctx_.fd(), off_, &dlen, &slen);
   if (compress) wr = ctx_.compress(std::move(wr));
 
   while (len > 0) {

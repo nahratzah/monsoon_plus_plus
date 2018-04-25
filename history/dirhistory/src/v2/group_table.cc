@@ -21,7 +21,7 @@ auto group_table::get_dictionary() const
 }
 
 auto group_table::get_ctx() const
--> const encdec_ctx& {
+-> encdec_ctx {
   return parent().get_ctx();
 }
 

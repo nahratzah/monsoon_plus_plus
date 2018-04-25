@@ -38,20 +38,15 @@ namespace v2 {
 using namespace std::string_view_literals;
 
 
-tsdata_v2_tables::tsdata_v2_tables(file_segment<file_data_tables>&& data,
-    const tsdata_v2::carg& constructor_arg)
-: tsdata_v2(constructor_arg),
-  data_(std::move(data))
-{}
-
 tsdata_v2_tables::~tsdata_v2_tables() noexcept {}
-
-std::shared_ptr<io::fd> tsdata_v2_tables::fd() const noexcept {
-  return data_.ctx().fd();
-}
 
 bool tsdata_v2_tables::is_writable() const noexcept {
   return false;
+}
+
+auto tsdata_v2_tables::read_() const
+-> std::shared_ptr<file_data_tables> {
+  return get_dynamics_cache<file_data_tables>(shared_from_this(), fdt());
 }
 
 std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
@@ -62,8 +57,7 @@ std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
   std::vector<time_series::tsv_set> tsdata;
   std::vector<time_series_value::metric_map> mmap;
 
-  const std::shared_ptr<const file_data_tables> file_data_tables =
-      data_.get();
+  const std::shared_ptr<const file_data_tables> file_data_tables = read_();
   for (const auto& block : *file_data_tables) {
     const timestamp_delta& timestamps = block->timestamps();
     const std::shared_ptr<const tables> tbl = block->get();
@@ -276,8 +270,7 @@ auto tsdata_v2_tables::emit(
   static instrumentation::group&& metric_grp = instrumentation::make_group("tsdata_v2_tables", monsoon::history_instrumentation());
 
   instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_new_objpipe_timing };
-  const std::shared_ptr<const file_data_tables> file_data_tables =
-      data_.get();
+  const std::shared_ptr<const file_data_tables> file_data_tables = read_();
 
   auto block_chain = objpipe::new_callback<emit_fdtblock_t>(
       [file_data_tables, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
@@ -318,8 +311,7 @@ auto tsdata_v2_tables::emit_time(
 -> objpipe::reader<time_point> {
   using iterator = timestamp_delta::const_iterator;
 
-  const std::shared_ptr<const file_data_tables> file_data_tables =
-      data_.get();
+  const std::shared_ptr<const file_data_tables> file_data_tables = read_();
 
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
     return objpipe::new_callback<time_point>(

@@ -1,6 +1,7 @@
 #include "tsdata_xdr.h"
 #include "xdr_primitives.h"
 #include "record_array.h"
+#include "tsdata.h"
 #include <stack>
 #include <tuple>
 
@@ -33,6 +34,16 @@ auto decode(const cache_search_type<dictionary, tsdata_xdr>& cst, dictionary::al
   return result;
 }
 
+
+tsdata_xdr::tsdata_xdr(std::shared_ptr<tsdata_v2> parent, allocator_type alloc)
+: typed_dynamics<dynamics>(parent),
+  ctx_(parent->get_ctx())
+{}
+
+tsdata_xdr::tsdata_xdr(std::shared_ptr<tsdata_xdr> parent, allocator_type alloc)
+: typed_dynamics<dynamics>(parent),
+  ctx_(parent->get_ctx())
+{}
 
 tsdata_xdr::~tsdata_xdr() noexcept {}
 

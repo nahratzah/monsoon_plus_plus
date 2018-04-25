@@ -31,7 +31,7 @@ class monsoon_dirhistory_local_ file_data_tables_block
 
   auto get_dictionary() -> std::shared_ptr<dictionary>;
   auto get_dictionary() const -> std::shared_ptr<const dictionary>;
-  auto get_ctx() const -> const encdec_ctx&;
+  auto get_ctx() const -> encdec_ctx;
 
   auto timestamps() const
   -> const timestamp_delta& {

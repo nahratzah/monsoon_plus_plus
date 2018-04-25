@@ -5,38 +5,6 @@
 namespace monsoon::history::v2 {
 
 
-encdec_ctx::encdec_ctx() noexcept {}
-
-encdec_ctx::encdec_ctx(const encdec_ctx& o)
-: fd_(o.fd_),
-  hdr_flags_(o.hdr_flags_)
-{}
-
-encdec_ctx::encdec_ctx(encdec_ctx&& o) noexcept
-: fd_(std::move(o.fd_)),
-  hdr_flags_(std::move(o.hdr_flags_))
-{}
-
-auto encdec_ctx::operator=(const encdec_ctx& o) -> encdec_ctx& {
-  fd_ = o.fd_;
-  hdr_flags_ = o.hdr_flags_;
-  return *this;
-}
-
-auto encdec_ctx::operator=(encdec_ctx&& o) noexcept -> encdec_ctx& {
-  fd_ = std::move(o.fd_);
-  hdr_flags_ = std::move(o.hdr_flags_);
-  return *this;
-}
-
-encdec_ctx::encdec_ctx(std::shared_ptr<io::fd> fd, std::uint32_t hdr_flags)
-  noexcept
-: fd_(std::move(fd)),
-  hdr_flags_(hdr_flags)
-{}
-
-encdec_ctx::~encdec_ctx() noexcept {}
-
 auto encdec_ctx::new_reader(const file_segment_ptr& ptr, bool compression)
   const
 -> xdr::xdr_stream_reader<io::ptr_stream_reader> {

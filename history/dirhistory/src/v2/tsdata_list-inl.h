@@ -11,6 +11,7 @@ namespace history {
 namespace v2 {
 
 
+#if 0
 template<typename Fn>
 void tsdata_v2_list::visit(Fn fn) const {
   if (data_.file_ptr().offset() == 0u) // Empty file, bail out early
@@ -171,6 +172,7 @@ auto tsdata_v2_list::emit_cb_unsorted_(
 #endif
   }
 }
+#endif
 
 
 }}} /* namespace monsoon::history::v2 */

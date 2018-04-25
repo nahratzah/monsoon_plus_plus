@@ -2,6 +2,7 @@
 #include "record_metrics.h"
 #include "tsdata_xdr.h"
 #include <tuple>
+#include <algorithm>
 
 namespace monsoon::history::v2 {
 
@@ -17,22 +18,30 @@ auto record_array::get_dictionary() -> std::shared_ptr<dictionary> {
 }
 
 auto record_array::get_ctx() const
--> const encdec_ctx& {
+-> encdec_ctx {
   return parent().get_ctx();
 }
 
 auto record_array::decode(xdr::xdr_istream& in)
 -> void {
   data_.clear();
-  in.get_collection(
+  in.accept_collection(
       [](xdr::xdr_istream& in) {
         elem e;
         e.grp_ref = in.get_uint32();
-        e.tag_ref = in.get_uint32();
-        e.metrics.decode(in);
-        return e;
+        return in.get_collection<std::vector<elem>>(
+            [&e](xdr::xdr_istream& in) {
+              e.tag_ref = in.get_uint32();
+              e.metrics.decode(in);
+              return e;
+            });
       },
-      data_);
+      [this](std::vector<elem>&& elems) {
+        data_.insert(
+            data_.end(),
+            std::make_move_iterator(elems.begin()),
+            std::make_move_iterator(elems.end()));
+      });
 
   std::sort(data_.begin(), data_.end(),
       [](const elem& x, const elem& y) {
@@ -43,7 +52,7 @@ auto record_array::decode(xdr::xdr_istream& in)
       std::unique(data_.begin(), data_.end(),
           [](const elem& x, const elem& y) {
             return std::tie(x.grp_ref, x.tag_ref)
-                < std::tie(y.grp_ref, y.tag_ref);
+                == std::tie(y.grp_ref, y.tag_ref);
           }),
       data_.end());
 }

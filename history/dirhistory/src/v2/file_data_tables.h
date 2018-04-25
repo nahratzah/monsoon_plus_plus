@@ -17,7 +17,7 @@ namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ file_data_tables
-: public typed_dynamics<void>,
+: public typed_dynamics<tsdata_v2>,
   public std::enable_shared_from_this<file_data_tables>
 {
  private:
@@ -45,25 +45,16 @@ class monsoon_dirhistory_local_ file_data_tables
   using iterator = const_iterator;
   using allocator_type = data_type::allocator_type;
 
-  file_data_tables(std::shared_ptr<void> parent, encdec_ctx ctx, allocator_type alloc = allocator_type())
-  : typed_dynamics<void>(std::move(parent)),
-    blocks_(alloc),
-    ctx_(ctx)
+  static constexpr bool is_compressed = true;
+
+  explicit file_data_tables(std::shared_ptr<tsdata_v2> parent, allocator_type alloc = allocator_type())
+  : typed_dynamics<tsdata_v2>(std::move(parent)),
+    blocks_(alloc)
   {}
 
   ~file_data_tables() noexcept override;
 
-  auto get_ctx() const
-  -> const encdec_ctx& {
-    return ctx_;
-  }
-
-  static auto from_xdr(std::shared_ptr<void> parent, xdr::xdr_istream& in, encdec_ctx ctx, allocator_type alloc = allocator_type())
-  -> std::shared_ptr<file_data_tables> {
-    auto tbl = std::allocate_shared<file_data_tables>(alloc, std::move(parent), std::move(ctx), alloc);
-    tbl->decode(in);
-    return tbl;
-  }
+  auto get_ctx() const -> encdec_ctx;
 
   auto decode(xdr::xdr_istream& in) -> void;
   auto encode(xdr::xdr_ostream& out) const -> void;

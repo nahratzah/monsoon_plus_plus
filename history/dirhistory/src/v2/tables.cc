@@ -22,7 +22,7 @@ auto tables::get_dictionary() const
 }
 
 auto tables::get_ctx() const
--> const encdec_ctx& {
+-> encdec_ctx {
   return parent().get_ctx();
 }
 

@@ -137,7 +137,7 @@ class monsoon_dirhistory_local_ tables
 
   auto get_dictionary() -> std::shared_ptr<dictionary>;
   auto get_dictionary() const -> std::shared_ptr<const dictionary>;
-  auto get_ctx() const -> const encdec_ctx&;
+  auto get_ctx() const -> encdec_ctx;
 
   auto size() const
   noexcept

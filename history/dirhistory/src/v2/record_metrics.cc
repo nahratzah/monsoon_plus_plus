@@ -18,7 +18,7 @@ auto record_metrics::get_dictionary()
 }
 
 auto record_metrics::get_ctx() const
--> const encdec_ctx& {
+-> encdec_ctx {
   return parent().get_ctx();
 }
 

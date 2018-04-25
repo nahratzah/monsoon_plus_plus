@@ -32,29 +32,22 @@ class monsoon_dirhistory_local_ tsdata_xdr
 
   static constexpr bool is_compressed = false;
 
-  explicit tsdata_xdr(std::shared_ptr<dynamics> parent, encdec_ctx ctx, allocator_type alloc = allocator_type())
-  : typed_dynamics<dynamics>(std::move(parent)),
-    ctx_(std::move(ctx))
-  {}
-
-  explicit tsdata_xdr(std::shared_ptr<tsdata_xdr> parent, allocator_type alloc = allocator_type())
-  : typed_dynamics<dynamics>(parent),
-    ctx_(parent->get_ctx())
-  {}
-
+  explicit tsdata_xdr(std::shared_ptr<tsdata_v2> parent, allocator_type alloc = allocator_type());
+  explicit tsdata_xdr(std::shared_ptr<tsdata_xdr> parent, allocator_type alloc = allocator_type());
   ~tsdata_xdr() noexcept override;
 
   auto get_dictionary() const -> std::shared_ptr<const dictionary>;
   auto get_dictionary() -> std::shared_ptr<dictionary>;
 
   auto get_ctx() const
-  -> const encdec_ctx& {
+  -> encdec_ctx {
     return ctx_;
   }
 
   auto get_predecessor() const -> std::shared_ptr<const tsdata_xdr>;
   auto get_predecessor() -> std::shared_ptr<tsdata_xdr>;
   auto get() const -> std::shared_ptr<const record_array>;
+  auto ts() const noexcept -> time_point { return ts_; }
 
   auto decode(xdr::xdr_istream& in) -> void;
 

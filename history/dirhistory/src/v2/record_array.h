@@ -126,7 +126,7 @@ class monsoon_dirhistory_local_ record_array
 
   auto get_dictionary() const -> std::shared_ptr<const dictionary>;
   auto get_dictionary() -> std::shared_ptr<dictionary>;
-  auto get_ctx() const -> const encdec_ctx&;
+  auto get_ctx() const -> encdec_ctx;
 
   auto begin() const -> const_iterator;
   auto end() const -> const_iterator;

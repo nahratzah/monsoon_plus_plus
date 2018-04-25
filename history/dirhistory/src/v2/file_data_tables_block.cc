@@ -30,7 +30,7 @@ auto file_data_tables_block::get_dictionary() const
 }
 
 auto file_data_tables_block::get_ctx() const
--> const encdec_ctx& {
+-> encdec_ctx {
   return std::shared_ptr<const file_data_tables>(owner_)->get_ctx();
 }
 

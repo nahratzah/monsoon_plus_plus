@@ -7,27 +7,11 @@
 #include <monsoon/io/stream.h>
 #include <monsoon/io/ptr_stream.h>
 #include "file_segment_ptr.h"
+#include "tsfile_header.h"
+#include <cassert>
+#include <cstdint>
 
 namespace monsoon::history::v2 {
-namespace header_flags {
-
-
-monsoon_dirhistory_local_
-constexpr std::uint32_t /* KIND: indicate if the type of file data. */
-                        KIND_MASK        = 0x0000000f,
-                        KIND_LIST        = 0x00000000,
-                        KIND_TABLES      = 0x00000001,
-                        /* Indicates segment compression algorithm. */
-                        COMPRESSION_MASK = 0x3f000000,
-                        LZO_1X1          = 0x10000000,
-                        GZIP             = 0x20000000,
-                        SNAPPY           = 0x30000000,
-                        /* Set if the file has sorted/unique timestamps. */
-                        SORTED           = 0x40000000,
-                        DISTINCT         = 0x80000000;
-
-
-} /* namespace monsoon::history::v2::header_flags */
 
 
 class monsoon_dirhistory_local_ encdec_ctx {
@@ -39,16 +23,20 @@ class monsoon_dirhistory_local_ encdec_ctx {
     SNAPPY = header_flags::SNAPPY
   };
 
-  encdec_ctx() noexcept;
-  encdec_ctx(const encdec_ctx&);
-  encdec_ctx(encdec_ctx&&) noexcept;
-  encdec_ctx& operator=(const encdec_ctx&);
-  encdec_ctx& operator=(encdec_ctx&&) noexcept;
-  encdec_ctx(std::shared_ptr<io::fd>, std::uint32_t) noexcept;
-  ~encdec_ctx() noexcept;
+  constexpr encdec_ctx() noexcept = default;
 
-  const std::shared_ptr<io::fd>& fd() const noexcept { return fd_; }
-  std::uint32_t flags() const noexcept { return hdr_flags_; }
+  constexpr encdec_ctx(io::fd& fd, std::uint32_t hdr_flags)
+  : fd_(&fd),
+    hdr_flags_(hdr_flags)
+  {}
+
+  auto fd() const noexcept -> io::fd& {
+    assert(fd_ != nullptr);
+    return *fd_;
+  }
+
+  auto flags() const noexcept -> std::uint32_t { return hdr_flags_; }
+
   auto new_reader(const file_segment_ptr&, bool = true) const
       -> xdr::xdr_stream_reader<io::ptr_stream_reader>;
   auto decompress(io::ptr_stream_reader&&, bool) const
@@ -61,7 +49,7 @@ class monsoon_dirhistory_local_ encdec_ctx {
   }
 
  private:
-  std::shared_ptr<io::fd> fd_ = nullptr;
+  io::fd* fd_ = nullptr;
   std::uint32_t hdr_flags_ = 0;
 };
 

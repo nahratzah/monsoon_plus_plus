@@ -1,10 +1,16 @@
 #include "file_data_tables.h"
 #include "file_data_tables_block.h"
+#include "tsdata.h"
 
 namespace monsoon::history::v2 {
 
 
 file_data_tables::~file_data_tables() noexcept {}
+
+auto file_data_tables::get_ctx() const
+-> encdec_ctx {
+  return parent().get_ctx();
+}
 
 auto file_data_tables::decode(xdr::xdr_istream& in)
 -> void {

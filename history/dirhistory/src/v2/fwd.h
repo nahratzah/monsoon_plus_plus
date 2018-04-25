@@ -4,6 +4,7 @@
 namespace monsoon::history::v2 {
 
 
+class tsdata_v2;
 class dictionary;
 class metric_table;
 class group_table;
