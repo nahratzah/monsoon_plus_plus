@@ -23,6 +23,12 @@
 #include <instrumentation/group.h>
 #include <instrumentation/counter.h>
 #include <string_view>
+#include "timestamp_delta.h"
+#include "group_table.h"
+#include "metric_table.h"
+#include "tables.h"
+#include "file_data_tables_block.h"
+#include "file_data_tables.h"
 
 namespace monsoon {
 namespace history {
@@ -32,20 +38,15 @@ namespace v2 {
 using namespace std::string_view_literals;
 
 
-tsdata_v2_tables::tsdata_v2_tables(file_segment<file_data_tables>&& data,
-    const tsdata_v2::carg& constructor_arg)
-: tsdata_v2(constructor_arg),
-  data_(std::move(data))
-{}
-
 tsdata_v2_tables::~tsdata_v2_tables() noexcept {}
-
-std::shared_ptr<io::fd> tsdata_v2_tables::fd() const noexcept {
-  return data_.ctx().fd();
-}
 
 bool tsdata_v2_tables::is_writable() const noexcept {
   return false;
+}
+
+auto tsdata_v2_tables::read_() const
+-> std::shared_ptr<file_data_tables> {
+  return get_dynamics_cache<file_data_tables>(shared_from_this(), fdt());
 }
 
 std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
@@ -56,30 +57,28 @@ std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
   std::vector<time_series::tsv_set> tsdata;
   std::vector<time_series_value::metric_map> mmap;
 
-  const std::shared_ptr<const file_data_tables> file_data_tables =
-      data_.get();
-  for (const file_data_tables_block& block : *file_data_tables) {
-    const std::vector<time_point>& timestamps = std::get<0>(block);
-    const std::shared_ptr<const tables> tbl = std::get<1>(block).get();
+  const std::shared_ptr<const file_data_tables> file_data_tables = read_();
+  for (const auto& block : *file_data_tables) {
+    const timestamp_delta& timestamps = block->timestamps();
+    const std::shared_ptr<const tables> tbl = block->get();
 
     // Create time_series maps over time.
     tsdata.resize(timestamps.size());
     std::for_each(tsdata.begin(), tsdata.end(),
         std::bind(&time_series::tsv_set::clear, _1));
-    for (tables::const_reference tbl_grp : *tbl) {
-      const group_name& gname = std::get<0>(tbl_grp);
-      const std::shared_ptr<const group_table> grp_data =
-          std::get<1>(tbl_grp).get();
-      const std::vector<bool>& presence = std::get<0>(*grp_data);
+    for (const auto& tbl_grp : *tbl) {
+      const group_name& gname = tbl_grp.name();
+      const std::shared_ptr<const group_table> grp_data = tbl_grp.get();
+      const bitset& presence = grp_data->presence();
 
       // Fill mmap with metric values over time.
       mmap.resize(presence.size());
       std::for_each(mmap.begin(), mmap.end(),
           std::bind(&time_series_value::metric_map::clear, _1));
-      for (const auto& metric_entry : std::get<1>(*grp_data)) {
-        const metric_name& mname = std::get<0>(metric_entry);
+      for (const auto& metric_entry : *grp_data) {
+        const metric_name& mname = metric_entry.name();
         const std::shared_ptr<const metric_table> mtbl =
-            std::get<1>(metric_entry).get();
+            metric_entry.get();
 
         // Fill mmap with a specific metric value over time.
         for (auto iter = std::make_tuple(mtbl->cbegin(), mmap.begin());
@@ -124,28 +123,28 @@ namespace {
 
 instrumentation::timing_accumulate tsdata_v2_tables_decode_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "column_read"sv}
     });
 instrumentation::timing_accumulate tsdata_v2_tables_less_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "compare"sv}
     });
 instrumentation::timing_accumulate tsdata_v2_tables_merge_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "merge"sv}
     });
 instrumentation::timing tsdata_v2_tables_new_objpipe_timing(
     "decode",
-    monsoon::history_instrumentation,
+    monsoon::history_instrumentation(),
     {
       {"file_type", "tsdata_v2"sv},
       {"operation", "new_objpipe"sv}
@@ -172,7 +171,7 @@ auto emit_fdtblock_pipe(
     std::shared_ptr<const std::vector<time_point>> time_points_ptr,
     group_name group_name_ptr,
     metric_name metric_name_ptr,
-    std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr)
+    std::shared_ptr<const metric_table> mv_column_ptr)
 -> decltype(auto) {
   using emit_type = tsdata_v2_tables::emit_type;
 
@@ -209,7 +208,7 @@ using emit_fdtblock_pipe_t = decltype(
         std::declval<std::shared_ptr<const std::vector<time_point>>>(),
         std::declval<group_name>(),
         std::declval<metric_name>(),
-        std::declval<std::shared_ptr<const std::vector<std::optional<metric_value>>>>()));
+        std::declval<std::shared_ptr<const metric_table>>()));
 
 auto emit_fdtblock(
     std::shared_ptr<const file_data_tables_block> block,
@@ -220,24 +219,18 @@ auto emit_fdtblock(
 -> decltype(auto) {
   using emit_type = tsdata_v2_tables::emit_type;
 
-  auto time_points_ptr = std::shared_ptr<const std::vector<time_point>>(block, &std::get<0>(*block));
-  const std::shared_ptr<const tables> tbl_ptr = std::get<1>(*block).get();
+  auto time_points_ptr = std::shared_ptr<const timestamp_delta>(block, &block->timestamps());
+  const std::shared_ptr<const tables> tbl_ptr = block->get();
 
   std::vector<emit_fdtblock_pipe_t> columns;
-  for (const auto& tbl_entry : *tbl_ptr) {
-    if (!group_filter(std::get<0>(tbl_entry).get_path())
-        || !tag_filter(std::get<0>(tbl_entry).get_tags()))
-      continue; // SKIP
+  for (const auto& tbl_entry : tbl_ptr->filter(group_filter, tag_filter)) {
+    auto group_name_ptr = tbl_entry.name();
+    auto group_table_ptr = tbl_entry.get();
 
-    auto group_name_ptr = std::get<0>(tbl_entry);
-    auto group_table_ptr = std::get<1>(tbl_entry).get();
+    for (const auto& mv_map_entry : group_table_ptr->filter(metric_filter)) {
+      const auto& metric_name_ptr = mv_map_entry.name();
 
-    for (const auto& mv_map_entry : std::get<1>(*group_table_ptr)) {
-      if (!metric_filter(mv_map_entry.first))
-        continue; // SKIP
-
-      auto metric_name_ptr = mv_map_entry.first;
-      std::shared_ptr<const std::vector<std::optional<metric_value>>> mv_column_ptr = mv_map_entry.second.get();
+      std::shared_ptr<const metric_table> mv_column_ptr = mv_map_entry.get();
 
       columns.emplace_back(
           emit_fdtblock_pipe(
@@ -274,17 +267,16 @@ auto tsdata_v2_tables::emit(
     const path_matcher& metric_filter)
     const
 -> objpipe::reader<emit_type> {
-  static instrumentation::group&& metric_grp = instrumentation::make_group("tsdata_v2_tables", monsoon::history_instrumentation);
+  static instrumentation::group&& metric_grp = instrumentation::make_group("tsdata_v2_tables", monsoon::history_instrumentation());
 
   instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_new_objpipe_timing };
-  const std::shared_ptr<const file_data_tables> file_data_tables =
-      data_.get();
+  const std::shared_ptr<const file_data_tables> file_data_tables = read_();
 
   auto block_chain = objpipe::new_callback<emit_fdtblock_t>(
       [file_data_tables, tr_begin, tr_end, group_filter, tag_filter, metric_filter](auto cb) {
-        for (const file_data_tables_block& block : *file_data_tables) {
+        for (const auto& block : *file_data_tables) {
           cb(emit_fdtblock(
-                  std::shared_ptr<const file_data_tables_block>(file_data_tables, &block),
+                  block,
                   tr_begin, tr_end, group_filter, tag_filter, metric_filter));
         }
       });
@@ -317,18 +309,16 @@ auto tsdata_v2_tables::emit_time(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end)
     const
 -> objpipe::reader<time_point> {
-  using iterator =
-      typename std::tuple_element_t<0, file_data_tables_block>::const_iterator;
+  using iterator = timestamp_delta::const_iterator;
 
-  const std::shared_ptr<const file_data_tables> file_data_tables =
-      data_.get();
+  const std::shared_ptr<const file_data_tables> file_data_tables = read_();
 
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
     return objpipe::new_callback<time_point>(
         [file_data_tables, tr_begin, tr_end](auto cb) {
-          for (const file_data_tables_block& block : *file_data_tables) {
-            iterator b = std::get<0>(block).begin();
-            iterator e = std::get<0>(block).end();
+          for (const auto& block : *file_data_tables) {
+            iterator b = block->timestamps().begin();
+            iterator e = block->timestamps().end();
             if (tr_begin.has_value())
               b = std::lower_bound(b, e, tr_begin.value());
             if (tr_end.has_value())
@@ -339,12 +329,11 @@ auto tsdata_v2_tables::emit_time(
         });
   } else {
     auto callback_factory =
-        [&](const file_data_tables_block& block) {
-          auto block_ptr = std::shared_ptr<const file_data_tables_block>(file_data_tables, &block);
+        [&](std::shared_ptr<const file_data_tables_block> block_ptr) {
           return objpipe::new_callback<time_point>(
               [block_ptr, tr_begin, tr_end](auto cb) {
-                iterator b = std::get<0>(*block_ptr).begin();
-                iterator e = std::get<0>(*block_ptr).end();
+                iterator b = block_ptr->timestamps().begin();
+                iterator e = block_ptr->timestamps().end();
                 if (tr_begin.has_value())
                   b = std::lower_bound(b, e, tr_begin.value());
                 if (tr_end.has_value())
@@ -353,10 +342,10 @@ auto tsdata_v2_tables::emit_time(
                 std::for_each(b, e, cb);
               });
         };
-    using callback_factory_type = std::decay_t<decltype(callback_factory(std::declval<const file_data_tables_block&>()))>;
+    using callback_factory_type = std::decay_t<decltype(callback_factory(std::declval<std::shared_ptr<const file_data_tables_block>>()))>;
 
     std::vector<callback_factory_type> parallel;
-    for (const file_data_tables_block& block : *file_data_tables)
+    for (const auto& block : *file_data_tables)
       parallel.emplace_back(callback_factory(block));
 
     if (is_distinct()) { // Merge only.

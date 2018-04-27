@@ -14,16 +14,25 @@
 #include <monsoon/metric_value.h>
 #include <monsoon/tags.h>
 #include <monsoon/xdr/xdr.h>
+#include "../dynamics.h"
+#include "cache.h"
 
 namespace monsoon::history::v2 {
 
 
 class monsoon_dirhistory_local_ strval_dictionary {
  private:
-  using inverse_map = std::unordered_map<std::string_view, std::uint32_t>;
+  using inverse_map = std::unordered_map<
+      std::string_view,
+      std::uint32_t,
+      std::hash<std::string_view>,
+      std::equal_to<std::string_view>,
+      cache_allocator<std::pair<const std::string_view, std::uint32_t>>>;
 
  public:
-  strval_dictionary();
+  using allocator_type = cache_allocator<std::string_view>;
+
+  strval_dictionary(allocator_type alloc = allocator_type());
   strval_dictionary(const strval_dictionary& y);
   strval_dictionary(strval_dictionary&& y);
   strval_dictionary& operator=(const strval_dictionary& y);
@@ -42,17 +51,29 @@ class monsoon_dirhistory_local_ strval_dictionary {
   auto encode_update(xdr::xdr_ostream& out) -> void;
   auto decode_update(xdr::xdr_istream& in) -> void;
 
+  auto reset() -> void {
+    values_.clear();
+    inverse_.reset();
+    update_start_ = 0;
+  }
+
  private:
   auto make_inverse_() const -> inverse_map;
 
-  std::vector<std::string> values_;
+  std::vector<
+      std::basic_string<char, std::char_traits<char>, cache_allocator<char>>,
+      cache_allocator<std::basic_string<char, std::char_traits<char>, cache_allocator<char>>>
+      > values_;
   memoid<inverse_map> inverse_;
   std::uint32_t update_start_ = 0;
 };
 
 class monsoon_dirhistory_local_ path_dictionary {
+ public:
+  using allocator_type = cache_allocator<std::uint32_t>;
+
  private:
-  using path = std::vector<std::uint32_t>;
+  using path = std::vector<std::uint32_t, allocator_type>;
 
   struct hasher_ {
     auto operator()(const path& p) const noexcept -> std::size_t {
@@ -67,7 +88,7 @@ class monsoon_dirhistory_local_ path_dictionary {
     std::hash<std::uint32_t> pelem_hash_fn_;
   };
 
-  using inverse_map = std::unordered_map<path, std::uint32_t, hasher_>;
+  using inverse_map = std::unordered_map<path, std::uint32_t, hasher_, std::equal_to<path>, cache_allocator<std::pair<const path, std::uint32_t>>>;
 
  public:
   class proxy {
@@ -92,7 +113,7 @@ class monsoon_dirhistory_local_ path_dictionary {
     std::uint32_t ref_;
   };
 
-  path_dictionary(strval_dictionary& str_tbl);
+  path_dictionary(strval_dictionary& str_tbl, allocator_type alloc = allocator_type());
   path_dictionary(const path_dictionary&) = delete;
   path_dictionary(const path_dictionary& y, strval_dictionary& str_tbl);
   path_dictionary(path_dictionary&& y, strval_dictionary& str_tbl);
@@ -112,6 +133,12 @@ class monsoon_dirhistory_local_ path_dictionary {
   auto encode_update(xdr::xdr_ostream& out) -> void;
   auto decode_update(xdr::xdr_istream& in) -> void;
 
+  auto reset() -> void {
+    values_.clear();
+    inverse_.reset();
+    update_start_ = 0;
+  }
+
  private:
   auto make_inverse_() const -> inverse_map;
 
@@ -122,8 +149,11 @@ class monsoon_dirhistory_local_ path_dictionary {
 };
 
 class monsoon_dirhistory_local_ tag_dictionary {
+ public:
+  using allocator_type = cache_allocator<std::pair<const std::uint32_t, metric_value>>;
+
  private:
-  using tag_data = std::unordered_map<std::uint32_t, metric_value>;
+  using tag_data = std::unordered_map<std::uint32_t, metric_value, std::hash<std::uint32_t>, std::equal_to<std::uint32_t>, cache_allocator<std::pair<const std::uint32_t, metric_value>>>;
 
   struct hasher_ {
     auto operator()(const tag_data& d) const noexcept -> std::size_t {
@@ -139,7 +169,7 @@ class monsoon_dirhistory_local_ tag_dictionary {
     std::hash<metric_value> elem_mapped_hash_fn_;
   };
 
-  using inverse_map = std::unordered_map<tag_data, std::uint32_t, hasher_>;
+  using inverse_map = std::unordered_map<tag_data, std::uint32_t, hasher_, std::equal_to<tag_data>, cache_allocator<std::pair<const tag_data, std::uint32_t>>>;
 
   auto make_transform_fn_() const {
     return [this](const tag_data::value_type& elem) {
@@ -150,7 +180,7 @@ class monsoon_dirhistory_local_ tag_dictionary {
   }
 
  public:
-  tag_dictionary(strval_dictionary& str_tbl);
+  tag_dictionary(strval_dictionary& str_tbl, allocator_type alloc = allocator_type());
   tag_dictionary(const tag_dictionary&) = delete;
   tag_dictionary(const tag_dictionary& y, strval_dictionary& str_tbl);
   tag_dictionary(tag_dictionary&& y, strval_dictionary& str_tbl);
@@ -170,6 +200,12 @@ class monsoon_dirhistory_local_ tag_dictionary {
   auto encode_update(xdr::xdr_ostream& out) -> void;
   auto decode_update(xdr::xdr_istream& in) -> void;
 
+  auto reset() -> void {
+    values_.clear();
+    inverse_.reset();
+    update_start_ = 0;
+  }
+
  private:
   auto make_inverse_() const -> inverse_map;
 
@@ -179,27 +215,37 @@ class monsoon_dirhistory_local_ tag_dictionary {
   std::uint32_t update_start_ = 0;
 };
 
-class monsoon_dirhistory_local_ dictionary {
+class monsoon_dirhistory_local_ dictionary
+: public dynamics
+{
  public:
-  dictionary()
-  : strval_(),
-    paths_(this->strval_),
-    tags_(this->strval_)
+  using allocator_type = strval_dictionary::allocator_type;
+
+  static constexpr bool is_compressed = true;
+
+  explicit dictionary(allocator_type alloc = allocator_type())
+  : dynamics(),
+    strval_(alloc),
+    paths_(this->strval_, alloc),
+    tags_(this->strval_, alloc)
   {}
 
   dictionary(const dictionary& y)
-  : strval_(y.strval_),
+  : dynamics(y),
+    strval_(y.strval_),
     paths_(y.paths_, this->strval_),
     tags_(y.tags_, this->strval_)
   {}
 
   dictionary(dictionary&& y)
-  : strval_(std::move(y.strval_)),
+  : dynamics(std::move(y)),
+    strval_(std::move(y.strval_)),
     paths_(std::move(y.paths_), this->strval_),
     tags_(std::move(y.tags_), this->strval_)
   {}
 
   dictionary& operator=(const dictionary& y) {
+    this->dynamics::operator=(y);
     strval_ = y.strval_;
     paths_ = y.paths_;
     tags_ = y.tags_;
@@ -207,11 +253,14 @@ class monsoon_dirhistory_local_ dictionary {
   }
 
   dictionary& operator=(dictionary&& y) {
+    this->dynamics::operator=(std::move(y));
     strval_ = std::move(y.strval_);
     paths_ = std::move(y.paths_);
     tags_ = std::move(y.tags_);
     return *this;
   }
+
+  ~dictionary() noexcept override;
 
   auto update_pending() const
   noexcept
@@ -274,6 +323,13 @@ class monsoon_dirhistory_local_ dictionary {
     strval_.decode_update(in);
     paths_.decode_update(in);
     tags_.decode_update(in);
+  }
+
+  auto reset()
+  -> void {
+    strval_.reset();
+    paths_.reset();
+    tags_.reset();
   }
 
  private:

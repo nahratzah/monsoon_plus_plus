@@ -3,6 +3,10 @@
 
 #include "file_segment_ptr.h"
 #include "dictionary.h"
+#include "xdr_primitives.h"
+#include "fwd.h"
+#include "encdec_ctx.h"
+#include "bitset.h"
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -28,61 +32,7 @@
 namespace monsoon {
 namespace history {
 namespace v2 {
-namespace header_flags {
 
-
-monsoon_dirhistory_local_
-constexpr std::uint32_t /* KIND: indicate if the type of file data. */
-                        KIND_MASK        = 0x0000000f,
-                        KIND_LIST        = 0x00000000,
-                        KIND_TABLES      = 0x00000001,
-                        /* Indicates segment compression algorithm. */
-                        COMPRESSION_MASK = 0x3f000000,
-                        LZO_1X1          = 0x10000000,
-                        GZIP             = 0x20000000,
-                        SNAPPY           = 0x30000000,
-                        /* Set if the file has sorted/unique timestamps. */
-                        SORTED           = 0x40000000,
-                        DISTINCT         = 0x80000000;
-
-
-} /* namespace monsoon::history::v2::header_flags */
-
-
-class monsoon_dirhistory_local_ encdec_ctx {
- public:
-  enum class compression_type : std::uint32_t {
-    NONE = 0,
-    LZO_1X1 = header_flags::LZO_1X1,
-    GZIP = header_flags::GZIP,
-    SNAPPY = header_flags::SNAPPY
-  };
-
-  encdec_ctx() noexcept;
-  encdec_ctx(const encdec_ctx&);
-  encdec_ctx(encdec_ctx&&) noexcept;
-  encdec_ctx& operator=(const encdec_ctx&);
-  encdec_ctx& operator=(encdec_ctx&&) noexcept;
-  encdec_ctx(std::shared_ptr<io::fd>, std::uint32_t) noexcept;
-  ~encdec_ctx() noexcept;
-
-  const std::shared_ptr<io::fd>& fd() const noexcept { return fd_; }
-  std::uint32_t flags() const noexcept { return hdr_flags_; }
-  auto new_reader(const file_segment_ptr&, bool = true) const
-      -> xdr::xdr_stream_reader<io::ptr_stream_reader>;
-  auto decompress(io::ptr_stream_reader&&, bool) const
-      -> std::unique_ptr<io::stream_reader>;
-  auto compress(io::ptr_stream_writer&&) const
-      -> std::unique_ptr<io::stream_writer>;
-
-  compression_type compression() const noexcept {
-    return compression_type(hdr_flags_ & header_flags::COMPRESSION_MASK);
-  }
-
- private:
-  std::shared_ptr<io::fd> fd_ = nullptr;
-  std::uint32_t hdr_flags_ = 0;
-};
 
 class monsoon_dirhistory_local_ encdec_writer {
  public:
@@ -144,7 +94,7 @@ class monsoon_dirhistory_local_ encdec_writer::xdr_writer
  * The CRC32 is calculated over the data and the padding bytes.
  */
 template<typename T>
-class monsoon_dirhistory_local_ file_segment {
+class monsoon_dirhistory_local_ [[deprecated]] file_segment {
  public:
   using offset_type = file_segment_ptr::offset_type;
   using size_type = file_segment_ptr::size_type;
@@ -172,7 +122,7 @@ class monsoon_dirhistory_local_ file_segment {
 };
 
 /** The TSData structure of the 'list' implementation. */
-class monsoon_dirhistory_local_ tsdata_list
+class monsoon_dirhistory_local_ [[deprecated]] tsdata_list
 : public std::enable_shared_from_this<tsdata_list>
 {
  public:
@@ -209,139 +159,37 @@ class monsoon_dirhistory_local_ tsdata_list
   const encdec_ctx ctx_;
 };
 
-using metric_table = std::vector<std::optional<metric_value>>;
-using group_table = std::tuple<std::vector<bool>, std::unordered_map<metric_name, file_segment<metric_table>>>;
-using tables = std::unordered_map<group_name, file_segment<group_table>>;
-using file_data_tables_block = std::tuple<std::vector<time_point>, file_segment<tables>>;
-using file_data_tables = std::vector<file_data_tables_block>;
-
-class monsoon_dirhistory_local_ tsfile_header {
- public:
-  static constexpr std::size_t XDR_SIZE = 16 + 4 + 4 + 8 + 16;
-
-  using kind_variant =
-      std::variant<file_segment<tsdata_list>, file_segment<file_data_tables>>;
-
-  tsfile_header(xdr::xdr_istream&, std::shared_ptr<io::fd>);
-  ~tsfile_header() noexcept;
-
-  const kind_variant& fdt() const & {
-    return fdt_;
-  }
-
-  kind_variant& fdt() & {
-    return fdt_;
-  }
-
-  kind_variant&& fdt() && {
-    return std::move(fdt_);
-  }
-
-  const time_point& first() const { return first_; }
-  const time_point& last() const { return last_; }
-  const std::uint32_t& flags() const { return flags_; }
-  const std::uint64_t& file_size() const { return file_size_; }
-
- private:
-  time_point first_, last_; // 16 bytes (8 each)
-  std::uint32_t flags_; // 4 bytes
-  std::uint32_t reserved_; // 4 bytes
-  std::uint64_t file_size_; // 8 bytes
-  kind_variant fdt_; // 16 bytes (underlying file pointer)
-};
 
 
-monsoon_dirhistory_local_
-time_point decode_timestamp(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_timestamp(xdr::xdr_ostream&, time_point);
-
-monsoon_dirhistory_local_
-std::vector<time_point> decode_timestamp_delta(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_timestamp_delta(xdr::xdr_ostream&, std::vector<time_point>&&);
-
-monsoon_dirhistory_local_
-std::vector<bool> decode_bitset(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_bitset(xdr::xdr_ostream&, const std::vector<bool>&);
-
-monsoon_dirhistory_local_
-histogram decode_histogram(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_histogram(xdr::xdr_ostream&, const histogram&);
-
-monsoon_dirhistory_local_
-metric_value decode_metric_value(xdr::xdr_istream&,
-    const strval_dictionary&);
-monsoon_dirhistory_local_
-void encode_metric_value(xdr::xdr_ostream&,
-    const metric_value& value, strval_dictionary&);
-
-monsoon_dirhistory_local_
-file_segment_ptr decode_file_segment(xdr::xdr_istream&);
-monsoon_dirhistory_local_
-void encode_file_segment(xdr::xdr_ostream&, const file_segment_ptr&);
-
+[[deprecated]]
 monsoon_dirhistory_local_
 auto decode_record_metrics(xdr::xdr_istream&, const dictionary_delta&)
   -> std::shared_ptr<time_series_value::metric_map>;
+[[deprecated]]
 monsoon_dirhistory_local_
 file_segment_ptr encode_record_metrics(encdec_writer&,
     const time_series_value::metric_map&,
     dictionary_delta&);
 
+[[deprecated]]
 monsoon_dirhistory_local_
 auto decode_record_array(xdr::xdr_istream&, const encdec_ctx&,
     const dictionary_delta&)
   -> std::shared_ptr<tsdata_list::record_array>;
+[[deprecated]]
 monsoon_dirhistory_local_
 file_segment_ptr encode_record_array(encdec_writer&,
     const time_series::tsv_set&, dictionary_delta&);
 
+[[deprecated]]
 monsoon_dirhistory_local_
 auto decode_tsdata(xdr::xdr_istream&, const encdec_ctx&)
   -> std::shared_ptr<tsdata_list>;
+[[deprecated]]
 monsoon_dirhistory_local_
 auto encode_tsdata(encdec_writer&, const time_series&, dictionary_delta,
     std::optional<file_segment_ptr>)
   -> file_segment_ptr;
-
-monsoon_dirhistory_local_
-auto decode_file_data_tables_block(xdr::xdr_istream&, const encdec_ctx&)
-  -> file_data_tables_block;
-
-monsoon_dirhistory_local_
-auto decode_file_data_tables(xdr::xdr_istream&, const encdec_ctx&)
-  -> std::shared_ptr<file_data_tables>;
-
-monsoon_dirhistory_local_
-auto decode_tables(xdr::xdr_istream&, const encdec_ctx&,
-    const std::shared_ptr<const dictionary_delta>&)
-  -> std::shared_ptr<tables>;
-monsoon_dirhistory_local_
-void encode_tables(xdr::xdr_ostream&,
-    const std::unordered_map<group_name, file_segment_ptr>&,
-    dictionary_delta&);
-
-monsoon_dirhistory_local_
-auto decode_group_table(xdr::xdr_istream&,
-    const encdec_ctx&, const std::shared_ptr<const dictionary_delta>&)
-  -> std::shared_ptr<group_table>;
-monsoon_dirhistory_local_
-void encode_group_table(xdr::xdr_ostream&,
-    const std::vector<bool>&,
-    const std::vector<std::pair<metric_name, file_segment_ptr>>&,
-    dictionary_delta&);
-
-monsoon_dirhistory_local_
-auto decode_metric_table(xdr::xdr_istream&,
-    const std::shared_ptr<const strval_dictionary>&)
-  -> std::shared_ptr<metric_table>;
-monsoon_dirhistory_local_
-void write_metric_table(xdr::xdr_ostream&,
-    const std::vector<std::optional<metric_value>>&,
-    strval_dictionary&);
 
 
 }}} /* namespace monsoon::history::v2 */

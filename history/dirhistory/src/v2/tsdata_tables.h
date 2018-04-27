@@ -5,6 +5,9 @@
 #include "encdec.h"
 #include "tsdata.h"
 #include "../tsdata_mime.h"
+#include "tsfile_header.h"
+#include <monsoon/io/fd.h>
+#include <memory>
 
 namespace monsoon {
 namespace history {
@@ -12,13 +15,16 @@ namespace v2 {
 
 
 class monsoon_dirhistory_local_ tsdata_v2_tables
-: public tsdata_v2
+: public tsdata_v2,
+  public std::enable_shared_from_this<tsdata_v2_tables>
 {
  public:
-  tsdata_v2_tables(file_segment<file_data_tables>&&, const tsdata_v2::carg&);
+  tsdata_v2_tables(io::fd&& fd, const tsfile_mimeheader& mime, const tsfile_header& hdr)
+  : tsdata_v2(std::move(fd), mime, hdr)
+  {}
+
   ~tsdata_v2_tables() noexcept override;
 
-  std::shared_ptr<io::fd> fd() const noexcept override;
   bool is_writable() const noexcept override;
   void push_back(const time_series&) override;
 
@@ -35,9 +41,9 @@ class monsoon_dirhistory_local_ tsdata_v2_tables
   -> objpipe::reader<time_point> override;
 
  private:
-  std::vector<time_series> read_all_raw_() const override;
+  auto read_() const -> std::shared_ptr<file_data_tables>;
 
-  file_segment<file_data_tables> data_;
+  std::vector<time_series> read_all_raw_() const override;
 };
 
 

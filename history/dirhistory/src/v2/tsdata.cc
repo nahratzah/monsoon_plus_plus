@@ -21,43 +21,20 @@ namespace history {
 namespace v2 {
 
 
-constexpr std::uint16_t tsdata_v2::MAJOR;
-constexpr std::uint16_t tsdata_v2::MAX_MINOR;
+std::shared_ptr<tsdata_v2> tsdata_v2::open(io::fd&& fd) {
+  xdr::xdr_stream_reader<raw_file_segment_reader> xdr = raw_file_segment_reader(fd, 0, tsfile_mimeheader::XDR_ENCODED_LEN + tsfile_header::XDR_SIZE);
+  tsfile_mimeheader mime(xdr);
+  tsfile_header hdr;
+  hdr.decode(xdr);
+  xdr.close();
 
-
-struct monsoon_dirhistory_local_ tsdata_v2::carg {
-  carg(const tsfile_mimeheader& mime, const tsfile_header& hdr)
-  : mime(mime),
-    hdr(hdr)
-  {}
-
-  const tsfile_mimeheader& mime;
-  const tsfile_header& hdr;
-};
-
-
-std::shared_ptr<tsdata_v2> tsdata_v2::open(io::fd&& fd_) {
-  auto fd = std::make_shared<io::fd>(std::move(fd_));
-
-  try {
-    xdr::xdr_stream_reader<raw_file_segment_reader> xdr = raw_file_segment_reader(*fd, 0, tsfile_mimeheader::XDR_ENCODED_LEN + tsfile_header::XDR_SIZE);
-    auto mime = tsfile_mimeheader(xdr);
-    auto hdr = tsfile_header(xdr, fd);
-    const carg constructor_arg = carg(mime, hdr);
-    xdr.close();
-
-    return visit(
-        overload(
-            [&constructor_arg](file_segment<tsdata_list>&& data) -> std::shared_ptr<tsdata_v2> {
-              return std::make_shared<tsdata_v2_list>(std::move(data), constructor_arg);
-            },
-            [&constructor_arg](file_segment<file_data_tables>&& data) -> std::shared_ptr<tsdata_v2> {
-              return std::make_shared<tsdata_v2_tables>(std::move(data), constructor_arg);
-            }),
-        std::move(hdr).fdt());
-  } catch (...) {
-    fd_ = std::move(*fd);
-    throw;
+  switch (hdr.kind()) {
+    default:
+      throw xdr::xdr_exception("file kind not recognized");
+    case header_flags::KIND_LIST:
+      return std::make_shared<tsdata_v2_list>(std::move(fd), std::move(mime), std::move(hdr));
+    case header_flags::KIND_TABLES:
+      return std::make_shared<tsdata_v2_tables>(std::move(fd), std::move(mime), std::move(hdr));
   }
 }
 
@@ -82,7 +59,7 @@ std::shared_ptr<tsdata_v2> tsdata_v2::new_list_file(io::fd&& fd,
   xdr.put_uint32(fl); // flags
   xdr.put_uint32(0u); // reserved
   xdr.put_uint64(CHECKSUMMED_HDR_LEN); // file size
-  encode_file_segment(xdr, file_segment_ptr(0u, 0u)); // nullptr == empty
+  file_segment_ptr().encode(xdr); // nullptr == empty
   xdr.close();
 
   assert(data_len == HDR_LEN);
@@ -90,14 +67,6 @@ std::shared_ptr<tsdata_v2> tsdata_v2::new_list_file(io::fd&& fd,
 
   return open(std::move(fd));
 }
-
-tsdata_v2::tsdata_v2(const carg& arg)
-: first_(arg.hdr.first()),
-  last_(arg.hdr.last()),
-  flags_(arg.hdr.flags()),
-  file_size_(arg.hdr.file_size()),
-  minor_version_(arg.mime.minor_version)
-{}
 
 tsdata_v2::~tsdata_v2() noexcept {}
 
@@ -163,17 +132,19 @@ std::vector<time_series> tsdata_v2::read_all() const {
 }
 
 std::tuple<std::uint16_t, std::uint16_t> tsdata_v2::version() const noexcept {
-  return std::make_tuple(MAJOR, minor_version_);
+  return std::make_tuple(mime_.major_version, mime_.minor_version);
 }
 
 auto tsdata_v2::time() const -> std::tuple<time_point, time_point> {
-  return std::make_tuple(first_, last_);
+  return std::make_tuple(hdr_.first, hdr_.last);
 }
 
 auto tsdata_v2::get_path() const -> std::optional<std::string> {
-  std::shared_ptr<io::fd> fd_ptr = fd();
-  if (fd_ptr == nullptr) return {};
-  return fd_ptr->get_path();
+  return fd_.get_path();
+}
+
+auto tsdata_v2::get_ctx() const -> encdec_ctx {
+  return encdec_ctx(fd(), hdr_.flags);
 }
 
 void tsdata_v2::update_hdr(time_point lo, time_point hi,
@@ -184,41 +155,36 @@ void tsdata_v2::update_hdr(time_point lo, time_point hi,
       HDR_LEN + 4u;
   assert(lo <= hi);
 
-  const auto fd_ptr = fd();
-  if (lo < last_)
-    flags_ &= ~header_flags::SORTED;
-  if (lo <= last_)
-    flags_ &= ~header_flags::DISTINCT;
+  if (lo < hdr_.last)
+    hdr_.flags &= ~header_flags::SORTED;
+  if (lo <= hdr_.last)
+    hdr_.flags &= ~header_flags::DISTINCT;
 
-  if (lo < first_) first_ = lo;
-  if (hi > last_) last_ = hi;
+  mime_.major_version = MAJOR;
+  mime_.minor_version = MAX_MINOR;
+  if (lo < hdr_.first) hdr_.first = lo;
+  if (hi > hdr_.last) hdr_.last = hi;
+  hdr_.file_size = new_file_len;
+  hdr_.fdt = fsp;
 
   io::fd::size_type data_len, storage_len;
   auto xdr = xdr::xdr_stream_writer<raw_file_segment_writer>(
-      raw_file_segment_writer(*fd_ptr, 0, &data_len, &storage_len));
-  tsfile_mimeheader(MAJOR, MAX_MINOR).write(xdr);
-  encode_timestamp(xdr, first_); // first
-  encode_timestamp(xdr, last_); // last
-  xdr.put_uint32(flags_); // flags
-  xdr.put_uint32(reserved_); // reserved
-  xdr.put_uint64(new_file_len); // file size
-  encode_file_segment(xdr, fsp); // nullptr == empty
+      raw_file_segment_writer(fd_, 0, &data_len, &storage_len));
+  mime_.write(xdr);
+  hdr_.encode(xdr);
   xdr.close();
-  fd_ptr->flush();
+  fd_.flush();
 
   assert(data_len == HDR_LEN);
   assert(storage_len == CHECKSUMMED_HDR_LEN);
-
-  file_size_ = new_file_len;
-  minor_version_ = MAX_MINOR;
 }
 
 bool tsdata_v2::is_distinct() const noexcept {
-  return (flags_ & header_flags::DISTINCT) != 0u;
+  return (hdr_.flags & header_flags::DISTINCT) != 0u;
 }
 
 bool tsdata_v2::is_sorted() const noexcept {
-  return (flags_ & header_flags::SORTED) != 0u;
+  return (hdr_.flags & header_flags::SORTED) != 0u;
 }
 
 

@@ -55,7 +55,7 @@ auto collect_self(const group& root_group, const time_point& tp)
   std::vector<collector::collection_element> elements;
   {
     instr_visitor v{root_group, elements};
-    monsoon_instrumentation.visit(v);
+    root_group.visit(v);
   }
 
   return { tp, std::move(elements), true };
@@ -152,7 +152,7 @@ auto instr_visitor::make_metric_name_(const basic_metric& m) const
 
 
 self::self() noexcept
-: self(monsoon_instrumentation)
+: self(monsoon_instrumentation())
 {}
 
 self::self(const instrumentation::group& grp) noexcept

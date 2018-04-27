@@ -7,6 +7,10 @@
 #include <monsoon/time_point.h>
 #include <memory>
 #include "file_segment_ptr.h"
+#include "../tsdata_mime.h"
+#include "../dynamics.h"
+#include "tsfile_header.h"
+#include "encdec_ctx.h"
 
 namespace monsoon {
 namespace history {
@@ -14,28 +18,34 @@ namespace v2 {
 
 
 class monsoon_dirhistory_local_ tsdata_v2
-: public tsdata
+: public tsdata,
+  public dynamics
 {
  public:
-  struct carg;
-
   static constexpr std::uint16_t MAJOR = 2u;
   static constexpr std::uint16_t MAX_MINOR = 0u;
 
-  static std::shared_ptr<tsdata_v2> open(io::fd&&);
-  static std::shared_ptr<tsdata_v2> new_list_file(io::fd&&, time_point tp);
+  static std::shared_ptr<tsdata_v2> open(io::fd&& fd);
+  static std::shared_ptr<tsdata_v2> new_list_file(io::fd&& fd, time_point tp);
 
-  tsdata_v2(const carg&);
+  tsdata_v2(io::fd&& fd, const tsfile_mimeheader& mime, const tsfile_header& hdr)
+  : fd_(std::move(fd)),
+    mime_(mime),
+    hdr_(hdr)
+  {}
+
   ~tsdata_v2() noexcept override;
 
-  virtual std::shared_ptr<io::fd> fd() const noexcept = 0;
+  io::fd& fd() const noexcept { return fd_; }
+  const file_segment_ptr fdt() const noexcept { return hdr_.fdt; }
   std::vector<time_series> read_all() const override final;
   std::tuple<std::uint16_t, std::uint16_t> version() const noexcept override;
   auto time() const -> std::tuple<time_point, time_point> override;
   std::optional<std::string> get_path() const override;
+  auto get_ctx() const -> encdec_ctx;
 
  protected:
-  inline auto hdr_file_size() const noexcept { return file_size_; }
+  inline auto hdr_file_size() const noexcept { return hdr_.file_size; }
   void update_hdr(time_point, time_point, const file_segment_ptr&,
       io::fd::size_type);
   bool is_distinct() const noexcept;
@@ -44,10 +54,9 @@ class monsoon_dirhistory_local_ tsdata_v2
  private:
   virtual std::vector<time_series> read_all_raw_() const = 0;
 
-  time_point first_, last_;
-  std::uint32_t flags_, reserved_;
-  std::uint64_t file_size_;
-  std::uint16_t minor_version_;
+  mutable io::fd fd_;
+  tsfile_mimeheader mime_;
+  tsfile_header hdr_;
 };
 
 

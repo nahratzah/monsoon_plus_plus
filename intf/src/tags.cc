@@ -14,7 +14,7 @@ namespace monsoon {
 
 tags::cache_type tags::cache_() {
   static cache_type impl = tags::cache_type::builder()
-      .stats("tags", cache_instrumentation)
+      .stats("tags", cache_instrumentation())
       .build(cache_create_());
   return impl;
 }

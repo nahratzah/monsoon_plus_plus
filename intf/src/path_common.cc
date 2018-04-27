@@ -13,7 +13,7 @@ namespace monsoon {
 
 path_common::cache_type path_common::cache_() {
   static cache_type impl = path_common::cache_type::builder()
-      .stats("path_names", cache_instrumentation)
+      .stats("path_names", cache_instrumentation())
       .build(cache_create_());
   return impl;
 }
