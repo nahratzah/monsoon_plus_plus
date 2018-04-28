@@ -13,6 +13,9 @@ using namespace monsoon;
 int main(int argc, char*argv[]) {
   std::function<void(time_point)> task;
 
+  // Grab something that will trip metric creation, so there's actually something to measure. :P
+  monsoon::metric_value("monsoon");
+
   {
     configuration cfg;
     cfg.add(std::make_unique<collectors::self>());
