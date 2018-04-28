@@ -22,6 +22,9 @@ class configuration {
   const std::vector<std::unique_ptr<collector>>& collectors() const noexcept;
   const std::vector<std::unique_ptr<rule>>& rules() const noexcept;
 
+  configuration& add(std::unique_ptr<collector>&& c);
+  configuration& add(std::unique_ptr<rule>&& r);
+
  private:
   std::vector<std::unique_ptr<collector>> collectors_;
   std::vector<std::unique_ptr<rule>> rules_;

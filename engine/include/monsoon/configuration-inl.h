@@ -28,6 +28,22 @@ inline auto configuration::rules() const noexcept
   return rules_;
 }
 
+inline configuration& configuration::add(std::unique_ptr<collector>&& c) {
+  if (c == nullptr)
+    throw std::invalid_argument("nullptr collector");
+
+  collectors_.push_back(std::move(c));
+  return *this;
+}
+
+inline configuration& configuration::add(std::unique_ptr<rule>&& r) {
+  if (r == nullptr)
+    throw std::invalid_argument("nullptr rule");
+
+  rules_.push_back(std::move(r));
+  return *this;
+}
+
 
 } /* namespace monsoon */
 

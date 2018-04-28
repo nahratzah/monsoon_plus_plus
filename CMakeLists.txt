@@ -86,6 +86,7 @@ if(NOT objpipe_DIR)
 endif()
 
 # Add module directories.
+add_subdirectory (bin)
 add_subdirectory (lib)
 add_subdirectory (intf)
 add_subdirectory (engine)
