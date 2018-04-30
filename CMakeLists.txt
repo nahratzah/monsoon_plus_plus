@@ -20,7 +20,7 @@ endif ()
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
   set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3")
   set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
-  set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wno-missing-noreturn -Wno-unused -Wsign-compare -Wuninitialized -Wno-unused-value")
+  set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wno-missing-noreturn -Wno-unused -Wsign-compare -Wuninitialized -Wno-unused-value -Wno-unknown-attributes")
 
   # Linux glibc is a pain without this.
   # This is the shotgun approach: enable every standard and make functions thread-safe.
@@ -35,6 +35,13 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
   set (CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /LARGEADDRESSAWARE /NXCOMPAT /INCREMENTAL:NO")
   set (CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} /LARGEADDRESSAWARE /NXCOMPAT /INCREMENTAL:NO")
 endif ()
+
+# If using ninja and clang, enable colours.
+if (UNIX AND
+    CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND
+    CMAKE_GENERATOR STREQUAL "Ninja")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcolor-diagnostics")
+endif()
 
 # Enable gprof profiling.
 option (PROFILE "Enable profiling." OFF)
@@ -73,6 +80,11 @@ endif ()
 find_package(instrumentation 0.0)
 if(NOT instrumentation_DIR)
   add_subdirectory(contrib/instrumentation)
+endif()
+
+find_package(cycle_ptr 0.3)
+if(NOT cycle_ptr_DIR)
+  add_subdirectory(contrib/cycle_ptr)
 endif()
 
 find_package(monsoon_cache 0.1)

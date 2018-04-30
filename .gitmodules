@@ -7,3 +7,6 @@
 [submodule "contrib/objpipe"]
 	path = contrib/objpipe
 	url = https://github.com/nahratzah/objpipe.git
+[submodule "contrib/cycle_ptr"]
+	path = contrib/cycle_ptr
+	url = https://github.com/nahratzah/cycle_ptr.git
