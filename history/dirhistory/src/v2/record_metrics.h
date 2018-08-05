@@ -29,7 +29,27 @@ class monsoon_dirhistory_local_ record_metrics
   using data_type = std::vector<std::pair<std::uint32_t, metric_value>, cache_allocator<std::pair<std::uint32_t, metric_value>>>;
 
  public:
-  class proxy;
+  class monsoon_dirhistory_local_ proxy {
+   public:
+    proxy(std::shared_ptr<const dictionary> dict, data_type::const_pointer item)
+    : dict_(std::move(dict)),
+      item_(item)
+    {}
+
+    auto name() const
+    -> metric_name {
+      return dict_->pdd()[item_->first];
+    }
+
+    auto get() const
+    -> const metric_value& {
+      return item_->second;
+    }
+
+   private:
+    std::shared_ptr<const dictionary> dict_;
+    data_type::const_pointer item_;
+  };
 
  private:
   class proxy_tf_fn_ {
@@ -116,29 +136,6 @@ class monsoon_dirhistory_local_ record_metrics
 
  private:
   data_type data_;
-};
-
-
-class monsoon_dirhistory_local_ record_metrics::proxy {
- public:
-  proxy(std::shared_ptr<const dictionary> dict, data_type::const_pointer item)
-  : dict_(std::move(dict)),
-    item_(item)
-  {}
-
-  auto name() const
-  -> metric_name {
-    return dict_->pdd()[item_->first];
-  }
-
-  auto get() const
-  -> const metric_value& {
-    return item_->second;
-  }
-
- private:
-  std::shared_ptr<const dictionary> dict_;
-  data_type::const_pointer item_;
 };
 
 

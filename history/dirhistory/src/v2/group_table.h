@@ -33,7 +33,68 @@ class monsoon_dirhistory_local_ group_table
   using allocator_type = data_type::allocator_type;
   using size_type = bitset::size_type;
 
-  class proxy;
+  class monsoon_dirhistory_local_ proxy {
+   public:
+    proxy(std::shared_ptr<const group_table> owner, std::shared_ptr<const dictionary> dict, data_type::const_pointer item)
+    : owner_(std::move(owner)),
+      dict_(std::move(dict)),
+      item_(item),
+      mt_([this]() { return owner_->read_(*item_); })
+    {}
+
+    proxy(const proxy& y)
+    : proxy(y.owner_, y.dict_, y.item_)
+    {}
+
+    proxy(proxy&& y)
+    : proxy(std::move(y.owner_), std::move(y.dict_), y.item_)
+    {
+      y.item_ = nullptr;
+      y.mt_.reset();
+    }
+
+    proxy& operator=(const proxy& y) {
+      owner_ = y.owner_;
+      dict_ = y.dict_;
+      item_ = y.item_;
+      mt_.reset();
+      return *this;
+    }
+
+    proxy& operator=(proxy&& y) {
+      owner_ = std::move(y.owner_);
+      dict_ = std::move(y.dict_);
+      item_ = std::move(y.item_);
+      y.mt_.reset();
+      mt_.reset();
+      return *this;
+    }
+
+    auto name() const -> metric_name {
+      return dict_->pdd()[item_->first];
+    }
+
+    auto operator*() const
+    -> const metric_table& {
+      return *get();
+    }
+
+    auto operator->() const
+    -> std::shared_ptr<const metric_table> {
+      return get();
+    }
+
+    auto get() const
+    -> std::shared_ptr<const metric_table> {
+      return mt_.get();
+    }
+
+   private:
+    std::shared_ptr<const group_table> owner_;
+    std::shared_ptr<const dictionary> dict_;
+    data_type::const_pointer item_;
+    memoid<std::shared_ptr<const metric_table>> mt_;
+  };
 
  private:
   class proxy_tf_fn_ {
@@ -151,70 +212,6 @@ class monsoon_dirhistory_local_ group_table
 
   bitset presence_;
   data_type data_;
-};
-
-
-class monsoon_dirhistory_local_ group_table::proxy {
- public:
-  proxy(std::shared_ptr<const group_table> owner, std::shared_ptr<const dictionary> dict, data_type::const_pointer item)
-  : owner_(std::move(owner)),
-    dict_(std::move(dict)),
-    item_(item),
-    mt_([this]() { return owner_->read_(*item_); })
-  {}
-
-  proxy(const proxy& y)
-  : proxy(y.owner_, y.dict_, y.item_)
-  {}
-
-  proxy(proxy&& y)
-  : proxy(std::move(y.owner_), std::move(y.dict_), y.item_)
-  {
-    y.item_ = nullptr;
-    y.mt_.reset();
-  }
-
-  proxy& operator=(const proxy& y) {
-    owner_ = y.owner_;
-    dict_ = y.dict_;
-    item_ = y.item_;
-    mt_.reset();
-    return *this;
-  }
-
-  proxy& operator=(proxy&& y) {
-    owner_ = std::move(y.owner_);
-    dict_ = std::move(y.dict_);
-    item_ = std::move(y.item_);
-    y.mt_.reset();
-    mt_.reset();
-    return *this;
-  }
-
-  auto name() const -> metric_name {
-    return dict_->pdd()[item_->first];
-  }
-
-  auto operator*() const
-  -> const metric_table& {
-    return *get();
-  }
-
-  auto operator->() const
-  -> std::shared_ptr<const metric_table> {
-    return get();
-  }
-
-  auto get() const
-  -> std::shared_ptr<const metric_table> {
-    return mt_.get();
-  }
-
- private:
-  std::shared_ptr<const group_table> owner_;
-  std::shared_ptr<const dictionary> dict_;
-  data_type::const_pointer item_;
-  memoid<std::shared_ptr<const metric_table>> mt_;
 };
 
 

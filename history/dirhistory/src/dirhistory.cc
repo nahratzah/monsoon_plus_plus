@@ -97,7 +97,7 @@ void merge(tsdata::emit_type& dst, tsdata::emit_type&& src) {
 
   auto&& src_map = std::get<1>(std::move(src));
   auto& dst_map = std::get<1>(dst);
-#if __cplusplus >= 201703
+#if __cpp_lib_node_extract >= 201703
   dst_map.merge(std::move(src_map));
 #else
   std::copy(
@@ -786,8 +786,8 @@ auto dirhistory::time() const -> std::tuple<time_point, time_point> {
       files_.front()->time(),
       [](const auto& x, const auto& y) {
         return std::make_tuple(
-            std::min(std::get<0>(x.value()), std::get<0>(y.value())),
-            std::max(std::get<1>(x.value()), std::get<1>(y.value())));
+            std::min(std::get<0>(x), std::get<0>(y)),
+            std::max(std::get<1>(x), std::get<1>(y)));
       },
       [](const auto& f) {
         return f->time();

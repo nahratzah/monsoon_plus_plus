@@ -441,7 +441,7 @@ fd fd::tmpfile(const std::string& prefix) {
   }
 
 #if __cplusplus >= 201703L // std::string::data() is modifiable
-  std::string template_name = prefix_path;
+  std::string template_name = prefix_path.native();
 #else
   const std::string ppstr = prefix_path.native();
   std::vector<char> template_name(ppstr.begin(), ppstr.end());

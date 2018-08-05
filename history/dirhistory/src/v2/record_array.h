@@ -37,7 +37,79 @@ class monsoon_dirhistory_local_ record_array
   using data_type = std::vector<elem, cache_allocator<elem>>;
 
  public:
-  class proxy;
+  class monsoon_dirhistory_local_ proxy {
+   public:
+    proxy(
+        std::shared_ptr<const record_array> owner,
+        std::shared_ptr<const dictionary> dict,
+        data_type::const_pointer item)
+    : owner_(std::move(owner)),
+      dict_(std::move(dict)),
+      item_(std::move(item)),
+      rm_([this]() { return owner_->read_(*item_); })
+    {}
+
+    proxy(const proxy& y)
+    : proxy(y.owner_, y.dict_, y.item_)
+    {}
+
+    proxy(proxy&& y)
+    : proxy(std::move(y.owner_), std::move(y.dict_), y.item_)
+    {
+      y.item_ = nullptr;
+      y.rm_.reset();
+    }
+
+    proxy& operator=(const proxy& y) {
+      owner_ = y.owner_;
+      dict_ = y.dict_;
+      item_ = y.item_;
+      rm_.reset();
+      return *this;
+    }
+
+    proxy& operator=(proxy&& y) {
+      owner_ = std::move(y.owner_);
+      dict_ = std::move(y.dict_);
+      item_ = std::move(y.item_);
+      y.rm_.reset();
+      rm_.reset();
+      return *this;
+    }
+
+    auto path() const -> simple_group {
+      return dict_->pdd()[item_->grp_ref];
+    }
+
+    auto tags() const -> monsoon::tags {
+      return dict_->tdd()[item_->tag_ref];
+    }
+
+    auto name() const -> group_name {
+      return group_name(path(), tags());
+    }
+
+    auto operator*() const
+    -> const record_metrics& {
+      return *get();
+    }
+
+    auto operator->() const
+    -> std::shared_ptr<const record_metrics> {
+      return get();
+    }
+
+    auto get() const
+    -> std::shared_ptr<const record_metrics> {
+      return rm_.get();
+    }
+
+   private:
+    std::shared_ptr<const record_array> owner_;
+    std::shared_ptr<const dictionary> dict_;
+    data_type::const_pointer item_;
+    memoid<std::shared_ptr<const record_metrics>> rm_;
+  };
 
  private:
   class proxy_tf_fn_ {
@@ -142,81 +214,6 @@ class monsoon_dirhistory_local_ record_array
   auto read_(const elem& v) const -> std::shared_ptr<record_metrics>;
 
   data_type data_;
-};
-
-
-class monsoon_dirhistory_local_ record_array::proxy {
- public:
-  proxy(
-      std::shared_ptr<const record_array> owner,
-      std::shared_ptr<const dictionary> dict,
-      data_type::const_pointer item)
-  : owner_(std::move(owner)),
-    dict_(std::move(dict)),
-    item_(std::move(item)),
-    rm_([this]() { return owner_->read_(*item_); })
-  {}
-
-  proxy(const proxy& y)
-  : proxy(y.owner_, y.dict_, y.item_)
-  {}
-
-  proxy(proxy&& y)
-  : proxy(std::move(y.owner_), std::move(y.dict_), y.item_)
-  {
-    y.item_ = nullptr;
-    y.rm_.reset();
-  }
-
-  proxy& operator=(const proxy& y) {
-    owner_ = y.owner_;
-    dict_ = y.dict_;
-    item_ = y.item_;
-    rm_.reset();
-    return *this;
-  }
-
-  proxy& operator=(proxy&& y) {
-    owner_ = std::move(y.owner_);
-    dict_ = std::move(y.dict_);
-    item_ = std::move(y.item_);
-    y.rm_.reset();
-    rm_.reset();
-    return *this;
-  }
-
-  auto path() const -> simple_group {
-    return dict_->pdd()[item_->grp_ref];
-  }
-
-  auto tags() const -> monsoon::tags {
-    return dict_->tdd()[item_->tag_ref];
-  }
-
-  auto name() const -> group_name {
-    return group_name(path(), tags());
-  }
-
-  auto operator*() const
-  -> const record_metrics& {
-    return *get();
-  }
-
-  auto operator->() const
-  -> std::shared_ptr<const record_metrics> {
-    return get();
-  }
-
-  auto get() const
-  -> std::shared_ptr<const record_metrics> {
-    return rm_.get();
-  }
-
- private:
-  std::shared_ptr<const record_array> owner_;
-  std::shared_ptr<const dictionary> dict_;
-  data_type::const_pointer item_;
-  memoid<std::shared_ptr<const record_metrics>> rm_;
 };
 
 

@@ -1866,7 +1866,7 @@ auto vector_sink::accept(expression::vector_emit_type&& emt)
                 .accept(expression::scalar_emit_type(tp, std::in_place_index<0>, std::get<1>(std::move(v))));
           },
           [this, &tp](expression::factual_vector&& v) {
-#if __cplusplus >= 201703
+#if __cpp_lib_node_extract >= 201703
             while (!v.empty()) {
               auto nh = v.extract(v.begin());
               [[maybe_unused]] const bool accepted = data_[std::move(nh.key())]

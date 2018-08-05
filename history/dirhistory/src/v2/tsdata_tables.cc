@@ -157,7 +157,7 @@ auto emit_type_less = [](const tsdata_v2_tables::emit_type& x, const tsdata_v2_t
 
 auto emit_type_merge = [](tsdata_v2_tables::emit_type&& x, tsdata_v2_tables::emit_type&& y) -> tsdata_v2_tables::emit_type&& {
   instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_merge_timing };
-#if __cplusplus >= 201703
+#if __cpp_lib_node_extract >= 201703
   std::get<1>(x).merge(std::get<1>(y));
 #else
   std::copy(std::get<1>(y).begin(), std::get<1>(y).end(), std::inserter(std::get<1>(x), std::get<1>(x).end()));
