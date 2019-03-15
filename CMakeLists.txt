@@ -82,7 +82,7 @@ if(NOT instrumentation_DIR)
   add_subdirectory(contrib/instrumentation)
 endif()
 
-find_package(cycle_ptr 0.3)
+find_package(cycle_ptr 0.0)
 if(NOT cycle_ptr_DIR)
   add_subdirectory(contrib/cycle_ptr)
 endif()
