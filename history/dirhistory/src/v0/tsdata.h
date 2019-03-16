@@ -42,7 +42,8 @@ class monsoon_dirhistory_local_ tsdata_v0
   auto version() const noexcept -> std::tuple<std::uint16_t, std::uint16_t>
       override;
   bool is_writable() const noexcept override;
-  void push_back(const time_series&) override;
+  void push_back(const time_series&);
+  void push_back(const emit_type&) override;
   std::optional<std::string> get_path() const override;
   auto time() const -> std::tuple<time_point, time_point> override;
 

@@ -59,7 +59,7 @@ class monsoon_dirhistory_export_ tsdata {
    */
   virtual auto time() const -> std::tuple<time_point, time_point> = 0;
 
-  virtual void push_back(const time_series&) = 0;
+  virtual void push_back(const emit_type& c) = 0;
 
   ///\brief Returns the path to the underlying file.
   virtual std::optional<std::string> get_path() const = 0;
@@ -99,6 +99,16 @@ class monsoon_dirhistory_export_ tsdata {
       std::optional<time_point> begin,
       std::optional<time_point> end) const
   -> objpipe::reader<time_point> = 0;
+
+ protected:
+  /**
+   * \brief Helper function to convert metrics to a time series.
+   *
+   * \param[in] c The data to be converted to a time series.
+   * \returns A time series created from \p c.
+   */
+  static auto make_time_series(const metric_source::metric_emit& c)
+  -> time_series;
 };
 
 

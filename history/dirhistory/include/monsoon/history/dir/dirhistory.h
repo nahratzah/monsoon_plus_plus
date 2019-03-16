@@ -32,8 +32,10 @@ class monsoon_dirhistory_export_ dirhistory
   dirhistory(filesystem::path, bool = true);
   ~dirhistory() noexcept override;
 
-  void push_back(const time_series&) override;
+ private:
+  void do_push_back_(const metric_emit&) override;
 
+ public:
   auto time() const -> std::tuple<time_point, time_point> override;
 
   auto emit(

@@ -34,29 +34,6 @@ auto print_history::emit_time(
   return objpipe::of<time_point>();
 }
 
-void print_history::push_back(const time_series& ts) {
-  const time_point tp = ts.get_time();
-
-  for (const time_series_value& tsv : ts.get_data()) {
-    const group_name& group = tsv.get_name();
-
-    for (const auto& metric_pair : tsv.get_metrics()) {
-      const metric_name& metric = metric_pair.first;
-      const metric_value& value = metric_pair.second;
-
-      std::cerr
-          << tp
-          << " "
-          << group
-          << "::"
-          << metric
-          << " = "
-          << value
-          << std::endl;
-    }
-  }
-}
-
 void print_history::do_push_back_(const metric_emit& m) {
   const time_point& tp = std::get<0>(m);
   const auto& collection = std::get<1>(m);

@@ -119,6 +119,10 @@ void tsdata_v2_list::push_back(const time_series& ts) {
   update_hdr(ts.get_time(), ts.get_time(), tsfile_ptr, out.offset());
 }
 
+void tsdata_v2_list::push_back(const emit_type& c) {
+  push_back(make_time_series(c));
+}
+
 auto tsdata_v2_list::emit(
     std::optional<time_point> tr_begin, std::optional<time_point> tr_end,
     const path_matcher& group_filter,

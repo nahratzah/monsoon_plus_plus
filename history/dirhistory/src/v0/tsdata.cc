@@ -134,6 +134,10 @@ void tsdata_v0::push_back(const time_series& ts) {
   }
 }
 
+void tsdata_v0::push_back(const emit_type& c) {
+  push_back(make_time_series(c));
+}
+
 auto tsdata_v0::time() const -> std::tuple<time_point, time_point> {
   return std::make_tuple(tp_begin_, tp_end_);
 }

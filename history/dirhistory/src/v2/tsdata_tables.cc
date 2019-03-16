@@ -114,7 +114,7 @@ std::vector<time_series> tsdata_v2_tables::read_all_raw_() const {
   return result;
 }
 
-void tsdata_v2_tables::push_back(const time_series&) {
+void tsdata_v2_tables::push_back(const emit_type&) {
   throw std::runtime_error("unsupported");
 }
 

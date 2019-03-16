@@ -30,9 +30,6 @@ class monsoon_history_export_ print_history
       -> objpipe::reader<time_point> override;
 
  private:
-  [[deprecated]]
-  void push_back(const time_series&) override;
-
   void do_push_back_(const metric_emit&) override;
 };
 

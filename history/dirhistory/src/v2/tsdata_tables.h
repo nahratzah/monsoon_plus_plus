@@ -26,7 +26,7 @@ class monsoon_dirhistory_local_ tsdata_v2_tables
   ~tsdata_v2_tables() noexcept override;
 
   bool is_writable() const noexcept override;
-  void push_back(const time_series&) override;
+  void push_back(const emit_type&) override;
 
   auto emit(
       std::optional<time_point>,

@@ -29,10 +29,7 @@ class monsoon_history_export_ collect_history
   collect_history(collect_history&&) noexcept = default;
 
  private:
-  [[deprecated]]
-  virtual void push_back(const time_series&) = 0;
-
-  virtual void do_push_back_(const metric_emit&);
+  virtual void do_push_back_(const metric_emit&) = 0;
 };
 
 

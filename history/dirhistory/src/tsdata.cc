@@ -2,6 +2,7 @@
 #include <monsoon/io/gzip_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/xdr/xdr_stream.h>
+#include <objpipe/of.h>
 #include <optional>
 #include "tsdata_mime.h"
 #include "v0/tsdata.h"
@@ -90,6 +91,36 @@ auto tsdata::new_file(io::fd&& fd, std::uint16_t version)
 
 auto tsdata::new_file(io::fd&& fd) -> std::shared_ptr<tsdata> {
   return new_file(std::move(fd), v2::tsdata_v2::MAJOR);
+}
+
+auto tsdata::make_time_series(const metric_source::metric_emit& c) -> time_series {
+  std::unordered_map<group_name, time_series_value> tsv_map;
+  const time_point tp = std::get<0>(c);
+  std::for_each(
+      std::get<1>(c).begin(),
+      std::get<1>(c).end(),
+      [&tsv_map](const auto& e) {
+        const auto& group_name = std::get<0>(e.first);
+        const auto& metric_name = std::get<1>(e.first);
+        const auto& metric_value = e.second;
+
+#if __cplusplus >= 201703
+        time_series_value& tsv =
+            tsv_map.try_emplace(group_name, group_name).first->second;
+#else
+        time_series_value& tsv = tsv_map.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(group_name),
+            std::forward_as_tuple(group_name)
+            ).first->second;
+#endif
+        tsv.metrics()[metric_name] = metric_value;
+      });
+  auto ts_elems = objpipe::of(std::move(tsv_map))
+      .iterate()
+      .select_second();
+
+  return time_series(tp, ts_elems.begin(), ts_elems.end());
 }
 
 

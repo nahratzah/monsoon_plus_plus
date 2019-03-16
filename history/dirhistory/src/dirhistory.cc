@@ -769,8 +769,8 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
 
 dirhistory::~dirhistory() noexcept {}
 
-void dirhistory::push_back(const time_series& ts) {
-  maybe_start_new_file_(ts.get_time());
+void dirhistory::do_push_back_(const metric_emit& ts) {
+  maybe_start_new_file_(std::get<0>(ts));
   write_file_->push_back(ts);
 }
 
