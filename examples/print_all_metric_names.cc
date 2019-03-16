@@ -36,13 +36,13 @@ int main(int argc, char** argv) {
 
   instrumentation::visitor::on_destroy_visitor(std::make_unique<instrumentation::print_visitor>(std::cerr));
 
-  name_set names = open_dir(argv[1])->emit({}, monsoon::path_matcher().push_back_double_wildcard(), monsoon::tag_matcher(), monsoon::path_matcher().push_back_double_wildcard())
+  auto names = open_dir(argv[1])->emit({}, monsoon::path_matcher().push_back_double_wildcard(), monsoon::tag_matcher(), monsoon::path_matcher().push_back_double_wildcard())
       .filter([](const auto& x) { return std::holds_alternative<monsoon::metric_source::metric_emit>(x); })
-      .transform([](const auto& x) -> const auto& { return std::get<monsoon::metric_source::metric_emit>(x); })
+      .select<monsoon::metric_source::metric_emit>()
       .select<1>()
       .iterate()
       .select_first()
-      .async(objpipe::multithread_unordered_push{})
+      .async(objpipe::multithread_unordered_push())
       .reduce(
           []() { return name_set(); },
           [](name_set& set, auto&& nm) -> objpipe::objpipe_errc {
@@ -56,10 +56,9 @@ int main(int argc, char** argv) {
             r.insert(x.begin(), x.end());
 #endif
           },
-          [](name_set&& r) -> name_set { return r; })
-      .get();
+          [](name_set&& r) -> name_set { return r; });
 
-  objpipe::of(std::move(names))
+  objpipe::of(names.get())
       .iterate()
       .for_each(
           [](const name_type& tuple) {
