@@ -1,7 +1,6 @@
 #include <monsoon/build_task.h>
 #include <monsoon/time_series_value.h>
 #include <monsoon/time_series.h>
-#include <objpipe/of.h>
 #include <objpipe/interlock.h>
 #include <objpipe/push_policies.h>
 #include <algorithm>
@@ -16,30 +15,6 @@
 
 namespace monsoon {
 namespace {
-
-
-auto make_time_series_(const collector::collection& c) -> time_series {
-  std::unordered_map<group_name, time_series_value> tsv_map;
-  std::for_each(c.elements.begin(), c.elements.end(),
-      [&tsv_map](const collector::collection_element& e) {
-#if __cplusplus >= 201703
-        time_series_value& tsv =
-            tsv_map.try_emplace(e.group, e.group).first->second;
-#else
-        time_series_value& tsv = tsv_map.emplace(
-            std::piecewise_construct,
-            std::forward_as_tuple(e.group),
-            std::forward_as_tuple(e.group)
-            ).first->second;
-#endif
-        tsv.metrics()[e.metric] = e.value;
-      });
-  auto ts_elems = objpipe::of(std::move(tsv_map))
-      .iterate()
-      .select_second();
-
-  return time_series(c.tp, ts_elems.begin(), ts_elems.end());
-}
 
 
 #ifdef NDEBUG
@@ -93,13 +68,16 @@ class history_multiplexer {
   : histories_(histories)
   {}
 
-  auto operator()(const collector::collection& c) const -> void {
-    const time_series ts = make_time_series_(c);
+  auto operator()(const metric_source::emit_type& e) const -> void {
+    if (std::holds_alternative<metric_source::metric_emit>(e)) {
+      const auto& emit = std::get<metric_source::metric_emit>(e);
 
-    std::for_each(histories_.begin(), histories_.end(),
-        [&ts](const std::shared_ptr<collect_history>& h) {
-          h->push_back(ts);
-        });
+      std::for_each(
+          histories_.begin(), histories_.end(),
+          [&emit](const std::shared_ptr<collect_history>& h) {
+            h->push_back(emit);
+          });
+    }
   }
 
  private:
@@ -345,6 +323,11 @@ class collector_metricsource_pipe_ {
   : src_(std::move(src))
   {}
 
+  collector_metricsource_pipe_(const collector_metricsource_pipe_&) = delete;
+  collector_metricsource_pipe_(collector_metricsource_pipe_&&) = default;
+  auto operator=(const collector_metricsource_pipe_&) -> collector_metricsource_pipe_& = delete;
+  auto operator=(collector_metricsource_pipe_&&) -> collector_metricsource_pipe_& = delete;
+
   auto is_pullable() noexcept
   -> bool {
     return !pending_.empty() || src_.is_pullable();
@@ -531,7 +514,7 @@ class collector_metric_source {
       : hm_(std::move(hm))
       {}
 
-      auto operator()(const collector::collection& c) {
+      auto operator()(const metric_source::emit_type& c) {
         hm_(c);
         return objpipe::objpipe_errc::success;
       }
@@ -544,7 +527,7 @@ class collector_metric_source {
       history_multiplexer hm_;
     };
 
-    sink_.new_pipe()
+    collection_to_msemit_(sink_.new_pipe())
         .async(objpipe::existingthread_push())
         .push(wrapper(h));
   }
