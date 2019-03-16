@@ -14,8 +14,6 @@ class monsoon_history_export_ print_history
  public:
   ~print_history() noexcept override;
 
-  void push_back(const time_series&) override;
-
   auto time() const -> std::tuple<time_point, time_point> override;
 
   auto emit(
@@ -30,6 +28,12 @@ class monsoon_history_export_ print_history
       time_range tr,
       time_point::duration slack) const
       -> objpipe::reader<time_point> override;
+
+ private:
+  [[deprecated]]
+  void push_back(const time_series&) override;
+
+  void do_push_back_(const metric_emit&) override;
 };
 
 

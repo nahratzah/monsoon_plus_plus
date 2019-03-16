@@ -20,9 +20,6 @@ class monsoon_history_export_ collect_history
   collect_history() noexcept = default;
   virtual ~collect_history() noexcept;
 
-  [[deprecated]]
-  virtual void push_back(const time_series&) = 0;
-
   void push_back(const metric_emit&);
 
   virtual auto time() const -> std::tuple<time_point, time_point> = 0;
@@ -32,6 +29,9 @@ class monsoon_history_export_ collect_history
   collect_history(collect_history&&) noexcept = default;
 
  private:
+  [[deprecated]]
+  virtual void push_back(const time_series&) = 0;
+
   virtual void do_push_back_(const metric_emit&);
 };
 
