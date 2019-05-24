@@ -301,10 +301,11 @@ auto wal_record::make_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t ds
 wal_reader::~wal_reader() noexcept = default;
 
 auto wal_reader::read(void* buf, std::size_t nbytes) -> std::size_t {
-  if (len_ == 0) throw std::logic_error("end of WAL");
+  assert(fd_ != nullptr);
+  if (len_ == 0) throw wal_error("corrupt WAL segment: too long");
 
   if (nbytes > len_) nbytes = len_;
-  const auto rlen = fd_.read_at(off_, buf, nbytes);
+  const auto rlen = fd_->read_at(off_, buf, nbytes);
   assert(rlen <= len_);
   off_ += rlen;
   len_ -= rlen;
