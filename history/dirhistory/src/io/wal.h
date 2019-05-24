@@ -23,7 +23,7 @@ class wal_error
 };
 
 
-enum class wal_entry : std::uint8_t {
+enum class wal_entry : std::uint32_t {
   end = 0,
   commit = 1,
   invalidate_previous_wal = 2,

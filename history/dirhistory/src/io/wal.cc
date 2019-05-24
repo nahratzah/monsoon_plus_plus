@@ -191,23 +191,23 @@ wal_error::~wal_error() = default;
 wal_record::~wal_record() noexcept = default;
 
 auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_record> {
-  const std::uint8_t discriminant = in.get_uint8();
+  const std::uint32_t discriminant = in.get_uint32();
   std::unique_ptr<wal_record> result;
 
   switch (discriminant) {
-    case static_cast<std::uint8_t>(wal_entry::end):
+    case static_cast<std::uint32_t>(wal_entry::end):
       result = std::make_unique<wal_record_end>();
       break;
-    case static_cast<std::uint8_t>(wal_entry::commit):
+    case static_cast<std::uint32_t>(wal_entry::commit):
       result = std::make_unique<wal_record_commit>();
       break;
-    case static_cast<std::uint8_t>(wal_entry::write):
+    case static_cast<std::uint32_t>(wal_entry::write):
       result = wal_record_write::from_stream(in);
       break;
-    case static_cast<std::uint8_t>(wal_entry::resize):
+    case static_cast<std::uint32_t>(wal_entry::resize):
       result = wal_record_resize::from_stream(in);
       break;
-    case static_cast<std::uint8_t>(wal_entry::copy):
+    case static_cast<std::uint32_t>(wal_entry::copy):
       result = wal_record_copy::from_stream(in);
       break;
     default:
@@ -215,12 +215,12 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
   }
 
   assert(result != nullptr
-      && static_cast<std::uint8_t>(result->get_wal_entry()) == discriminant);
+      && static_cast<std::uint32_t>(result->get_wal_entry()) == discriminant);
   return result;
 }
 
 auto wal_record::write(monsoon::xdr::xdr_ostream& out) const -> void {
-  out.put_uint8(static_cast<std::uint8_t>(get_wal_entry()));
+  out.put_uint8(static_cast<std::uint32_t>(get_wal_entry()));
   do_write(out);
 }
 
