@@ -2,6 +2,7 @@
 #define IO_WAL_H
 
 #include <algorithm>
+#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -51,6 +52,7 @@ class wal_record {
   void apply(monsoon::io::fd& fd) const;
   auto is_end() const noexcept -> bool;
   auto is_commit() const noexcept -> bool;
+  auto is_invalidate_previous_wal() const noexcept -> bool;
   auto tx_id() const noexcept -> std::uint32_t { return tx_id_; }
 
   static auto make_end() -> std::unique_ptr<wal_record>;
@@ -86,6 +88,50 @@ class wal_reader
   const monsoon::io::fd& fd_;
   monsoon::io::fd::offset_type off_;
   monsoon::io::fd::size_type len_;
+};
+
+
+class wal_region {
+  private:
+  using wal_seqno_type = std::uint32_t;
+  struct wal_vector {
+    std::size_t slot;
+    wal_seqno_type seq;
+    std::vector<std::unique_ptr<wal_record>> data;
+  };
+
+  public:
+  wal_region() = default;
+  wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
+  wal_region(wal_region&&) = default;
+  wal_region(const wal_region&) = delete;
+  wal_region& operator=(wal_region&&) = default;
+  wal_region& operator=(const wal_region&) = delete;
+  ~wal_region() = default;
+
+  static auto create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> wal_region;
+
+  private:
+  static constexpr std::size_t num_segments_ = 2;
+
+  auto segment_len_() const noexcept -> monsoon::io::fd::size_type {
+    return segment_len_(len_);
+  }
+
+  static constexpr auto segment_len_(monsoon::io::fd::size_type len) noexcept -> monsoon::io::fd::size_type {
+    return len / num_segments_;
+  }
+
+  auto read_segment_(std::size_t idx) -> wal_vector;
+  static auto make_empty_segment_(wal_seqno_type seq, bool invalidate) -> monsoon::xdr::xdr_bytevector_ostream<>;
+
+  monsoon::io::fd* fd_ = nullptr;
+  monsoon::io::fd::offset_type off_;
+  monsoon::io::fd::size_type len_;
+  wal_seqno_type current_seq_;
+  std::size_t current_slot_;
+  std::bitset<num_segments_> slots_active_{ 0ull };
+  monsoon::io::fd::offset_type slot_off_;
 };
 
 

@@ -1,5 +1,7 @@
 #include "wal.h"
 #include <cassert>
+#include <unordered_set>
+#include <monsoon/xdr/xdr_stream.h>
 
 namespace monsoon::history::io {
 namespace {
@@ -246,7 +248,7 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
 }
 
 auto wal_record::write(monsoon::xdr::xdr_ostream& out) const -> void {
-  assert((tx_id & tx_id_mask) == tx_id);
+  assert((tx_id() & tx_id_mask) == tx_id());
   out.put_uint32(static_cast<std::uint32_t>(get_wal_entry()) | (tx_id() << 8));
   do_write(out);
 }
@@ -261,6 +263,10 @@ auto wal_record::is_end() const noexcept -> bool {
 
 auto wal_record::is_commit() const noexcept -> bool {
   return get_wal_entry() == wal_entry::commit;
+}
+
+auto wal_record::is_invalidate_previous_wal() const noexcept -> bool {
+  return get_wal_entry() == wal_entry::invalidate_previous_wal;
 }
 
 auto wal_record::make_end() -> std::unique_ptr<wal_record> {
@@ -309,6 +315,146 @@ void wal_reader::close() {}
 
 auto wal_reader::at_end() const -> bool {
   return len_ == 0u;
+}
+
+
+wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+: fd_(&fd),
+  off_(off),
+  len_(len)
+{
+  static_assert(num_segments_ == 2u, "Algorithm assumes two segments.");
+  std::array<wal_vector, num_segments_> segments{
+    read_segment_(0),
+    read_segment_(1)
+  };
+
+  std::sort(
+      segments.begin(),
+      segments.end(),
+      [](const wal_vector& x, const wal_vector& y) -> bool {
+        // Use a sliding window for sequencing distance.
+        // Note: y.seq - x.seq may wrap-around, the comparison is based on that.
+        return y.seq - x.seq <= 0x7fffffffu;
+      });
+
+  assert(std::all_of(
+          segments.begin(), segments.end(),
+          [](const wal_vector& v) {
+            return !v.data.empty() && v.data.back()->is_end();
+          }));
+
+  const auto base_seq = segments.front().seq;
+  std::for_each(segments.begin(), segments.end(), [base_seq](wal_vector& v) { v.seq -= base_seq; });
+
+  if (!std::all_of(
+          segments.begin(),
+          segments.end(),
+          [](const wal_vector& v) -> bool {
+            return v.data.size() == 1u;
+          })) {
+    auto invalidation = segments.end();
+    for (auto iter = segments.begin(); iter != segments.end(); ++iter) {
+      if (std::any_of(
+              iter->data.begin(),
+              iter->data.end(),
+              [](const auto& wal_record_ptr) -> bool {
+                return wal_record_ptr->is_invalidate_previous_wal();
+              }))
+        invalidation = iter;
+    }
+    if (invalidation == segments.end())
+      throw wal_error("unable to determine start of WAL");
+
+    // Ensure we're operating on a sequential subset of entries.
+    for (auto iter = invalidation; iter != segments.end() - 1; ++iter) {
+      if (iter->seq + 1u != iter->seq)
+        throw wal_error("missing WAL sequence IDs");
+    }
+
+    // Figure out the complete set of committed transactions.
+    std::unordered_set<wal_record::tx_id_type> committed;
+    for (auto iter = invalidation; iter != segments.end(); ++iter) {
+      for (const auto& record_ptr : iter->data) {
+        if (record_ptr->is_commit())
+          committed.insert(record_ptr->tx_id());
+      }
+    }
+
+    // Replay the WAL.
+    for (auto iter = invalidation; iter != segments.end(); ++iter) {
+      for (const auto& record_ptr : iter->data) {
+        if (committed.count(record_ptr->tx_id()) > 0)
+          record_ptr->apply(*fd_);
+      }
+    }
+  }
+
+  // Start a new WAL entry that invalidates all previous entries.
+  current_seq_ = base_seq + segments.back().seq + 1u;
+  current_slot_ = segments.front().slot;
+  const auto new_segment = make_empty_segment_(current_seq_, true);
+  if (new_segment.size() > segment_len_()) throw wal_error("WAL segments too small");
+  auto woff = off_ + segments.front().slot * segment_len_();
+  auto buf = new_segment.data();
+  auto buflen = new_segment.size();
+  slot_off_ = buflen;
+  while (buflen > 0) {
+    const auto wlen = fd_->write_at(woff, buf, buflen);
+    woff += wlen;
+    buf += wlen;
+    buflen -= wlen;
+  }
+  slots_active_[segments.front().slot] = true;
+
+  assert(!slots_active_.all() && !slots_active_.none());
+}
+
+auto wal_region::create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> wal_region {
+  for (std::size_t idx = 0; idx < num_segments_; ++idx) {
+    const auto tmp = make_empty_segment_(idx, idx == num_segments_ - 1u);
+    if (tmp.size() > segment_len_(len))
+      throw std::logic_error("WAL segments are too small");
+
+    auto segment_off = off + idx * segment_len_(len);
+
+    auto buf = tmp.data();
+    auto nbytes = tmp.size();
+    while (nbytes > 0) {
+      const auto wlen = fd.write_at(segment_off, buf, nbytes);
+      segment_off += wlen;
+      buf += wlen;
+      nbytes -= wlen;
+    }
+  }
+
+  fd.flush();
+  return wal_region(fd, off, len);
+}
+
+auto wal_region::read_segment_(std::size_t idx) -> wal_vector {
+  assert(idx < num_segments_);
+
+  wal_vector result;
+  auto xdr_stream = monsoon::xdr::xdr_stream_reader<wal_reader>(
+      wal_reader(*fd_, off_ + idx * segment_len_(), segment_len_()));
+
+  result.slot = idx;
+  result.seq = xdr_stream.get_uint32();
+  do {
+    result.data.push_back(wal_record::read(xdr_stream));
+  } while (!result.data.back()->is_end());
+
+  return result;
+}
+
+auto wal_region::make_empty_segment_(wal_seqno_type seq, bool invalidate) -> monsoon::xdr::xdr_bytevector_ostream<> {
+  monsoon::xdr::xdr_bytevector_ostream<> x;
+
+  x.put_uint32(seq);
+  if (invalidate) wal_record::make_invalidate_previous_wal()->write(x);
+  wal_record::make_end()->write(x);
+  return x;
 }
 
 
