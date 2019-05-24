@@ -1,4 +1,4 @@
-#include "wal.h"
+#include <monsoon/history/dir/io/wal.h>
 #include <cassert>
 #include <unordered_set>
 #include <monsoon/xdr/xdr_stream.h>
