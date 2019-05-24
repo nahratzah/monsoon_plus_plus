@@ -39,6 +39,7 @@ add_library (monsoon_dirhistory
   src/v2/tsdata_tables.cc
   src/v2/tsdata_list.cc
   src/v2/bitset.cc
+  src/io/wal.cc
 )
 target_include_directories (monsoon_dirhistory PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
