@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
             r.insert(x.begin(), x.end());
 #endif
           },
-          [](name_set&& r) -> name_set { return r; });
+          [](name_set&& r) -> name_set { return std::move(r); });
 
   objpipe::of(names.get())
       .iterate()
