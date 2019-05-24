@@ -1,6 +1,7 @@
-#ifndef IO_WAL_H
-#define IO_WAL_H
+#ifndef MONSOON_HISTORY_DIR_IO_WAL_H
+#define MONSOON_HISTORY_DIR_IO_WAL_H
 
+#include <monsoon/history/dir/dirhistory_export_.h>
 #include <algorithm>
 #include <bitset>
 #include <cstddef>
@@ -255,4 +256,4 @@ class wal_region {
 
 } /* namespace monsoon::history::io */
 
-#endif /* IO_WAL_H */
+#endif /* MONSOON_HISTORY_DIR_IO_WAL_H */
