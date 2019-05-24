@@ -94,6 +94,7 @@ class wal_reader
 class wal_region {
   private:
   using wal_seqno_type = std::uint32_t;
+
   struct wal_vector {
     std::size_t slot;
     wal_seqno_type seq;
