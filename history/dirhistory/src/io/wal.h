@@ -23,7 +23,7 @@ class wal_error
 };
 
 
-enum class wal_entry : std::uint32_t {
+enum class wal_entry : std::uint8_t {
   end = 0,
   commit = 1,
   invalidate_previous_wal = 2,
@@ -34,6 +34,12 @@ enum class wal_entry : std::uint32_t {
 
 class wal_record {
   public:
+  using tx_id_type = std::uint32_t;
+
+  static constexpr tx_id_type tx_id_mask = 0xffffffu;
+
+  wal_record() = delete;
+  wal_record(tx_id_type tx_id);
   virtual ~wal_record() noexcept;
   virtual auto get_wal_entry() const noexcept -> wal_entry = 0;
   private:
@@ -45,14 +51,18 @@ class wal_record {
   void apply(monsoon::io::fd& fd) const;
   auto is_end() const noexcept -> bool;
   auto is_commit() const noexcept -> bool;
+  auto tx_id() const noexcept -> std::uint32_t { return tx_id_; }
 
   static auto make_end() -> std::unique_ptr<wal_record>;
-  static auto make_commit() -> std::unique_ptr<wal_record>;
+  static auto make_commit(tx_id_type tx_id) -> std::unique_ptr<wal_record>;
   static auto make_invalidate_previous_wal() -> std::unique_ptr<wal_record>;
-  static auto make_write(std::uint64_t offset, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record>;
-  static auto make_write(std::uint64_t offset, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record>;
-  static auto make_resize(std::uint64_t new_size) -> std::unique_ptr<wal_record>;
-  static auto make_copy(std::uint64_t src, std::uint64_t dst, std::uint64_t len) -> std::unique_ptr<wal_record>;
+  static auto make_write(tx_id_type tx_id, std::uint64_t offset, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record>;
+  static auto make_write(tx_id_type tx_id, std::uint64_t offset, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record>;
+  static auto make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::unique_ptr<wal_record>;
+  static auto make_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t dst, std::uint64_t len) -> std::unique_ptr<wal_record>;
+
+  private:
+  tx_id_type tx_id_;
 };
 
 

@@ -9,6 +9,10 @@ class wal_record_end
 : public wal_record
 {
   public:
+  wal_record_end() noexcept
+  : wal_record(0u)
+  {}
+
   ~wal_record_end() noexcept override = default;
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::end; }
   private:
@@ -21,6 +25,8 @@ class wal_record_commit
 : public wal_record
 {
   public:
+  using wal_record::wal_record;
+
   ~wal_record_commit() noexcept override = default;
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::commit; }
   private:
@@ -33,6 +39,10 @@ class wal_record_invalidate_previous_wal
 : public wal_record
 {
   public:
+  wal_record_invalidate_previous_wal() noexcept
+  : wal_record(0u)
+  {}
+
   ~wal_record_invalidate_previous_wal() noexcept override = default;
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::invalidate_previous_wal; }
   private:
@@ -47,17 +57,18 @@ class wal_record_write
   public:
   wal_record_write() = delete;
 
-  wal_record_write(std::uint64_t offset, std::vector<uint8_t> data) noexcept
-  : offset(offset),
+  wal_record_write(tx_id_type tx_id, std::uint64_t offset, std::vector<uint8_t> data)
+  : wal_record(tx_id),
+    offset(offset),
     data(std::move(data))
   {}
 
   ~wal_record_write() noexcept override = default;
 
-  static auto from_stream(monsoon::xdr::xdr_istream& in)
+  static auto from_stream(tx_id_type tx_id, monsoon::xdr::xdr_istream& in)
   -> std::unique_ptr<wal_record_write> {
     const std::uint64_t offset = in.get_uint64();
-    return std::make_unique<wal_record_write>(offset, in.get_opaque());
+    return std::make_unique<wal_record_write>(tx_id, offset, in.get_opaque());
   }
 
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::write; }
@@ -92,15 +103,16 @@ class wal_record_resize
   public:
   wal_record_resize() = delete;
 
-  wal_record_resize(std::uint64_t new_size) noexcept
-  : new_size(new_size)
+  wal_record_resize(tx_id_type tx_id, std::uint64_t new_size)
+  : wal_record(tx_id),
+    new_size(new_size)
   {}
 
   ~wal_record_resize() noexcept override = default;
 
-  static auto from_stream(monsoon::xdr::xdr_istream& in)
+  static auto from_stream(tx_id_type tx_id, monsoon::xdr::xdr_istream& in)
   -> std::unique_ptr<wal_record_resize> {
-    return std::make_unique<wal_record_resize>(in.get_uint64());
+    return std::make_unique<wal_record_resize>(tx_id, in.get_uint64());
   }
 
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::resize; }
@@ -127,20 +139,21 @@ class wal_record_copy
   public:
   wal_record_copy() = delete;
 
-  wal_record_copy(std::uint64_t src, std::uint64_t dst, std::uint64_t len) noexcept
-  : src(src),
+  wal_record_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t dst, std::uint64_t len)
+  : wal_record(tx_id),
+    src(src),
     dst(dst),
     len(len)
   {}
 
   ~wal_record_copy() noexcept override = default;
 
-  static auto from_stream(monsoon::xdr::xdr_istream& in)
+  static auto from_stream(tx_id_type tx_id, monsoon::xdr::xdr_istream& in)
   -> std::unique_ptr<wal_record_copy> {
     const std::uint64_t src = in.get_uint64();
     const std::uint64_t dst = in.get_uint64();
     const std::uint64_t len = in.get_uint64();
-    return std::make_unique<wal_record_copy>(src, dst, len);
+    return std::make_unique<wal_record_copy>(tx_id, src, dst, len);
   }
 
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::copy; }
@@ -188,27 +201,40 @@ class wal_record_copy
 wal_error::~wal_error() = default;
 
 
+wal_record::wal_record(tx_id_type tx_id)
+: tx_id_(tx_id)
+{
+  if ((tx_id & tx_id_mask) != tx_id)
+    throw std::logic_error("tx_id out of range (only 24 bit expected)");
+}
+
 wal_record::~wal_record() noexcept = default;
 
 auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_record> {
   const std::uint32_t discriminant = in.get_uint32();
   std::unique_ptr<wal_record> result;
+  const tx_id_type tx_id = discriminant >> 8;
 
-  switch (discriminant) {
-    case static_cast<std::uint32_t>(wal_entry::end):
+  switch (discriminant & 0xff) {
+    case static_cast<std::uint8_t>(wal_entry::end):
+      if (tx_id != 0u) throw wal_error("unrecognized WAL entry");
       result = std::make_unique<wal_record_end>();
       break;
-    case static_cast<std::uint32_t>(wal_entry::commit):
-      result = std::make_unique<wal_record_commit>();
+    case static_cast<std::uint8_t>(wal_entry::commit):
+      result = std::make_unique<wal_record_commit>(tx_id);
       break;
-    case static_cast<std::uint32_t>(wal_entry::write):
-      result = wal_record_write::from_stream(in);
+    case static_cast<std::uint8_t>(wal_entry::invalidate_previous_wal):
+      if (tx_id != 0u) throw wal_error("unrecognized WAL entry");
+      result = std::make_unique<wal_record_invalidate_previous_wal>();
       break;
-    case static_cast<std::uint32_t>(wal_entry::resize):
-      result = wal_record_resize::from_stream(in);
+    case static_cast<std::uint8_t>(wal_entry::write):
+      result = wal_record_write::from_stream(tx_id, in);
       break;
-    case static_cast<std::uint32_t>(wal_entry::copy):
-      result = wal_record_copy::from_stream(in);
+    case static_cast<std::uint8_t>(wal_entry::resize):
+      result = wal_record_resize::from_stream(tx_id, in);
+      break;
+    case static_cast<std::uint8_t>(wal_entry::copy):
+      result = wal_record_copy::from_stream(tx_id, in);
       break;
     default:
       throw wal_error("unrecognized WAL entry");
@@ -220,7 +246,8 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
 }
 
 auto wal_record::write(monsoon::xdr::xdr_ostream& out) const -> void {
-  out.put_uint8(static_cast<std::uint32_t>(get_wal_entry()));
+  assert((tx_id & tx_id_mask) == tx_id);
+  out.put_uint32(static_cast<std::uint32_t>(get_wal_entry()) | (tx_id() << 8));
   do_write(out);
 }
 
@@ -240,28 +267,28 @@ auto wal_record::make_end() -> std::unique_ptr<wal_record> {
   return std::make_unique<wal_record_end>();
 }
 
-auto wal_record::make_commit() -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_commit>();
+auto wal_record::make_commit(tx_id_type tx_id) -> std::unique_ptr<wal_record> {
+  return std::make_unique<wal_record_commit>(tx_id);
 }
 
 auto wal_record::make_invalidate_previous_wal() -> std::unique_ptr<wal_record> {
   return std::make_unique<wal_record_invalidate_previous_wal>();
 }
 
-auto wal_record::make_write(std::uint64_t offset, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_write>(offset, std::move(data));
+auto wal_record::make_write(tx_id_type tx_id, std::uint64_t offset, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record> {
+  return std::make_unique<wal_record_write>(tx_id, offset, std::move(data));
 }
 
-auto wal_record::make_write(std::uint64_t offset, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_write>(offset, data);
+auto wal_record::make_write(tx_id_type tx_id, std::uint64_t offset, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record> {
+  return std::make_unique<wal_record_write>(tx_id, offset, data);
 }
 
-auto wal_record::make_resize(std::uint64_t new_size) -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_resize>(new_size);
+auto wal_record::make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::unique_ptr<wal_record> {
+  return std::make_unique<wal_record_resize>(tx_id, new_size);
 }
 
-auto wal_record::make_copy(std::uint64_t src, std::uint64_t dst, std::uint64_t len) -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_copy>(src, dst, len);
+auto wal_record::make_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t dst, std::uint64_t len) -> std::unique_ptr<wal_record> {
+  return std::make_unique<wal_record_copy>(tx_id, src, dst, len);
 }
 
 
