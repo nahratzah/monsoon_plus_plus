@@ -412,21 +412,16 @@ wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, mo
 }
 
 auto wal_region::create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> wal_region {
-  for (std::size_t idx = 0; idx < num_segments_; ++idx) {
-    const auto tmp = make_empty_segment_(idx, idx == num_segments_ - 1u);
-    if (tmp.size() > segment_len_(len))
-      throw std::logic_error("WAL segments are too small");
+  const auto buf_vector = std::vector<std::uint8_t>(len, std::uint8_t(0));
+  const std::uint8_t* buf = buf_vector.data();
+  auto nbytes = buf_vector.size();
+  auto woff = off;
 
-    auto segment_off = off + idx * segment_len_(len);
-
-    auto buf = tmp.data();
-    auto nbytes = tmp.size();
-    while (nbytes > 0) {
-      const auto wlen = fd.write_at(segment_off, buf, nbytes);
-      segment_off += wlen;
-      buf += wlen;
-      nbytes -= wlen;
-    }
+  while (nbytes > 0) {
+    const auto wlen = fd.write_at(woff, buf, nbytes);
+    woff += wlen;
+    buf += wlen;
+    nbytes -= wlen;
   }
 
   fd.flush();
