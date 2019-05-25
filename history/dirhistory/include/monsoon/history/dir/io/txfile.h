@@ -4,6 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <optional>
 #include <shared_mutex>
 #include <utility>
@@ -192,11 +193,25 @@ class txfile {
   auto begin() const -> transaction;
 
   private:
-  monsoon::io::fd fd_;
-  wal_region wal_;
-  tx_sequencer sequencer_;
-  ///\brief Mutex guards the file contents, except for the WAL regions.
-  std::shared_mutex mtx_;
+  struct impl_ {
+    impl_(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+    : fd_(std::move(fd)),
+      wal_(fd_, off, len)
+    {}
+
+    impl_([[maybe_unused]] create_tag tag, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+    : fd_(std::move(fd)),
+      wal_(wal_region::create(fd_, off, len))
+    {}
+
+    monsoon::io::fd fd_;
+    wal_region wal_;
+    tx_sequencer sequencer_;
+    ///\brief Mutex guards the file contents, except for the WAL regions.
+    std::shared_mutex mtx_;
+  };
+
+  std::unique_ptr<impl_> pimpl_;
 };
 
 
@@ -263,8 +278,8 @@ class txfile::transaction {
    */
   explicit transaction(bool read_only, txfile& owner)
   : read_only_(read_only),
-    owner_(&owner),
-    seq_(owner.sequencer_.begin())
+    owner_(owner.pimpl_.get()),
+    seq_(owner.pimpl_->sequencer_.begin())
   {}
 
   public:
@@ -316,7 +331,7 @@ class txfile::transaction {
 
   private:
   bool read_only_;
-  txfile* owner_ = nullptr;
+  impl_* owner_ = nullptr;
   tx_sequencer::tx seq_;
   ///\brief Hold the result of uncommitted write actions.
   replacement_map replacements_;
