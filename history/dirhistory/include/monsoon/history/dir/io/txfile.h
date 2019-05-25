@@ -1,6 +1,7 @@
 #ifndef MONSOON_HISTORY_DIR_IO_TXFILE_H
 #define MONSOON_HISTORY_DIR_IO_TXFILE_H
 
+#include <cstddef>
 #include <utility>
 #include <monsoon/io/fd.h>
 #include <monsoon/history/dir/io/tx_sequencer.h>
@@ -13,7 +14,15 @@ class txfile {
   public:
   class transaction;
 
+  txfile(const txfile&) = delete;
+  txfile& operator=(const txfile&) = delete;
+
+  txfile() {}
   txfile(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
+
+  txfile(txfile&&) noexcept = default;
+  txfile& operator=(txfile&&) noexcept = default;
+
   ~txfile() noexcept;
 
   auto begin(bool read_only) -> transaction;
@@ -30,8 +39,18 @@ class txfile::transaction {
   friend txfile;
 
   public:
+  using offset_type = monsoon::io::fd::offset_type;
+  using size_type = monsoon::io::fd::size_type;
+
   transaction(const transaction&) = delete;
   transaction& operator=(const transaction&) = delete;
+
+  friend void swap(transaction& x, transaction& y) noexcept {
+    using std::swap;
+    swap(x.read_only_, y.read_only_);
+    swap(x.owner_, y.owner_);
+    swap(x.seq_, y.seq_);
+  }
 
   transaction() = default;
 
@@ -41,16 +60,11 @@ class txfile::transaction {
     seq_(std::move(x.seq_))
   {}
 
-  friend void swap(transaction& x, transaction& y) noexcept {
-    using std::swap;
-    swap(x.read_only_, y.read_only_);
-    swap(x.owner_, y.owner_);
-    swap(x.seq_, y.seq_);
-  }
-
   transaction& operator=(transaction&& x) noexcept {
     if (*this) rollback();
-    swap(*this, x);
+    read_only_ = x.read_only_;
+    owner_ = std::exchange(x.owner_, nullptr);
+    seq_ = std::move(x.seq_);
     return *this;
   }
 
@@ -76,6 +90,9 @@ class txfile::transaction {
 
   void commit();
   void rollback() noexcept;
+
+  auto write_at(offset_type off, const void* buf, std::size_t nbytes) -> std::size_t;
+  auto read_at(offset_type off, void* buf, std::size_t nbytes) -> std::size_t;
 
   private:
   bool read_only_;

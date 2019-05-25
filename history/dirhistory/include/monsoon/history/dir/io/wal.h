@@ -201,10 +201,10 @@ class wal_region {
   ///\param[in] len The size of the WAL.
   wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
   ///\brief A WAL is move-constructible.
-  wal_region(wal_region&&) = default;
+  wal_region(wal_region&&) noexcept = default;
   wal_region(const wal_region&) = delete;
   ///\brief A WAL region is move-assignable.
-  wal_region& operator=(wal_region&&) = default;
+  wal_region& operator=(wal_region&&) noexcept = default;
   wal_region& operator=(const wal_region&) = delete;
   ~wal_region() = default;
 

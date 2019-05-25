@@ -59,6 +59,30 @@ class tx_sequencer {
       >;
 
   public:
+  tx_sequencer() = default;
+
+  tx_sequencer(const tx_sequencer& other)
+  : c_(other.c_),
+    seq_(other.seq_.load(std::memory_order_relaxed))
+  {}
+
+  tx_sequencer(tx_sequencer&& other) noexcept
+  : c_(std::move(other.c_)),
+    seq_(other.seq_.load(std::memory_order_relaxed))
+  {}
+
+  auto operator=(const tx_sequencer& other) -> tx_sequencer& {
+    c_ = other.c_;
+    seq_.store(other.seq_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    return *this;
+  }
+
+  auto operator=(tx_sequencer&& other) noexcept -> tx_sequencer& {
+    c_ = std::move(other.c_);
+    seq_.store(other.seq_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    return *this;
+  }
+
   /**
    * \brief Test if a transaction began before another transaction was committed.
    * \details
