@@ -42,6 +42,7 @@ add_library (monsoon_dirhistory
   src/io/wal.cc
   src/io/tx_sequencer.cc
   src/io/txfile.cc
+  src/io/replacement_map.cc
 )
 target_include_directories (monsoon_dirhistory PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -67,6 +68,7 @@ install (FILES
   include/monsoon/history/dir/io/tx_sequencer.h
   include/monsoon/history/dir/io/wal.h
   include/monsoon/history/dir/io/txfile.h
+  include/monsoon/history/dir/io/replacement_map.h
   DESTINATION include/monsoon/history/dir)
 
 add_subdirectory (tests)
