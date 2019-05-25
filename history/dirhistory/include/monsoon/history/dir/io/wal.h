@@ -214,6 +214,11 @@ class wal_region {
   ///\param[in] len The size of the WAL.
   static auto create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> wal_region;
 
+  ///\brief Retrieve the end of the WAL region.
+  auto wal_end_offset() const noexcept -> monsoon::io::fd::offset_type {
+    return off_ + len_;
+  }
+
   private:
   ///\brief Number of segments that the WAL is divided in.
   static constexpr std::size_t num_segments_ = 2;

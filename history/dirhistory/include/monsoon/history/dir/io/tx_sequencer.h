@@ -27,6 +27,9 @@ class tx_sequencer {
     private:
     explicit tx(std::uint32_t idx) : idx_(idx) {}
 
+    public:
+    tx() = default;
+
     private:
     std::uint32_t idx_;
   };
