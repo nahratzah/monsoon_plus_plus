@@ -198,6 +198,9 @@ auto txfile::replacement_map::write_at(monsoon::io::fd::offset_type off, const v
 }
 
 
+txfile::impl_::~impl_() noexcept = default;
+
+
 txfile::txfile(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
 : pimpl_(std::make_unique<impl_>(std::move(fd), off, len))
 {}
@@ -205,8 +208,6 @@ txfile::txfile(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::
 txfile::txfile(create_tag tag, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
 : pimpl_(std::make_unique<impl_>(tag, std::move(fd), off, len))
 {}
-
-txfile::~txfile() noexcept = default;
 
 auto txfile::create(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> txfile {
   return txfile(create_tag(), std::move(fd), off, len);

@@ -151,7 +151,7 @@ class txfile {
   txfile& operator=(const txfile&) = delete;
 
   ///\brief Create a new txfile object that does not point at a file.
-  txfile() {}
+  txfile() noexcept = default;
 
   /**
    * \brief Open an existing txfile.
@@ -169,8 +169,6 @@ class txfile {
   public:
   txfile(txfile&&) noexcept = default;
   txfile& operator=(txfile&&) noexcept = default;
-
-  ~txfile() noexcept;
 
   auto create(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> txfile;
 
@@ -194,6 +192,11 @@ class txfile {
 
   private:
   struct impl_ {
+    impl_(const impl_&) = delete;
+    impl_(impl_&&) = delete;
+    impl_& operator=(const impl_&) = delete;
+    impl_& operator=(impl_&&) = delete;
+
     impl_(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
     : fd_(std::move(fd)),
       wal_(fd_, off, len)
@@ -203,6 +206,8 @@ class txfile {
     : fd_(std::move(fd)),
       wal_(wal_region::create(fd_, off, len))
     {}
+
+    ~impl_() noexcept;
 
     monsoon::io::fd fd_;
     wal_region wal_;
