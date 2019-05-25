@@ -389,6 +389,9 @@ wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, mo
           record_ptr->apply(*fd_);
       }
     }
+
+    // Sync state to disk.
+    fd_->flush();
   }
 
   // Start a new WAL entry that invalidates all previous entries.
@@ -407,6 +410,7 @@ wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, mo
     buflen -= wlen;
   }
   slots_active_[segments.front().slot] = true;
+  fd_->flush(); // Sync new segment.
 
   assert(!slots_active_.all() && !slots_active_.none());
 }
