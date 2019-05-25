@@ -4,13 +4,42 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <optional>
+#include <shared_mutex>
 #include <utility>
 #include <vector>
 #include <monsoon/io/fd.h>
 #include <monsoon/history/dir/io/tx_sequencer.h>
 #include <monsoon/history/dir/io/wal.h>
+#include <boost/intrusive/set.hpp>
+#include <boost/intrusive/options.hpp>
 
 namespace monsoon::history::io {
+
+
+class txfile_transaction_error
+: public std::runtime_error
+{
+  public:
+  using std::runtime_error::runtime_error;
+  ~txfile_transaction_error();
+};
+
+class txfile_bad_transaction
+: public std::logic_error
+{
+  public:
+  using std::logic_error::logic_error;
+  ~txfile_bad_transaction();
+};
+
+class txfile_read_only_transaction
+: public txfile_bad_transaction
+{
+  public:
+  using txfile_bad_transaction::txfile_bad_transaction;
+  ~txfile_read_only_transaction();
+};
 
 
 /**
@@ -46,9 +75,43 @@ class txfile {
   private:
   class replacement_map {
     private:
-    using map_type = std::map<monsoon::io::fd::offset_type, std::vector<std::uint8_t>>;
+    using vector_type = std::vector<std::uint8_t>;
+
+    struct entry_type
+    : public boost::intrusive::set_base_hook<>
+    {
+      entry_type(monsoon::io::fd::offset_type first, vector_type second) noexcept
+      : first(std::move(first)),
+        second(std::move(second))
+      {}
+
+      auto end_offset() const noexcept -> monsoon::io::fd::offset_type {
+        return first + second.size();
+      }
+
+      const monsoon::io::fd::offset_type first;
+      const vector_type second;
+    };
+
+    struct entry_key_extractor_ {
+      using type = monsoon::io::fd::offset_type;
+
+      auto operator()(const entry_type& e) const noexcept -> const type& {
+        return e.first;
+      }
+    };
+
+    using map_type = boost::intrusive::set<
+        entry_type,
+        boost::intrusive::key_of_value<entry_key_extractor_>,
+        boost::intrusive::constant_time_size<false>>;
 
     public:
+    ///\brief Opaque type used by txfile to allow transaction semantics for the replacement_map.
+    class tx;
+
+    ~replacement_map() noexcept;
+
     /**
      * \brief Read data from the replacement map if applicable.
      * \details
@@ -65,14 +128,16 @@ class txfile {
     /**
      * \brief Write data into the replacement map.
      * \details
-     * Writes up to \p nbytes from \p buf into the replacement map.
+     * Prepares a transaction that writes \p nbytes from \p buf into the replacement map.
      *
      * If the map already holds data at the given position, it will be replaced.
-     * \return The number of bytes actually written.
+     *
+     * The returned transaction is applied only if the commit method is invoked.
+     * The replacement_map only allows for a single transaction at a time.
      * \throw std::overflow_error if \p buf + \p nbytes exceed the range of an offset.
      * \throw std::bad_alloc if insufficient memory is available to complete the operation.
      */
-    auto write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> std::size_t;
+    auto write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx;
 
     private:
     map_type map_;
@@ -130,6 +195,8 @@ class txfile {
   monsoon::io::fd fd_;
   wal_region wal_;
   tx_sequencer sequencer_;
+  ///\brief Mutex guards the file contents, except for the WAL regions.
+  std::shared_mutex mtx_;
 };
 
 
@@ -253,6 +320,8 @@ class txfile::transaction {
   tx_sequencer::tx seq_;
   ///\brief Hold the result of uncommitted write actions.
   replacement_map replacements_;
+  ///\brief Hold on to the WAL transaction ID.
+  std::optional<wal_record::tx_id_type> tx_id_;
 };
 
 
