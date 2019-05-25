@@ -92,7 +92,7 @@ class txfile::transaction {
   void rollback() noexcept;
 
   auto write_at(offset_type off, const void* buf, std::size_t nbytes) -> std::size_t;
-  auto read_at(offset_type off, void* buf, std::size_t nbytes) -> std::size_t;
+  auto read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t;
 
   private:
   bool read_only_;
