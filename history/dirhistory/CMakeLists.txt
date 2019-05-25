@@ -63,6 +63,8 @@ install (FILES
   include/monsoon/history/dir/hdir_exception.h
   include/monsoon/history/dir/dirhistory_export_.h
   include/monsoon/history/dir/tsdata.h
+  include/monsoon/history/dir/io/tx_sequencer.h
+  include/monsoon/history/dir/io/wal.h
   DESTINATION include/monsoon/history/dir)
 
 add_subdirectory (tests)
