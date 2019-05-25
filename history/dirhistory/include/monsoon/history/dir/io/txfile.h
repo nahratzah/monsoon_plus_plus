@@ -48,9 +48,9 @@ class txfile_read_only_transaction
  * A transactional file works by creating the illusion of a file that is
  * modified by atomically committable transactions.
  *
- * The model of the transaction isolation implemented by this file is the serializable isolation:
- * - the transaction won't be able to read data that is not committed
- * - the transaction, when re-reading data previously read, will read the same data and won't see commits from other transactions
+ * The model of the transaction isolation implemented by this file is the repeatable read isolation:
+ * - the transaction will see all of the data committed before it started.
+ * - the transaction will see none of the data committed before it started.
  *
  * Furthermore, this class guarantees that data that was successfully committed
  * will be stored on disk even in the event of a crash of the binary or the system.
