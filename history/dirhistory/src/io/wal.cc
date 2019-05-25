@@ -320,14 +320,13 @@ auto wal_reader::at_end() const -> bool {
 
 
 wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
-: fd_(&fd),
-  off_(off),
+: off_(off),
   len_(len)
 {
   static_assert(num_segments_ == 2u, "Algorithm assumes two segments.");
   std::array<wal_vector, num_segments_> segments{
-    read_segment_(0),
-    read_segment_(1)
+    read_segment_(fd, 0),
+    read_segment_(fd, 1)
   };
 
   std::sort(
@@ -386,12 +385,12 @@ wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, mo
     for (auto iter = invalidation; iter != segments.end(); ++iter) {
       for (const auto& record_ptr : iter->data) {
         if (committed.count(record_ptr->tx_id()) > 0)
-          record_ptr->apply(*fd_);
+          record_ptr->apply(fd);
       }
     }
 
     // Sync state to disk.
-    fd_->flush();
+    fd.flush();
   }
 
   // Start a new WAL entry that invalidates all previous entries.
@@ -404,13 +403,13 @@ wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, mo
   auto buflen = new_segment.size();
   slot_off_ = buflen;
   while (buflen > 0) {
-    const auto wlen = fd_->write_at(woff, buf, buflen);
+    const auto wlen = fd.write_at(woff, buf, buflen);
     woff += wlen;
     buf += wlen;
     buflen -= wlen;
   }
   slots_active_[segments.front().slot] = true;
-  fd_->flush(); // Sync new segment.
+  fd.flush(); // Sync new segment.
 
   assert(!slots_active_.all() && !slots_active_.none());
 }
@@ -432,12 +431,12 @@ auto wal_region::create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, m
   return wal_region(fd, off, len);
 }
 
-auto wal_region::read_segment_(std::size_t idx) -> wal_vector {
+auto wal_region::read_segment_(monsoon::io::fd& fd, std::size_t idx) -> wal_vector {
   assert(idx < num_segments_);
 
   wal_vector result;
   auto xdr_stream = monsoon::xdr::xdr_stream_reader<wal_reader>(
-      wal_reader(*fd_, off_ + idx * segment_len_(), segment_len_()));
+      wal_reader(fd, off_ + idx * segment_len_(), segment_len_()));
 
   result.slot = idx;
   result.seq = xdr_stream.get_uint32();

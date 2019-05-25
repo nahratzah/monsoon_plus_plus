@@ -234,13 +234,12 @@ class wal_region {
   }
 
   ///\brief Read a WAL segment.
+  ///\param[in] fd The file descriptor.
   ///\param[in] idx The slot index of the segment to read.
-  auto read_segment_(std::size_t idx) -> wal_vector;
+  auto read_segment_(monsoon::io::fd& fd, std::size_t idx) -> wal_vector;
   ///\brief Create an in-memory representation of an empty segment.
   static auto make_empty_segment_(wal_seqno_type seq, bool invalidate) -> monsoon::xdr::xdr_bytevector_ostream<>;
 
-  ///\brief File descriptor in which the WAL resides.
-  monsoon::io::fd* fd_ = nullptr;
   ///\brief Offset of the WAL.
   monsoon::io::fd::offset_type off_;
   ///\brief Length of the WAL.
