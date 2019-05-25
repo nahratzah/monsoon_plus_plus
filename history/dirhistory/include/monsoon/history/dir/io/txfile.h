@@ -2,7 +2,10 @@
 #define MONSOON_HISTORY_DIR_IO_TXFILE_H
 
 #include <cstddef>
+#include <cstdint>
+#include <map>
 #include <utility>
+#include <vector>
 #include <monsoon/io/fd.h>
 #include <monsoon/history/dir/io/tx_sequencer.h>
 #include <monsoon/history/dir/io/wal.h>
@@ -40,6 +43,41 @@ namespace monsoon::history::io {
  * Only one transaction at a time can change the file size.
  */
 class txfile {
+  private:
+  class replacement_map {
+    private:
+    using map_type = std::map<monsoon::io::fd::offset_type, std::vector<std::uint8_t>>;
+
+    public:
+    /**
+     * \brief Read data from the replacement map if applicable.
+     * \details
+     * Data in the replacement map is sparse.
+     * Thus not all reads may succeed.
+     * When a read doesn't succeed, we'll indicate that by returning a zero-bytes-read return value.
+     *
+     * \param[in] off The offset at which the read happens.
+     * \param[out] buf Buffer into which to read data.
+     * \param[in,out] nbytes Number of bytes to read. If the read happens inside a gap of the replacement map, the value will be clamped to not exceed that gap.
+     * \return The number of bytes read from the replacement map, or 0 if no bytes could be read.
+     */
+    auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t;
+    /**
+     * \brief Write data into the replacement map.
+     * \details
+     * Writes up to \p nbytes from \p buf into the replacement map.
+     *
+     * If the map already holds data at the given position, it will be replaced.
+     * \return The number of bytes actually written.
+     * \throw std::overflow_error if \p buf + \p nbytes exceed the range of an offset.
+     * \throw std::bad_alloc if insufficient memory is available to complete the operation.
+     */
+    auto write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> std::size_t;
+
+    private:
+    map_type map_;
+  };
+
   public:
   class transaction;
 
@@ -213,6 +251,8 @@ class txfile::transaction {
   bool read_only_;
   txfile* owner_ = nullptr;
   tx_sequencer::tx seq_;
+  ///\brief Hold the result of uncommitted write actions.
+  replacement_map replacements_;
 };
 
 
