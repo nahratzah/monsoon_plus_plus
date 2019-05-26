@@ -103,12 +103,12 @@ class wal_record {
   ///\params[in] tx_id The transaction ID.
   ///\params[in] offset The position at which the write happens.
   ///\params[in] data The data that is to be written.
-  static auto make_write(tx_id_type tx_id, std::uint64_t offset, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record>;
+  static auto make_write(tx_id_type tx_id, std::uint64_t offset, std::vector<std::uint8_t>&& data) -> std::unique_ptr<wal_record>;
   ///\brief Create a record that describes a write operation.
   ///\params[in] tx_id The transaction ID.
   ///\params[in] offset The position at which the write happens.
   ///\params[in] data The data that is to be written.
-  static auto make_write(tx_id_type tx_id, std::uint64_t offset, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record>;
+  static auto make_write(tx_id_type tx_id, std::uint64_t offset, const std::vector<std::uint8_t>& data) -> std::unique_ptr<wal_record>;
   ///\brief Create a record indicating the file is being resized.
   ///\params[in] tx_id The transaction ID.
   ///\params[in] new_size The new size of the file.
