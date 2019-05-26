@@ -2,10 +2,10 @@
 #define MONSOON_HISTORY_DIR_IO_REPLACEMENT_MAP_H
 
 #include <monsoon/history/dir/dirhistory_export_.h>
-#include <cstdint>
-#include <iterator>
-#include <cstring>
 #include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <iterator>
 #include <vector>
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/options.hpp>
@@ -76,8 +76,6 @@ class monsoon_dirhistory_export_ replacement_map {
    * \details
    * Prepares a transaction that writes \p nbytes from \p buf into the replacement map.
    *
-   * If the map already holds data at the given position, it will be replaced.
-   *
    * The returned transaction is applied only if the commit method is invoked.
    *
    * The replacement_map only allows for a single transaction at a time.
@@ -91,6 +89,27 @@ class monsoon_dirhistory_export_ replacement_map {
    * \throw std::bad_alloc if insufficient memory is available to complete the operation.
    */
   auto write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes, bool overwrite = true) -> tx;
+
+  /**
+   * \brief Write data into the replacement map, from a file.
+   * \details
+   * Prepares a transaction that writes \p nbytes into the replacement map.
+   * The bytes written are sourced from \p fd at offset \p fd_off.
+   *
+   * The returned transaction is applied only if the commit method is invoked.
+   *
+   * The replacement_map only allows for a single transaction at a time.
+   * The exception begin that multiple transaction are allowed if all transactions
+   * are non-replacing and do not overlap.
+   * \param[in] off The offset at which the write takes place.
+   * \param[in] fd The file holding the bytes to be written.
+   * \param[in] fd_off The position in the file at which the bytes to be written reside.
+   * \param[in] nbytes Number of bytes that is to be written.
+   * \param[in] overwrite If set, allow this write to overwrite previous writes on this replacement_map.
+   * \throw std::overflow_error if \p buf + \p nbytes exceed the range of an offset.
+   * \throw std::bad_alloc if insufficient memory is available to complete the operation.
+   */
+  auto write_at_from_file(monsoon::io::fd::offset_type off, const monsoon::io::fd& fd, monsoon::io::fd::offset_type fd_off, std::size_t nbytes, bool overwrite = true) -> tx;
 
   private:
   auto write_at_with_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx;
