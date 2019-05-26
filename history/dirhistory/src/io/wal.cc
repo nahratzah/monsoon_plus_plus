@@ -1,6 +1,6 @@
 #include <monsoon/history/dir/io/wal.h>
 #include <cassert>
-#include <unordered_set>
+#include <unordered_map>
 #include <monsoon/xdr/xdr_stream.h>
 
 namespace monsoon::history::io {
@@ -430,20 +430,25 @@ wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, mo
         throw wal_error("missing WAL sequence IDs");
     }
 
-    // Figure out the complete set of committed transactions.
-    std::unordered_set<wal_record::tx_id_type> committed;
-    for (auto iter = invalidation; iter != segments.end(); ++iter) {
-      for (const auto& record_ptr : iter->data) {
-        if (record_ptr->is_commit())
-          committed.insert(record_ptr->tx_id());
-      }
+    // Drop all records preceding the invalidation.
+    for (auto i = std::find_if(invalidation->data.begin(), invalidation->data.end(), [](const auto& r) -> bool { return r->is_invalidate_previous_wal(); });
+        i != invalidation->data.end();
+        i = std::find_if(invalidation->data.begin(), invalidation->data.end(), [](const auto& r) -> bool { return r->is_invalidate_previous_wal(); })) {
+      invalidation->data.erase(invalidation->data.begin(), i);
     }
 
     // Replay the WAL.
+    std::unordered_map<wal_record::tx_id_type, std::vector<const wal_record*>> records;
+    bool invalidation_seen = false;
     for (auto iter = invalidation; iter != segments.end(); ++iter) {
       for (const auto& record_ptr : iter->data) {
-        if (committed.count(record_ptr->tx_id()) > 0)
-          record_ptr->apply(fd);
+        if (invalidation_seen) {
+          records[record_ptr->tx_id()].push_back(record_ptr.get());
+          if (record_ptr->is_commit()) {
+            for (const auto r : records[record_ptr->tx_id()]) r->apply(fd);
+            records[record_ptr->tx_id()].clear();
+          }
+        }
       }
     }
 
