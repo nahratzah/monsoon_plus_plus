@@ -261,6 +261,12 @@ class txfile::transaction {
   auto read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t;
 
   private:
+  auto offset_to_fd_offset_(offset_type off) const -> offset_type {
+    const offset_type fd_off = off + owner_->wal_.wal_end_offset();
+    if (fd_off < off) throw std::overflow_error("off");
+    return fd_off;
+  }
+
   bool read_only_;
   impl_* owner_ = nullptr;
   tx_sequencer::tx seq_;

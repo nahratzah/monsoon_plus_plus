@@ -38,7 +38,7 @@ auto txfile::transaction::write_at(offset_type off, const void* buf, std::size_t
   assert(tx_id_.has_value());
   auto wal_op = wal_record::make_write(
       *tx_id_,
-      off,
+      offset_to_fd_offset_(off),
       std::vector<std::uint8_t>(reinterpret_cast<const std::uint8_t*>(buf), reinterpret_cast<const std::uint8_t*>(buf) + nbytes));
 
 #if 0 // XXX implement required code
@@ -54,20 +54,21 @@ auto txfile::transaction::write_at(offset_type off, const void* buf, std::size_t
 auto txfile::transaction::read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t {
   if (!*this) throw txfile_bad_transaction("txfile::transaction::read_at");
 
+  // Read from the writes in the transaction.
   std::size_t rlen = replacements_.read_at(off, buf, nbytes);
   if (rlen != 0u) return rlen;
   // nbytes will have been modified to not overlap any replacements_.
 
-  // Protect against changes in the file contents.
+  // Protect against changes in the file contents and transaction sequence.
   std::shared_lock lck{ owner_->mtx_ };
 
-#if 0 // XXX evaluate changes by other transactions.
-  rlen = owner_->changes_.read_at(seq_, off, buf, nbytes);
+  // Read from the recorded change-sets of each transaction.
+  rlen = seq_.read_at(off, buf, nbytes);
+  if (rlen != 0u) return rlen;
   // nbytes will have been modified to not overlap any transactions that apply.
-#endif
 
   // data is only present in the file.
-  return owner_->fd_.read_at(off, buf, nbytes);
+  return owner_->fd_.read_at(offset_to_fd_offset_(off), buf, nbytes);
 }
 
 
