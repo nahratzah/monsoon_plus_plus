@@ -4,7 +4,7 @@ namespace monsoon::history::io {
 
 
 tx_sequencer::tx::tx(tx_sequencer& seq)
-: seq_(seq.weak_from_this()),
+: seq_(seq.shared_from_this()),
   record_(new record())
 {
   boost::intrusive_ptr<record> tmp = record_;
@@ -13,19 +13,15 @@ tx_sequencer::tx::tx(tx_sequencer& seq)
 }
 
 tx_sequencer::tx::~tx() noexcept {
-  if (record_ != nullptr) {
-    const std::shared_ptr<tx_sequencer> seq_ptr = seq_.lock();
-    if (seq_ptr != nullptr) {
-      seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
-      seq_ptr->do_maintenance_();
-    }
+  if (record_ != nullptr && !record_->committed) {
+    seq_->c_.erase_and_dispose(seq_->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+    seq_->do_maintenance_();
   }
 }
 
 auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t {
-  const auto seq_ptr = std::shared_ptr<const tx_sequencer>(seq_);
-  for (record_list::const_iterator iter = seq_ptr->c_.iterator_to(*record_);
-      iter != seq_ptr->c_.end();
+  for (record_list::const_iterator iter = seq_->c_.iterator_to(*record_);
+      iter != seq_->c_.end();
       ++iter) {
     if (iter->committed) {
       const std::size_t rlen = iter->replaced.read_at(off, buf, nbytes);
@@ -35,13 +31,12 @@ auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std:
   return 0;
 }
 
-void tx_sequencer::tx::commit() {
-  const auto seq_ptr = std::shared_ptr<tx_sequencer>(seq_);
-  seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+void tx_sequencer::tx::commit() noexcept {
+  seq_->c_.erase_and_dispose(seq_->c_.iterator_to(*record_), &tx_sequencer::disposer_);
   record_->committed = true;
-  seq_ptr->c_.push_back(*record_);
+  seq_->c_.push_back(*record_);
   record_.detach();
-  seq_ptr->do_maintenance_();
+  seq_->do_maintenance_();
 }
 
 void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) {

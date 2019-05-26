@@ -75,7 +75,7 @@ class tx_sequencer
      * Records that the transaction was committed and exposes the change set to
      * read operations.
      */
-    void commit();
+    void commit() noexcept;
     /**
      * \brief Record a change.
      * \details
@@ -85,7 +85,7 @@ class tx_sequencer
     void record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes);
 
     private:
-    std::weak_ptr<tx_sequencer> seq_;
+    std::shared_ptr<tx_sequencer> seq_;
     boost::intrusive_ptr<record> record_;
   };
 
