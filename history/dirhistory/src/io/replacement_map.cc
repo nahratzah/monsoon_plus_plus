@@ -38,7 +38,14 @@ auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::
   return rlen; // Indicate we actually read something.
 }
 
-auto replacement_map::write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx {
+auto replacement_map::write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes, bool overwrite) -> tx {
+  if (overwrite)
+    return write_at_with_overwrite_(off, buf, nbytes);
+  else
+    return write_at_without_overwrite_(off, buf, nbytes);
+}
+
+auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx {
   const monsoon::io::fd::offset_type end_off = off + nbytes;
   if (end_off < off) throw std::overflow_error("replacement_map: off + nbytes");
 
@@ -125,6 +132,68 @@ auto replacement_map::write_at(monsoon::io::fd::offset_type off, const void* buf
     assert(vector_pos == vector.end());
     t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector)));
     off += written;
+  }
+
+  return t;
+}
+
+auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx {
+  const monsoon::io::fd::offset_type end_off = off + nbytes;
+  if (end_off < off) throw std::overflow_error("replacement_map: off + nbytes");
+
+  tx t;
+  t.map_ = &map_;
+
+  /* We only write in the gaps, so we position 'iter' and 'iter_succ' such that
+   * they are the delimiters of the first gap at/after 'off'.
+   */
+  while (off < end_off) {
+    // Find the first region *after* off.
+    const map_type::iterator succ = map_.upper_bound(off);
+    assert(succ == map_.end() || succ->first > off);
+
+    // Find the region at-or-before off.
+    map_type::iterator iter = (succ == map_.begin() ? map_.end() : std::prev(succ));
+    assert(iter == map_.end() || iter->first <= off);
+    if (iter != map_.end() && iter->end_offset() >= end_off) break; // GUARD: stop if there are no intersecting gaps.
+    assert(iter->end_offset() < end_off);
+
+    if (iter != map_.end() && iter->end_offset() > off) {
+      const monsoon::io::fd::offset_type skip = iter->end_offset() - off;
+      off += skip;
+      buf = reinterpret_cast<const std::uint8_t*>(buf) + skip;
+    }
+    assert(iter == map_.end() || iter->end_offset() <= off);
+
+    map_type::iterator iter_succ = (iter == map_.end() ? map_.end() : std::next(iter));
+    if (iter_succ->first >= end_off) iter_succ = map_.end();
+    assert(iter_succ == map_.end() || iter_succ->first > off);
+
+    monsoon::io::fd::offset_type write_end_off = (iter_succ == map_.end() ? end_off : iter_succ->first);
+    assert(write_end_off <= end_off);
+
+    while (off < write_end_off) {
+      vector_type vector;
+      vector_type::size_type to_reserve = vector.max_size();
+      if (to_reserve > write_end_off - off) to_reserve = write_end_off - off;
+      for (;;) {
+        try {
+          vector.reserve(to_reserve);
+          break;
+        } catch (const std::bad_alloc&) {
+          if (to_reserve <= 1u) throw;
+          to_reserve /= 2u;
+        }
+      }
+
+      std::copy_n(reinterpret_cast<const std::uint8_t*>(buf), to_reserve, std::back_inserter(vector));
+      t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector)));
+      off += to_reserve;
+      buf = reinterpret_cast<const std::uint8_t*>(buf) + to_reserve;
+    }
+
+    assert(off == write_end_off);
+    iter = std::move(iter_succ);
   }
 
   return t;

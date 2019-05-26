@@ -80,12 +80,19 @@ class monsoon_dirhistory_export_ replacement_map {
    *
    * The returned transaction is applied only if the commit method is invoked.
    * The replacement_map only allows for a single transaction at a time.
+   * \param[in] off The offset at which the write takes place.
+   * \param[in] buf The buffer holding the bytes to be written.
+   * \param[in] nbytes Number of bytes that is to be written.
+   * \param[in] overwrite If set, allow this write to overwrite previous writes on this replacement_map.
    * \throw std::overflow_error if \p buf + \p nbytes exceed the range of an offset.
    * \throw std::bad_alloc if insufficient memory is available to complete the operation.
    */
-  auto write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx;
+  auto write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes, bool overwrite = true) -> tx;
 
   private:
+  auto write_at_with_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx;
+  auto write_at_without_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx;
+
   map_type map_;
 };
 

@@ -1,5 +1,4 @@
 #include <monsoon/history/dir/io/tx_sequencer.h>
-#include <tuple>
 
 namespace monsoon::history::io {
 
@@ -46,7 +45,7 @@ void tx_sequencer::tx::commit() {
 }
 
 void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) {
-  return record_->replaced.write_at(off, buf, nbytes).commit();
+  return record_->replaced.write_at(off, buf, nbytes, false).commit();
 }
 
 
