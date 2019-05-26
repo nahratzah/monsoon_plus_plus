@@ -12,6 +12,7 @@
 #include <monsoon/io/fd.h>
 #include <monsoon/io/stream.h>
 #include <monsoon/xdr/xdr.h>
+#include <monsoon/history/dir/io/replacement_map.h>
 
 namespace monsoon::history::io {
 
@@ -29,6 +30,9 @@ class wal_error
   using std::runtime_error::runtime_error;
   ~wal_error();
 };
+
+
+class wal_region;
 
 
 ///\brief Types of WAL entries.
@@ -68,6 +72,8 @@ class wal_record {
   virtual auto do_write(monsoon::xdr::xdr_ostream& out) const -> void = 0;
   ///\brief Apply the operation described in this WAL record.
   virtual auto do_apply(monsoon::io::fd& fd) const -> void = 0;
+  ///\brief Apply the operation described in this WAL record.
+  virtual void do_apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo_op) const;
   public:
   ///\brief Read a WAL record from an XDR stream.
   static auto read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_record>;
@@ -75,6 +81,8 @@ class wal_record {
   void write(monsoon::xdr::xdr_ostream& out) const;
   ///\brief Apply the operation described in this WAL record.
   void apply(monsoon::io::fd& fd) const;
+  ///\brief Apply the operation described in this WAL record.
+  void apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo_op) const;
   ///\brief Test if this WAL record denotes the end of a WAL segment.
   auto is_end() const noexcept -> bool;
   ///\brief Test if this WAL record indicates a transaction commit.

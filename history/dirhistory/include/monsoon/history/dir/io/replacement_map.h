@@ -79,7 +79,10 @@ class monsoon_dirhistory_export_ replacement_map {
    * If the map already holds data at the given position, it will be replaced.
    *
    * The returned transaction is applied only if the commit method is invoked.
+   *
    * The replacement_map only allows for a single transaction at a time.
+   * The exception begin that multiple transaction are allowed if all transactions
+   * are non-replacing and do not overlap.
    * \param[in] off The offset at which the write takes place.
    * \param[in] buf The buffer holding the bytes to be written.
    * \param[in] nbytes Number of bytes that is to be written.
