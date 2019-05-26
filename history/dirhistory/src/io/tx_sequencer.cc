@@ -52,4 +52,9 @@ void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off,
 }
 
 
+tx_sequencer::~tx_sequencer() noexcept {
+  c_.clear_and_dispose(&tx_sequencer::disposer_);
+}
+
+
 } /* namespace monsoon::history::io */

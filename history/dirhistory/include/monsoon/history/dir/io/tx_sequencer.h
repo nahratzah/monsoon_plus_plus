@@ -65,6 +65,8 @@ class tx_sequencer
   tx_sequencer& operator=(const tx_sequencer&) = delete;
   tx_sequencer& operator=(tx_sequencer&&) = delete;
 
+  ~tx_sequencer() noexcept;
+
   auto begin() -> tx {
     return tx(*this);
   }
