@@ -18,9 +18,7 @@ tx_sequencer::tx::~tx() noexcept {
     const std::shared_ptr<tx_sequencer> seq_ptr = seq_.lock();
     if (seq_ptr != nullptr) {
       seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
-      while (!seq_ptr->c_.empty() && seq_ptr->c_.front().committed) {
-        seq_ptr->c_.pop_front_and_dispose(&tx_sequencer::disposer_);
-      }
+      seq_ptr->do_maintenance_();
     }
   }
 }
@@ -40,11 +38,11 @@ auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std:
 
 void tx_sequencer::tx::commit() {
   const auto seq_ptr = std::shared_ptr<tx_sequencer>(seq_);
-  if (seq_ptr != nullptr)
-    seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+  seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
   record_->committed = true;
   seq_ptr->c_.push_back(*record_);
   record_.detach();
+  seq_ptr->do_maintenance_();
 }
 
 void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) {
@@ -54,6 +52,11 @@ void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off,
 
 tx_sequencer::~tx_sequencer() noexcept {
   c_.clear_and_dispose(&tx_sequencer::disposer_);
+}
+
+void tx_sequencer::do_maintenance_() noexcept {
+  while (!c_.empty() && c_.front().committed)
+    c_.pop_front_and_dispose(&tx_sequencer::disposer_);
 }
 
 

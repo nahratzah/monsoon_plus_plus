@@ -39,6 +39,11 @@ class tx_sequencer
   }
 
   public:
+  /**
+   * \brief A transaction in the sequencer.
+   * \details
+   * The transaction exposes methods that operate on the sequencer.
+   */
   class tx {
     friend tx_sequencer;
 
@@ -49,8 +54,34 @@ class tx_sequencer
     tx() = default;
     ~tx() noexcept;
 
+    /**
+     * \brief Perform a transaction-isolated read.
+     * \details
+     * This read operation explores the sequence of transactions
+     * and uses the replacement_map in transactions written after,
+     * to retrieve results from before those transactions were committed.
+     *
+     * If there is not replacement at the \p off, the function will clamp
+     * \p nbytes appropriately and return 0.
+     * \param[in] off The offset at which to read.
+     * \param[out] buf The buffer into which to read.
+     * \param[in,out] nbytes The number of bytes that is to be read.
+     * \return Number of bytes read.
+     */
     auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t;
+    /**
+     * \brief Commit this transaction.
+     * \details
+     * Records that the transaction was committed and exposes the change set to
+     * read operations.
+     */
     void commit();
+    /**
+     * \brief Record a change.
+     * \details
+     * The read logic of the tx_sequencer depends on accurately recording
+     * what data is being changed during the commit phase.
+     */
     void record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes);
 
     private:
@@ -67,11 +98,20 @@ class tx_sequencer
 
   ~tx_sequencer() noexcept;
 
+  ///\brief Start a new transaction.
+  ///\details
+  ///Read operations on the returned transaction will be sequenced between
+  ///all commits that have happened before, and before any commits that
+  ///happened after this transaction was started.
+  ///\return The new transaction.
   auto begin() -> tx {
     return tx(*this);
   }
 
   private:
+  void do_maintenance_() noexcept;
+
+  ///\brief Collection holding the records of the transactions.
   record_list c_;
 };
 
