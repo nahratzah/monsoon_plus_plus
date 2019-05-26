@@ -73,7 +73,7 @@ class wal_record {
   ///\brief Apply the operation described in this WAL record.
   virtual auto do_apply(monsoon::io::fd& fd) const -> void = 0;
   ///\brief Apply the operation described in this WAL record.
-  virtual void do_apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo_op) const;
+  virtual auto do_apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo_op) const -> void = 0;
   public:
   ///\brief Read a WAL record from an XDR stream.
   static auto read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_record>;

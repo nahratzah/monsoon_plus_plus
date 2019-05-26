@@ -160,8 +160,7 @@ class wal_record_resize
   }
 
   auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {
-    assert(wal.wal_end_offset() <= dst);
-    assert(wal.wal_end_offset() <= src);
+    assert(wal.wal_end_offset() <= new_size);
 
     std::vector<replacement_map::tx> tx_list;
     const auto old_size = fd.size();
