@@ -13,20 +13,19 @@ auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::
   auto iter = map_.upper_bound(off);
   assert(iter == map_.end() || iter->first > off);
 
-  // Update nbytes to be clipped at next-region-start.
-  if (iter != map_.end() && nbytes > iter->first - off)
-    nbytes = iter->first - off;
-
   // If the first region *after* off is the very first in the list, we can't
   // read anything here.
-  if (iter == map_.begin()) return 0;
+  // Same if the predecessor does not intersect the requested offset.
+  if (iter == map_.begin() || std::prev(iter)->end_offset() <= off) {
+    // Update nbytes to be clipped at next-region-start.
+    if (nbytes > iter->first - off) nbytes = iter->first - off;
+    return 0;
+  }
   // Change iter to point at the at-or-before entry.
   --iter;
 
   // Validate assertions.
   assert(iter->first <= off);
-  // If iter points at a before entry, this read can't be satisfied here.
-  if (iter->first + iter->second.size() <= off) return 0;
 
   // Compute local offset into the *at* entry.
   const std::size_t local_off = off - iter->first;
@@ -83,15 +82,21 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
     bytes_from_pred = off - pred->first;
   }
 
-  // Mark any full-replaced entries as to-be-erased.
-  // Move succ forward until it's the first not-fully-replaced entry after off.
-  while (succ != map_.end() && succ->end_offset() <= end_off)
-    t.to_erase_.push_back(succ++);
-
-  // We may need to include bytes from succ.
-  if (succ != map_.end() && succ->first < end_off) {
-    t.to_erase_.push_back(succ);
+  if (pred != map_.end() && pred->end_offset() > end_off) {
+    // Handle the case where pred extends both sides.
+    succ = pred;
     bytes_from_succ = succ->end_offset() - end_off;
+  } else {
+    // Mark any full-replaced entries as to-be-erased.
+    // Move succ forward until it's the first not-fully-replaced entry after off.
+    while (succ != map_.end() && succ->end_offset() <= end_off)
+      t.to_erase_.push_back(succ++);
+
+    // We may need to include bytes from succ.
+    if (succ != map_.end() && succ->first < end_off) {
+      t.to_erase_.push_back(succ);
+      bytes_from_succ = succ->end_offset() - end_off;
+    }
   }
 
   // Reserve at least some bytes into the vector.
@@ -99,6 +104,7 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
   const std::uint8_t* pred_buf = pred->second.data();
   const std::uint8_t* byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
   const std::uint8_t* succ_buf = succ->second.data() + succ->second.size() - bytes_from_succ;
+  off -= bytes_from_pred;
   while (bytes_from_succ > 0 || nbytes > 0 || bytes_from_pred > 0) {
     const std::size_t Max = vector.max_size();
     std::size_t to_reserve = bytes_from_pred;
@@ -109,7 +115,7 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
     if (Max - to_reserve < bytes_from_succ) // overflow case
       to_reserve = Max;
     else
-      to_reserve += nbytes;
+      to_reserve += bytes_from_succ;
 
     for (;;) {
       try {
@@ -139,7 +145,7 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
     written += wlen;
 
     wlen = std::min(bytes_from_succ, to_reserve);
-    vector_pos = std::copy_n(byte_buf, wlen, vector_pos);
+    vector_pos = std::copy_n(succ_buf, wlen, vector_pos);
     bytes_from_succ -= wlen;
     succ_buf += wlen;
     to_reserve -= wlen;
