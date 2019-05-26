@@ -37,6 +37,7 @@ void tx_sequencer::tx::commit() noexcept {
   seq_->c_.push_back(*record_);
   record_.detach();
   seq_->do_maintenance_();
+  seq_.reset();
 }
 
 void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) {
