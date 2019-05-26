@@ -175,82 +175,6 @@ class wal_record_resize
 };
 
 
-class wal_record_copy
-: public wal_record
-{
-  private:
-  static constexpr std::uint64_t BUF_SIZE = 4u << 20;
-
-  public:
-  wal_record_copy() = delete;
-
-  wal_record_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t dst, std::uint64_t len)
-  : wal_record(tx_id),
-    src(src),
-    dst(dst),
-    len(len)
-  {}
-
-  ~wal_record_copy() noexcept override = default;
-
-  static auto from_stream(tx_id_type tx_id, monsoon::xdr::xdr_istream& in)
-  -> std::unique_ptr<wal_record_copy> {
-    const std::uint64_t src = in.get_uint64();
-    const std::uint64_t dst = in.get_uint64();
-    const std::uint64_t len = in.get_uint64();
-    return std::make_unique<wal_record_copy>(tx_id, src, dst, len);
-  }
-
-  auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::copy; }
-
-  private:
-  auto do_write(monsoon::xdr::xdr_ostream& out) const -> void override {
-    out.put_uint64(src);
-    out.put_uint64(dst);
-    out.put_uint64(len);
-  }
-
-  auto do_apply(monsoon::io::fd& fd) const -> void override {
-    std::uint64_t src = this->src;
-    std::uint64_t dst = this->dst;
-    std::uint64_t len = this->len;
-
-    std::vector<std::uint8_t> buf;
-    if (len < BUF_SIZE)
-      buf.resize(len);
-    else
-      buf.resize(BUF_SIZE);
-
-    while (len > 0) {
-      auto rlen = fd.read_at(src, buf.data(), std::min(len, buf.size()));
-
-      while (rlen > 0) {
-        const std::uint8_t* buf_ptr = buf.data();
-        const auto wlen = fd.write_at(dst, buf_ptr, rlen);
-        src += wlen;
-        dst += wlen;
-        len -= wlen;
-        rlen -= wlen;
-        buf_ptr += wlen;
-      }
-    }
-  }
-
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {
-    assert(wal.wal_end_offset() <= dst);
-    assert(wal.wal_end_offset() <= src);
-
-    auto tx_list = prepare_undo_information(fd, wal, undo_op, dst, len);
-
-    do_apply(fd);
-
-    for (auto& tx : tx_list) tx.commit();
-  }
-
-  std::uint64_t src, dst, len;
-};
-
-
 } /* namespace monsoon::history::io::<unnamed> */
 
 
@@ -288,9 +212,6 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
       break;
     case static_cast<std::uint8_t>(wal_entry::resize):
       result = wal_record_resize::from_stream(tx_id, in);
-      break;
-    case static_cast<std::uint8_t>(wal_entry::copy):
-      result = wal_record_copy::from_stream(tx_id, in);
       break;
     default:
       throw wal_error("unrecognized WAL entry");
@@ -349,10 +270,6 @@ auto wal_record::make_write(tx_id_type tx_id, std::uint64_t offset, const std::v
 
 auto wal_record::make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::unique_ptr<wal_record> {
   return std::make_unique<wal_record_resize>(tx_id, new_size);
-}
-
-auto wal_record::make_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t dst, std::uint64_t len) -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_copy>(tx_id, src, dst, len);
 }
 
 

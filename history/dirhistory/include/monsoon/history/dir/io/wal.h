@@ -41,8 +41,7 @@ enum class wal_entry : std::uint8_t {
   commit = 1, ///<\brief Transaction commit.
   invalidate_previous_wal = 2, ///<\brief Preceding WAL segments have been processed and consequently are invalidated.
   write = 10, ///<\brief Write operation that is part of a transaction.
-  resize = 11, ///<\brief File resize operation that is part of a transaction.
-  copy = 20 ///<\brief Copy operation, where contents from within the file is copied, as part of a transaction.
+  resize = 11 ///<\brief File resize operation that is part of a transaction.
 };
 
 
@@ -113,12 +112,6 @@ class wal_record {
   ///\params[in] tx_id The transaction ID.
   ///\params[in] new_size The new size of the file.
   static auto make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::unique_ptr<wal_record>;
-  ///\brief Create a record that indicates a copy operation.
-  ///\params[in] tx_id The transaction ID.
-  ///\params[in] src The offset at which the data that is to be copied is stored.
-  ///\params[in] dst The offset at which the data is to be written.
-  ///\params[in] len The amount of bytes that are to be written.
-  static auto make_copy(tx_id_type tx_id, std::uint64_t src, std::uint64_t dst, std::uint64_t len) -> std::unique_ptr<wal_record>;
 
   private:
   ///\brief The transaction ID of the record.

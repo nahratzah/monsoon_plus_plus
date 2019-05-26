@@ -28,9 +28,6 @@ auto operator<<(std::ostream& o, wal_entry e) -> std::ostream& {
     case wal_entry::resize:
       o << "wal_entry::resize";
       break;
-    case wal_entry::copy:
-      o << "wal_entry::copy";
-      break;
   }
   return o;
 }
@@ -111,22 +108,6 @@ TEST(wal_resize) {
   CHECK_EQUAL(std::vector<std::uint8_t>({
           0u, 0u, 17u, 11u, // 3-byte tx_id, 1-byte record type
           0u, 0u, 0u, 0u, 0x12u, 0x34u, 0x56u, 0x78u // 8-byte new-size
-      }), wal_record_as_bytes(*ptr));
-}
-
-TEST(wal_copy) {
-  auto ptr = wal_record::make_copy(17, 0x123456789abcdef0ull, 0x00000f0000000000ull, 0x1900u);
-
-  CHECK_EQUAL(wal_entry::copy, ptr->get_wal_entry());
-  CHECK_EQUAL(false, ptr->is_end());
-  CHECK_EQUAL(false, ptr->is_commit());
-  CHECK_EQUAL(false, ptr->is_invalidate_previous_wal());
-  CHECK_EQUAL(17u, ptr->tx_id());
-  CHECK_EQUAL(std::vector<std::uint8_t>({
-          0u, 0u, 17u, 20u, // 3-byte tx_id, 1-byte record type
-          0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0, // 8-byte src offset
-          0x00, 0x00, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, // 8-byte dst offset
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x19, 0x00 // 8-byte length
       }), wal_record_as_bytes(*ptr));
 }
 
