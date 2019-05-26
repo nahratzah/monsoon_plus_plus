@@ -7,6 +7,22 @@ namespace monsoon::history::io {
 namespace {
 
 
+auto prepare_undo_information(const monsoon::io::fd& fd, const wal_region& wal, replacement_map& undo_op, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> std::vector<replacement_map::tx> {
+  std::vector<replacement_map::tx> tx;
+
+  assert(wal.wal_end_offset() <= off);
+  while (len > 0u) {
+    std::size_t bufsiz = 64u * 1024u * 1024u;
+    if (bufsiz > len) bufsiz = len;
+    tx.emplace_back(undo_op.write_at_from_file(off - wal.wal_end_offset(), fd, off, bufsiz, false));
+    off += bufsiz;
+    len -= bufsiz;
+  }
+
+  return tx;
+}
+
+
 class wal_record_end
 : public wal_record
 {
@@ -100,22 +116,7 @@ class wal_record_write
   auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {
     assert(wal.wal_end_offset() <= offset);
 
-    // Create a vector buffer to read in the data we're going to replace.
-    auto undo_buf = std::unique_ptr<std::uint8_t[]>(new std::uint8_t[data.size()]);
-    {
-      // Read contents that is to be replaced and store it in the undo_op map.
-      auto undo_off = offset;
-      std::size_t undo_len = data.size();
-      auto buf_pos = undo_buf.get();
-      while (undo_len > 0) {
-        const auto rlen = fd.read_at(undo_off, buf_pos, undo_len);
-        undo_off += rlen;
-        undo_len -= rlen;
-        buf_pos += rlen;
-      }
-    }
-    // Prepare the undo_op.
-    auto tx = undo_op.write_at(offset - wal.wal_end_offset(), undo_buf.get(), data.size(), false);
+    auto tx = undo_op.write_at_from_file(offset - wal.wal_end_offset(), fd, offset, data.size(), false);
 
     // Apply changes on the file.
     do_apply(fd);
@@ -164,25 +165,7 @@ class wal_record_resize
 
     std::vector<replacement_map::tx> tx_list;
     const auto old_size = fd.size();
-    if (old_size > new_size) {
-      auto undo_off = new_size;
-      auto undo_len = old_size - new_size;
-
-      // Create a vector buffer to read in the data we're going to replace.
-      std::size_t buf_size = 4u * 1024u * 1024u;
-      if (buf_size > undo_len) buf_size = undo_len;
-      auto undo_buf = std::unique_ptr<std::uint8_t[]>(new std::uint8_t[buf_size]);
-
-      // Read contents that is to be replaced and store it in the undo_op map.
-      while (undo_len > 0) {
-        auto read_at_len = buf_size;
-        if (read_at_len > undo_len) read_at_len = undo_len;
-        const auto rlen = fd.read_at(undo_off, undo_buf.get(), read_at_len);
-        tx_list.emplace_back(undo_op.write_at(undo_off - wal.wal_end_offset(), undo_buf.get(), rlen, false));
-        undo_off += rlen;
-        undo_len -= rlen;
-      }
-    }
+    if (old_size > new_size) tx_list = prepare_undo_information(fd, wal, undo_op, new_size, old_size - new_size);
 
     do_apply(fd);
 
@@ -258,25 +241,7 @@ class wal_record_copy
     assert(wal.wal_end_offset() <= dst);
     assert(wal.wal_end_offset() <= src);
 
-    std::vector<replacement_map::tx> tx_list;
-    // Create a vector buffer to read in the data we're going to replace.
-    std::size_t buf_size = BUF_SIZE;
-    if (buf_size > len) buf_size = len;
-    auto undo_buf = std::unique_ptr<std::uint8_t[]>(new std::uint8_t[buf_size]);
-    {
-      // Read contents that is to be replaced and store it in the undo_op map.
-      auto undo_off = dst;
-      auto undo_len = len;
-      while (undo_len > 0) {
-        std::size_t read_at_len = buf_size;
-        if (read_at_len > undo_len) read_at_len = undo_len;
-        const auto rlen = fd.read_at(undo_off, undo_buf.get(), read_at_len);
-        tx_list.emplace_back(undo_op.write_at(undo_off - wal.wal_end_offset(), undo_buf.get(), rlen, false));
-        undo_off += rlen;
-        undo_len -= rlen;
-      }
-    }
-    undo_buf.reset();
+    auto tx_list = prepare_undo_information(fd, wal, undo_op, dst, len);
 
     do_apply(fd);
 

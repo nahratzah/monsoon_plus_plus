@@ -1,4 +1,5 @@
 #include <monsoon/history/dir/io/replacement_map.h>
+#include <memory>
 
 namespace monsoon::history::io {
 
@@ -43,6 +44,21 @@ auto replacement_map::write_at(monsoon::io::fd::offset_type off, const void* buf
     return write_at_with_overwrite_(off, buf, nbytes);
   else
     return write_at_without_overwrite_(off, buf, nbytes);
+}
+
+auto replacement_map::write_at_from_file(monsoon::io::fd::offset_type off, const monsoon::io::fd& fd, monsoon::io::fd::offset_type fd_off, std::size_t nbytes, bool overwrite) -> tx {
+  std::unique_ptr<std::uint8_t[]> buffer{ new std::uint8_t[nbytes] };
+
+  auto fd_nbytes = nbytes;
+  std::uint8_t* buffer_pos = buffer.get();
+  while (fd_nbytes > 0) {
+    const auto rlen = fd.read_at(fd_off, buffer_pos, fd_nbytes);
+    buffer_pos += rlen;
+    fd_off += rlen;
+    fd_nbytes -= rlen;
+  }
+
+  return write_at(off, buffer.get(), nbytes, overwrite);
 }
 
 auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx {
