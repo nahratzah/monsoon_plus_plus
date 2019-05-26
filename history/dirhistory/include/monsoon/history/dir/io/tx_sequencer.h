@@ -3,12 +3,11 @@
 
 #include <atomic>
 #include <cstdint>
-#include <boost/multi_index_container.hpp>
-#include <boost/multi_index/composite_key.hpp>
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index/random_access_index.hpp>
-#include <boost/multi_index/tag.hpp>
+#include <boost/intrusive/list.hpp>
+#include <boost/intrusive/options.hpp>
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+#include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <monsoon/history/dir/io/replacement_map.h>
 
 namespace monsoon::history::io {
 
@@ -19,93 +18,59 @@ namespace monsoon::history::io {
  * The transaction sequencer can be used to figure out if a transaction was
  * started before another transaction was committed.
  */
-class tx_sequencer {
+class tx_sequencer
+: public std::enable_shared_from_this<tx_sequencer>
+{
+  private:
+  struct record
+  : boost::intrusive::list_base_hook<>,
+    boost::intrusive_ref_counter<record>
+  {
+    bool committed = false;
+    replacement_map replaced;
+  };
+
+  using record_list = boost::intrusive::list<
+      record,
+      boost::intrusive::constant_time_size<false>>;
+
+  static auto disposer_(record* ptr) -> boost::intrusive_ptr<record> {
+    return boost::intrusive_ptr<record>(ptr, false);
+  }
+
   public:
   class tx {
     friend tx_sequencer;
 
     private:
-    explicit tx(std::uint32_t idx) : idx_(idx) {}
+    explicit tx(tx_sequencer& seq);
 
     public:
     tx() = default;
+    ~tx() noexcept;
+
+    auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t;
+    void commit();
+    void record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes);
 
     private:
-    std::uint32_t idx_;
+    std::weak_ptr<tx_sequencer> seq_;
+    boost::intrusive_ptr<record> record_;
   };
 
-  private:
-  struct ordering {
-    std::uint32_t idx;
-    bool is_write;
-  };
-
-  struct lookup_idx {};
-  struct lookup {};
-
-  using ordering_collection = boost::multi_index::multi_index_container<
-      ordering,
-      boost::multi_index::indexed_by<
-          boost::multi_index::random_access<boost::multi_index::tag<lookup_idx>>,
-          boost::multi_index::hashed_unique<
-              boost::multi_index::tag<lookup>,
-              boost::multi_index::composite_key<
-                  ordering,
-                  boost::multi_index::member<ordering, std::uint32_t, &ordering::idx>,
-                  boost::multi_index::member<ordering, bool, &ordering::is_write>
-                  >
-              >
-          >
-      >;
-
-  public:
   tx_sequencer() = default;
 
-  tx_sequencer(const tx_sequencer& other)
-  : c_(other.c_),
-    seq_(other.seq_.load(std::memory_order_relaxed))
-  {}
+  tx_sequencer(const tx_sequencer&) = delete;
+  tx_sequencer(tx_sequencer&&) = delete;
+  tx_sequencer& operator=(const tx_sequencer&) = delete;
+  tx_sequencer& operator=(tx_sequencer&&) = delete;
 
-  tx_sequencer(tx_sequencer&& other) noexcept
-  : c_(std::move(other.c_)),
-    seq_(other.seq_.load(std::memory_order_relaxed))
-  {}
-
-  auto operator=(const tx_sequencer& other) -> tx_sequencer& {
-    c_ = other.c_;
-    seq_.store(other.seq_.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    return *this;
+  auto begin() -> tx {
+    return tx(*this);
   }
-
-  auto operator=(tx_sequencer&& other) noexcept -> tx_sequencer& {
-    c_ = std::move(other.c_);
-    seq_.store(other.seq_.load(std::memory_order_relaxed), std::memory_order_relaxed);
-    return *this;
-  }
-
-  /**
-   * \brief Test if a transaction began before another transaction was committed.
-   * \details
-   * When a transaction is started, each of its read operations must be
-   * sequenced such that they only observe data at the moment they are begun.
-   *
-   * When a transaction is committed, it must appear unobservable to transactions
-   * started before it.
-   *
-   * This function decides if the read-side of a transaction was started before
-   * the other transaction was commited.
-   */
-  auto is_read_before(const tx& read_tx, const tx& write_tx) const;
-
-  auto begin() -> tx;
-
-  void commit(const tx& tx_object);
-
-  void rollback(const tx& tx_object);
 
   private:
-  ordering_collection c_;
-  std::atomic<std::uint32_t> seq_{ 0u };
+  record_list c_;
 };
 
 

@@ -137,7 +137,7 @@ class txfile {
 
     monsoon::io::fd fd_;
     wal_region wal_;
-    tx_sequencer sequencer_;
+    std::shared_ptr<tx_sequencer> sequencer_ = std::make_shared<tx_sequencer>();
     ///\brief Mutex guards the file contents, except for the WAL regions.
     std::shared_mutex mtx_;
   };
@@ -210,7 +210,7 @@ class txfile::transaction {
   explicit transaction(bool read_only, txfile& owner)
   : read_only_(read_only),
     owner_(owner.pimpl_.get()),
-    seq_(owner.pimpl_->sequencer_.begin())
+    seq_(owner.pimpl_->sequencer_->begin())
   {}
 
   public:

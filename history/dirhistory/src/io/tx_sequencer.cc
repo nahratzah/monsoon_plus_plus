@@ -4,25 +4,51 @@
 namespace monsoon::history::io {
 
 
-auto tx_sequencer::is_read_before(const tx& read_tx, const tx& write_tx) const {
-  const auto read_rank =  c_.project<lookup_idx>(c_.get<lookup>().find(std::make_tuple(read_tx.idx_, false)));
-  const auto write_rank = c_.project<lookup_idx>(c_.get<lookup>().find(std::make_tuple(write_tx.idx_, true)));
-  return read_rank < write_rank;
+tx_sequencer::tx::tx(tx_sequencer& seq)
+: seq_(seq.weak_from_this()),
+  record_(new record())
+{
+  boost::intrusive_ptr<record> tmp = record_;
+  seq.c_.push_back(*tmp);
+  tmp.detach();
 }
 
-auto tx_sequencer::begin() -> tx {
-  const auto seq = seq_.fetch_add(1u, std::memory_order_relaxed);
-  c_.push_back(ordering{ seq, false });
-  return tx(seq);
+tx_sequencer::tx::~tx() noexcept {
+  if (record_ != nullptr) {
+    const std::shared_ptr<tx_sequencer> seq_ptr = seq_.lock();
+    if (seq_ptr != nullptr) {
+      seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+      while (!seq_ptr->c_.empty() && seq_ptr->c_.front().committed) {
+        seq_ptr->c_.pop_front_and_dispose(&tx_sequencer::disposer_);
+      }
+    }
+  }
 }
 
-void tx_sequencer::commit(const tx& tx_object) {
-  c_.get<lookup>().erase(c_.get<lookup>().find(std::make_tuple(tx_object.idx_, false)));
-  c_.push_back(ordering{ tx_object.idx_, true });
+auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t {
+  const auto seq_ptr = std::shared_ptr<const tx_sequencer>(seq_);
+  for (record_list::const_iterator iter = seq_ptr->c_.iterator_to(*record_);
+      iter != seq_ptr->c_.end();
+      ++iter) {
+    if (iter->committed) {
+      const std::size_t rlen = iter->replaced.read_at(off, buf, nbytes);
+      if (rlen != 0) return rlen;
+    }
+  }
+  return 0;
 }
 
-void tx_sequencer::rollback(const tx& tx_object) {
-  c_.get<lookup>().erase(c_.get<lookup>().find(std::make_tuple(tx_object.idx_, false)));
+void tx_sequencer::tx::commit() {
+  const auto seq_ptr = std::shared_ptr<tx_sequencer>(seq_);
+  if (seq_ptr != nullptr)
+    seq_ptr->c_.erase_and_dispose(seq_ptr->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+  record_->committed = true;
+  seq_ptr->c_.push_back(*record_);
+  record_.detach();
+}
+
+void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) {
+  return record_->replaced.write_at(off, buf, nbytes).commit();
 }
 
 
