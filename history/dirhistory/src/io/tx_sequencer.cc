@@ -5,9 +5,9 @@ namespace monsoon::history::io {
 
 tx_sequencer::tx::tx(tx_sequencer& seq)
 : seq_(seq.shared_from_this()),
-  record_(new record())
+  record_(new struct record())
 {
-  boost::intrusive_ptr<record> tmp = record_;
+  boost::intrusive_ptr<tx_sequencer::record> tmp = record_;
   seq.c_.push_back(*tmp);
   tmp.detach();
 }
@@ -38,10 +38,6 @@ void tx_sequencer::tx::commit() noexcept {
   record_.detach();
   seq_->do_maintenance_();
   seq_.reset();
-}
-
-void tx_sequencer::tx::record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) {
-  return record_->replaced.write_at(off, buf, nbytes, false).commit();
 }
 
 

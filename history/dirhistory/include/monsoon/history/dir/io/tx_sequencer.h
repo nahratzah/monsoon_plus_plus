@@ -76,17 +76,22 @@ class tx_sequencer
      * read operations.
      */
     void commit() noexcept;
+
     /**
-     * \brief Record a change.
+     * \brief Expose the record of changes.
      * \details
-     * The read logic of the tx_sequencer depends on accurately recording
-     * what data is being changed during the commit phase.
+     * The record of changes holds information about overwritten bytes.
+     * This information is available to transactions started before this
+     * transaction was committed, to extract the before-this-transaction-commit
+     * state of the file.
      */
-    void record_previous_data_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes);
+    auto record() -> replacement_map& {
+      return record_->replaced;
+    }
 
     private:
     std::shared_ptr<tx_sequencer> seq_;
-    boost::intrusive_ptr<record> record_;
+    boost::intrusive_ptr<tx_sequencer::record> record_;
   };
 
   tx_sequencer() = default;
