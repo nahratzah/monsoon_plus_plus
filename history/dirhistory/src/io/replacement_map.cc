@@ -1,5 +1,4 @@
 #include <monsoon/history/dir/io/replacement_map.h>
-#include <limits>
 #include <memory>
 #include <stdexcept>
 
@@ -119,7 +118,6 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
   const std::uint8_t* byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
   while (nbytes > 0) {
     std::unique_ptr<std::uint8_t[]> vector;
-    const std::size_t Max = std::numeric_limits<std::size_t>::max();
     std::size_t to_reserve = nbytes;
 
     for (;;) {
@@ -180,8 +178,7 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
 
     while (off < write_end_off) {
       std::unique_ptr<std::uint8_t[]> vector;
-      std::size_t to_reserve = std::numeric_limits<std::size_t>::max();
-      if (to_reserve > write_end_off - off) to_reserve = write_end_off - off;
+      std::size_t to_reserve = write_end_off - off;
       for (;;) {
         try {
           vector = std::make_unique<std::uint8_t[]>(to_reserve);
