@@ -1,4 +1,5 @@
 #include <monsoon/history/dir/io/replacement_map.h>
+#include <limits>
 #include <memory>
 
 namespace monsoon::history::io {
@@ -100,13 +101,13 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
   }
 
   // Reserve at least some bytes into the vector.
-  vector_type vector;
+  std::unique_ptr<std::uint8_t[]> vector;
   const std::uint8_t* pred_buf = reinterpret_cast<const std::uint8_t*>(pred->data());
   const std::uint8_t* byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
   const std::uint8_t* succ_buf = reinterpret_cast<const std::uint8_t*>(succ->data()) + succ->size() - bytes_from_succ;
   off -= bytes_from_pred;
   while (bytes_from_succ > 0 || nbytes > 0 || bytes_from_pred > 0) {
-    const std::size_t Max = vector.max_size();
+    const std::size_t Max = std::numeric_limits<std::size_t>::max();
     std::size_t to_reserve = bytes_from_pred;
     if (Max - to_reserve < nbytes) // overflow case
       to_reserve = Max;
@@ -119,16 +120,17 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
 
     for (;;) {
       try {
-        vector.resize(to_reserve);
+        vector = std::make_unique<std::uint8_t[]>(to_reserve);
         break;
       } catch (...) {
         if (to_reserve <= 1) throw;
         to_reserve /= 2;
       }
     }
+    const auto vector_size = to_reserve;
 
     std::size_t wlen, written = 0;
-    vector_type::iterator vector_pos = vector.begin();
+    std::uint8_t* vector_pos = vector.get();
 
     wlen = std::min(bytes_from_pred, to_reserve);
     vector_pos = std::copy_n(pred_buf, wlen, vector_pos);
@@ -151,8 +153,8 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
     to_reserve -= wlen;
     written += wlen;
 
-    assert(vector_pos == vector.end());
-    t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector)));
+    assert(vector_pos == vector.get() + vector_size);
+    t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector), vector_size));
     off += written;
   }
 
@@ -195,12 +197,12 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
     assert(write_end_off <= end_off);
 
     while (off < write_end_off) {
-      vector_type vector;
-      vector_type::size_type to_reserve = vector.max_size();
+      std::unique_ptr<std::uint8_t[]> vector;
+      std::size_t to_reserve = std::numeric_limits<std::size_t>::max();
       if (to_reserve > write_end_off - off) to_reserve = write_end_off - off;
       for (;;) {
         try {
-          vector.reserve(to_reserve);
+          vector = std::make_unique<std::uint8_t[]>(to_reserve);
           break;
         } catch (const std::bad_alloc&) {
           if (to_reserve <= 1u) throw;
@@ -208,8 +210,8 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
         }
       }
 
-      std::copy_n(reinterpret_cast<const std::uint8_t*>(buf), to_reserve, std::back_inserter(vector));
-      t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector)));
+      std::copy_n(reinterpret_cast<const std::uint8_t*>(buf), to_reserve, vector.get());
+      t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector), to_reserve));
       off += to_reserve;
       buf = reinterpret_cast<const std::uint8_t*>(buf) + to_reserve;
     }

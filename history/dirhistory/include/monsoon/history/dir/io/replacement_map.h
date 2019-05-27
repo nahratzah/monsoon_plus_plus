@@ -21,20 +21,16 @@ namespace monsoon::history::io {
  * be applied during reads.
  */
 class monsoon_dirhistory_export_ replacement_map {
-  private:
-  using vector_type = std::vector<std::uint8_t>;
-
+  public:
   class entry_type
   : public boost::intrusive::set_base_hook<>
   {
     public:
-    entry_type(monsoon::io::fd::offset_type first, vector_type second) noexcept
-    : first(std::move(first)),
-      data_(std::make_unique<std::uint8_t[]>(second.size())),
-      size_(second.size())
-    {
-      std::copy(second.begin(), second.end(), data_.get());
-    }
+    entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, std::size_t size)
+    : first(first),
+      data_(std::move(data)),
+      size_(size)
+    {}
 
     auto begin_offset() const noexcept -> monsoon::io::fd::offset_type {
       return first;
@@ -58,6 +54,7 @@ class monsoon_dirhistory_export_ replacement_map {
     const std::size_t size_;
   };
 
+  private:
   struct entry_key_extractor_ {
     using type = monsoon::io::fd::offset_type;
 
@@ -72,15 +69,11 @@ class monsoon_dirhistory_export_ replacement_map {
       boost::intrusive::constant_time_size<false>>;
 
   public:
-  using iterator = map_type::iterator;
   using const_iterator = map_type::const_iterator;
+  using iterator = const_iterator;
   class tx;
 
   ~replacement_map() noexcept;
-
-  auto begin() -> iterator {
-    return map_.begin();
-  }
 
   auto begin() const -> const_iterator {
     return map_.begin();
@@ -88,10 +81,6 @@ class monsoon_dirhistory_export_ replacement_map {
 
   auto cbegin() const -> const_iterator {
     return begin();
-  }
-
-  auto end() -> iterator {
-    return map_.end();
   }
 
   auto end() const -> const_iterator {
