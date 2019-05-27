@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cstring>
 #include <iterator>
+#include <memory>
 #include <vector>
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/options.hpp>
@@ -25,6 +26,7 @@ class monsoon_dirhistory_export_ replacement_map {
   class entry_type
   : public boost::intrusive::set_base_hook<>
   {
+#if __cpp_lib_shared_ptr_arrays >= 201611
     public:
     entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, std::size_t size)
     : first(first),
@@ -32,6 +34,31 @@ class monsoon_dirhistory_export_ replacement_map {
       size_(size)
     {}
 
+    private:
+    entry_type(monsoon::io::fd::offset_type first, std::shared_ptr<const std::uint8_t[]>&& data, std::size_t size)
+    : first(first),
+      data_(std::move(data)),
+      size_(size)
+    {}
+#else
+    public:
+    entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, std::size_t size)
+    : first(first),
+      data_(data.get(), data.get_deleter()),
+      size_(size)
+    {
+      data.release();
+    }
+
+    private:
+    entry_type(monsoon::io::fd::offset_type first, std::shared_ptr<const std::uint8_t>&& data, std::size_t size)
+    : first(first),
+      data_(std::move(data)),
+      size_(size)
+    {}
+#endif
+
+    public:
     auto begin_offset() const noexcept -> monsoon::io::fd::offset_type {
       return first;
     }
@@ -48,10 +75,21 @@ class monsoon_dirhistory_export_ replacement_map {
       return data_.get();
     }
 
+    auto pop_front(std::size_t n = 1) -> entry_type&;
+    auto pop_back(std::size_t n = 1) -> entry_type&;
+
+    auto empty() const noexcept -> bool {
+      return size() == 0u;
+    }
+
     private:
-    const monsoon::io::fd::offset_type first;
-    const std::unique_ptr<std::uint8_t[]> data_;
-    const std::size_t size_;
+    monsoon::io::fd::offset_type first;
+#if __cpp_lib_shared_ptr_arrays >= 201611
+    std::shared_ptr<const std::uint8_t[]> data_;
+#else
+    std::shared_ptr<const std::uint8_t> data_;
+#endif
+    std::size_t size_;
   };
 
   private:
