@@ -101,23 +101,26 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
     }
   }
 
+  // Prepare a replacement for pred.
+  if (bytes_from_pred > 0u) {
+    auto new_pred = std::make_unique<entry_type>(*pred);
+    new_pred->keep_front(bytes_from_pred);
+    t.to_insert_.emplace_back(std::move(new_pred));
+  }
+
+  // Prepare a replacement for succ.
+  if (bytes_from_succ > 0u) {
+    auto new_succ = std::make_unique<entry_type>(*succ);
+    new_succ->keep_back(bytes_from_succ);
+    t.to_insert_.emplace_back(std::move(new_succ));
+  }
+
   // Reserve at least some bytes into the vector.
-  std::unique_ptr<std::uint8_t[]> vector;
-  const std::uint8_t* pred_buf = reinterpret_cast<const std::uint8_t*>(pred->data());
   const std::uint8_t* byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
-  const std::uint8_t* succ_buf = reinterpret_cast<const std::uint8_t*>(succ->data()) + succ->size() - bytes_from_succ;
-  off -= bytes_from_pred;
-  while (bytes_from_succ > 0 || nbytes > 0 || bytes_from_pred > 0) {
+  while (nbytes > 0) {
+    std::unique_ptr<std::uint8_t[]> vector;
     const std::size_t Max = std::numeric_limits<std::size_t>::max();
-    std::size_t to_reserve = bytes_from_pred;
-    if (Max - to_reserve < nbytes) // overflow case
-      to_reserve = Max;
-    else
-      to_reserve += nbytes;
-    if (Max - to_reserve < bytes_from_succ) // overflow case
-      to_reserve = Max;
-    else
-      to_reserve += bytes_from_succ;
+    std::size_t to_reserve = nbytes;
 
     for (;;) {
       try {
@@ -128,35 +131,13 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
         to_reserve /= 2;
       }
     }
-    const auto vector_size = to_reserve;
 
-    std::size_t wlen, written = 0;
-    std::uint8_t* vector_pos = vector.get();
+    std::copy_n(byte_buf, to_reserve, vector.get());
+    nbytes -= to_reserve;
+    byte_buf += to_reserve;
 
-    wlen = std::min(bytes_from_pred, to_reserve);
-    vector_pos = std::copy_n(pred_buf, wlen, vector_pos);
-    bytes_from_pred -= wlen;
-    pred_buf += wlen;
-    to_reserve -= wlen;
-    written += wlen;
-
-    wlen = std::min(nbytes, to_reserve);
-    vector_pos = std::copy_n(byte_buf, wlen, vector_pos);
-    nbytes -= wlen;
-    byte_buf += wlen;
-    to_reserve -= wlen;
-    written += wlen;
-
-    wlen = std::min(bytes_from_succ, to_reserve);
-    vector_pos = std::copy_n(succ_buf, wlen, vector_pos);
-    bytes_from_succ -= wlen;
-    succ_buf += wlen;
-    to_reserve -= wlen;
-    written += wlen;
-
-    assert(vector_pos == vector.get() + vector_size);
-    t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector), vector_size));
-    off += written;
+    t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector), to_reserve));
+    off += to_reserve;
   }
 
   return t;

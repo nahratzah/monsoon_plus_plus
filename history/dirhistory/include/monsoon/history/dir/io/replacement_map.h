@@ -38,13 +38,6 @@ class monsoon_dirhistory_export_ replacement_map {
       data_(std::move(data)),
       size_(size)
     {}
-
-    private:
-    entry_type(monsoon::io::fd::offset_type first, std::shared_ptr<const std::uint8_t[]>&& data, size_type size)
-    : first(first),
-      data_(std::move(data)),
-      size_(size)
-    {}
 #else
     public:
     entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, size_type size)
@@ -54,13 +47,6 @@ class monsoon_dirhistory_export_ replacement_map {
     {
       data.release();
     }
-
-    private:
-    entry_type(monsoon::io::fd::offset_type first, std::shared_ptr<const std::uint8_t>&& data, size_type size)
-    : first(first),
-      data_(std::move(data)),
-      size_(size)
-    {}
 #endif
 
     public:
