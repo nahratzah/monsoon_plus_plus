@@ -153,6 +153,161 @@ TEST(iterate) {
   CHECK(iter == map.end());
 }
 
+TEST(clear) {
+  replacement_map map;
+  map.write_at( 0, u8"xx", 2).commit();
+  map.write_at( 4, u8"y",  1).commit();
+  map.write_at(10, u8"zz", 2).commit();
+  map.clear();
+
+  CHECK(map.empty());
+  CHECK(map.begin() == map.end());
+}
+
+TEST(copy_constructor) {
+  replacement_map orig_map;
+  orig_map.write_at( 0, u8"xx", 2).commit();
+  orig_map.write_at( 4, u8"y",  1).commit();
+  orig_map.write_at(10, u8"zz", 2).commit();
+  replacement_map map = orig_map;
+  orig_map.clear();
+
+  replacement_map::const_iterator iter = map.cbegin();
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(0u, iter->begin_offset());
+  CHECK_EQUAL(2u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"xx", iter->data(), 2u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(4u, iter->begin_offset());
+  CHECK_EQUAL(5u, iter->end_offset());
+  CHECK_EQUAL(1u, iter->size());
+  if (iter->size() >= 1u) CHECK(std::memcmp(u8"y", iter->data(), 1u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(10u, iter->begin_offset());
+  CHECK_EQUAL(12u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"zz", iter->data(), 2u) == 0);
+
+  ++iter;
+  CHECK(iter == map.end());
+}
+
+TEST(move_constructor) {
+  replacement_map orig_map;
+  orig_map.write_at( 0, u8"xx", 2).commit();
+  orig_map.write_at( 4, u8"y",  1).commit();
+  orig_map.write_at(10, u8"zz", 2).commit();
+  replacement_map map = std::move(orig_map);
+
+  replacement_map::const_iterator iter = map.cbegin();
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(0u, iter->begin_offset());
+  CHECK_EQUAL(2u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"xx", iter->data(), 2u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(4u, iter->begin_offset());
+  CHECK_EQUAL(5u, iter->end_offset());
+  CHECK_EQUAL(1u, iter->size());
+  if (iter->size() >= 1u) CHECK(std::memcmp(u8"y", iter->data(), 1u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(10u, iter->begin_offset());
+  CHECK_EQUAL(12u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"zz", iter->data(), 2u) == 0);
+
+  ++iter;
+  CHECK(iter == map.end());
+
+  CHECK(orig_map.empty());
+  CHECK(orig_map.begin() == orig_map.end());
+}
+
+TEST(copy_assignment) {
+  replacement_map map;
+  map.write_at( 0, u8"aa", 2).commit();
+  map.write_at( 3, u8"b", 1).commit();
+
+  replacement_map orig_map;
+  orig_map.write_at( 0, u8"xx", 2).commit();
+  orig_map.write_at( 4, u8"y",  1).commit();
+  orig_map.write_at(10, u8"zz", 2).commit();
+  map = orig_map;
+  orig_map.clear();
+
+  replacement_map::const_iterator iter = map.cbegin();
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(0u, iter->begin_offset());
+  CHECK_EQUAL(2u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"xx", iter->data(), 2u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(4u, iter->begin_offset());
+  CHECK_EQUAL(5u, iter->end_offset());
+  CHECK_EQUAL(1u, iter->size());
+  if (iter->size() >= 1u) CHECK(std::memcmp(u8"y", iter->data(), 1u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(10u, iter->begin_offset());
+  CHECK_EQUAL(12u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"zz", iter->data(), 2u) == 0);
+
+  ++iter;
+  CHECK(iter == map.end());
+}
+
+TEST(move_assignment) {
+  replacement_map map;
+  map.write_at( 0, u8"aa", 2).commit();
+  map.write_at( 3, u8"b", 1).commit();
+
+  replacement_map orig_map;
+  orig_map.write_at( 0, u8"xx", 2).commit();
+  orig_map.write_at( 4, u8"y",  1).commit();
+  orig_map.write_at(10, u8"zz", 2).commit();
+  map = std::move(orig_map);
+
+  replacement_map::const_iterator iter = map.cbegin();
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(0u, iter->begin_offset());
+  CHECK_EQUAL(2u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"xx", iter->data(), 2u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(4u, iter->begin_offset());
+  CHECK_EQUAL(5u, iter->end_offset());
+  CHECK_EQUAL(1u, iter->size());
+  if (iter->size() >= 1u) CHECK(std::memcmp(u8"y", iter->data(), 1u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(10u, iter->begin_offset());
+  CHECK_EQUAL(12u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"zz", iter->data(), 2u) == 0);
+
+  ++iter;
+  CHECK(iter == map.end());
+
+  CHECK(orig_map.empty());
+  CHECK(orig_map.begin() == orig_map.end());
+}
+
 int main(int argc, char** argv) {
   return UnitTest::RunAllTests();
 }

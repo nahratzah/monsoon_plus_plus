@@ -41,11 +41,15 @@ auto replacement_map::operator=(const replacement_map& y) -> replacement_map& {
 
 auto replacement_map::operator=(replacement_map&& y) noexcept -> replacement_map& {
   map_.swap(y.map_);
-  map_.clear_and_dispose(&replacement_map_dispose);
+  y.map_.clear_and_dispose(&replacement_map_dispose);
   return *this;
 }
 
 replacement_map::~replacement_map() noexcept {
+  map_.clear_and_dispose(&replacement_map_dispose);
+}
+
+void replacement_map::clear() noexcept {
   map_.clear_and_dispose(&replacement_map_dispose);
 }
 

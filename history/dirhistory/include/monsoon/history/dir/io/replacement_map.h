@@ -153,6 +153,20 @@ class monsoon_dirhistory_export_ replacement_map {
     return end();
   }
 
+  ///\brief Test if the replacement_map is empty.
+  ///\returns True if the replacement_map is empty, false otherwise.
+  auto empty() const noexcept -> bool {
+    return map_.empty();
+  }
+
+  ///\brief Remove all records from the replacement_map.
+  void clear() noexcept;
+
+  ///\brief Swap this map with another map.
+  void swap(replacement_map& y) noexcept {
+    map_.swap(y.map_);
+  }
+
   /**
    * \brief Read data from the replacement map if applicable.
    * \details
@@ -212,6 +226,10 @@ class monsoon_dirhistory_export_ replacement_map {
 
   map_type map_;
 };
+
+inline void swap(replacement_map& x, replacement_map& y) noexcept {
+  x.swap(y);
+}
 
 
 ///\brief Transactional write operation.
