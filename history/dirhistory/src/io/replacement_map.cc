@@ -6,11 +6,11 @@ namespace monsoon::history::io {
 namespace {
 
 
-inline auto replacement_map_clone(const replacement_map::entry_type& r) -> replacement_map::entry_type* {
-  return new replacement_map::entry_type(r);
+inline auto replacement_map_clone(const replacement_map::value_type& r) -> replacement_map::value_type* {
+  return new replacement_map::value_type(r);
 }
 
-inline void replacement_map_dispose(replacement_map::entry_type* ptr) {
+inline void replacement_map_dispose(replacement_map::value_type* ptr) {
   delete ptr;
 }
 
@@ -142,14 +142,14 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
 
   // Prepare a replacement for pred.
   if (bytes_from_pred > 0u) {
-    auto new_pred = std::make_unique<entry_type>(*pred);
+    auto new_pred = std::make_unique<value_type>(*pred);
     new_pred->keep_front(bytes_from_pred);
     t.to_insert_.emplace_back(std::move(new_pred));
   }
 
   // Prepare a replacement for succ.
   if (bytes_from_succ > 0u) {
-    auto new_succ = std::make_unique<entry_type>(*succ);
+    auto new_succ = std::make_unique<value_type>(*succ);
     new_succ->keep_back(bytes_from_succ);
     t.to_insert_.emplace_back(std::move(new_succ));
   }
@@ -174,7 +174,7 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
     nbytes -= to_reserve;
     byte_buf += to_reserve;
 
-    t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector), to_reserve));
+    t.to_insert_.emplace_back(std::make_unique<value_type>(off, std::move(vector), to_reserve));
     off += to_reserve;
   }
 
@@ -230,7 +230,7 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
       }
 
       std::copy_n(reinterpret_cast<const std::uint8_t*>(buf), to_reserve, vector.get());
-      t.to_insert_.emplace_back(std::make_unique<entry_type>(off, std::move(vector), to_reserve));
+      t.to_insert_.emplace_back(std::make_unique<value_type>(off, std::move(vector), to_reserve));
       off += to_reserve;
       buf = reinterpret_cast<const std::uint8_t*>(buf) + to_reserve;
     }
@@ -243,8 +243,8 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
 }
 
 
-auto replacement_map::entry_type::pop_front(size_type n) -> entry_type& {
-  if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
+auto replacement_map::value_type::pop_front(size_type n) -> value_type& {
+  if (n > size_) throw std::overflow_error("replacement_map::value_type::pop_front");
 
   first += n;
 #if __cpp_lib_shared_ptr_arrays >= 201611
@@ -256,22 +256,22 @@ auto replacement_map::entry_type::pop_front(size_type n) -> entry_type& {
   return *this;
 }
 
-auto replacement_map::entry_type::pop_back(size_type n) -> entry_type& {
-  if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
+auto replacement_map::value_type::pop_back(size_type n) -> value_type& {
+  if (n > size_) throw std::overflow_error("replacement_map::value_type::pop_front");
 
   size_ -= n;
   return *this;
 }
 
-auto replacement_map::entry_type::keep_front(size_type n) -> entry_type& {
-  if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
+auto replacement_map::value_type::keep_front(size_type n) -> value_type& {
+  if (n > size_) throw std::overflow_error("replacement_map::value_type::pop_front");
 
   size_ = n;
   return *this;
 }
 
-auto replacement_map::entry_type::keep_back(size_type n) -> entry_type& {
-  if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
+auto replacement_map::value_type::keep_back(size_type n) -> value_type& {
+  if (n > size_) throw std::overflow_error("replacement_map::value_type::pop_front");
   const size_type advance = size_ - n;
 
   first += advance;
@@ -300,7 +300,7 @@ void replacement_map::tx::commit() noexcept {
   std::for_each(
       std::move_iterator(to_insert_.begin()),
       std::move_iterator(to_insert_.end()),
-      [this](std::unique_ptr<entry_type>&& entry) {
+      [this](std::unique_ptr<value_type>&& entry) {
         bool inserted = false;
         map_type::iterator ipos;
         std::tie(ipos, inserted) = map_->insert(*entry);

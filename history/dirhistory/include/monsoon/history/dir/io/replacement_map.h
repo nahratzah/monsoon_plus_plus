@@ -23,24 +23,24 @@ namespace monsoon::history::io {
  */
 class monsoon_dirhistory_export_ replacement_map {
   public:
-  class entry_type
+  class value_type
   : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>>
   {
     public:
     using size_type = std::size_t;
 
-    entry_type() = default;
+    value_type() = default;
 
 #if __cpp_lib_shared_ptr_arrays >= 201611
     public:
-    entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, size_type size)
+    value_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, size_type size)
     : first(first),
       data_(std::move(data)),
       size_(size)
     {}
 #else
     public:
-    entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, size_type size)
+    value_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, size_type size)
     : first(first),
       data_(data.get(), data.get_deleter()),
       size_(size)
@@ -70,25 +70,25 @@ class monsoon_dirhistory_export_ replacement_map {
     ///\param[in] n Number of bytes to remove.
     ///\return This entry.
     ///\throw std::overflow_error if \p n is larger than the size of this entry.
-    auto pop_front(size_type n = 1) -> entry_type&;
+    auto pop_front(size_type n = 1) -> value_type&;
 
     ///\brief Remove bytes from the rear of the entry.
     ///\param[in] n Number of bytes to remove.
     ///\return This entry.
     ///\throw std::overflow_error if \p n is larger than the size of this entry.
-    auto pop_back(size_type n = 1) -> entry_type&;
+    auto pop_back(size_type n = 1) -> value_type&;
 
     ///\brief Remove bytes from the rear of the entry, until the entry is exactly \p n bytes.
     ///\param[in] n Number of bytes to keep.
     ///\return This entry.
     ///\throw std::overflow_error if \p n is larger than the size of this entry.
-    auto keep_front(size_type n) -> entry_type&;
+    auto keep_front(size_type n) -> value_type&;
 
     ///\brief Remove bytes from the front of the entry, until the entry is exactly \p n bytes.
     ///\param[in] n Number of bytes to keep.
     ///\return This entry.
     ///\throw std::overflow_error if \p n is larger than the size of this entry.
-    auto keep_back(size_type n) -> entry_type&;
+    auto keep_back(size_type n) -> value_type&;
 
     ///\brief Test if this entry is empty.
     ///\return True if this entry holds zero bytes. False otherwise.
@@ -110,13 +110,13 @@ class monsoon_dirhistory_export_ replacement_map {
   struct entry_key_extractor_ {
     using type = monsoon::io::fd::offset_type;
 
-    auto operator()(const entry_type& e) const noexcept -> type {
+    auto operator()(const value_type& e) const noexcept -> type {
       return e.begin_offset();
     }
   };
 
   using map_type = boost::intrusive::set<
-      entry_type,
+      value_type,
       boost::intrusive::key_of_value<entry_key_extractor_>,
       boost::intrusive::constant_time_size<false>>;
 
@@ -246,7 +246,7 @@ class monsoon_dirhistory_export_ replacement_map::tx {
   private:
   map_type* map_ = nullptr; // No ownership.
   std::vector<map_type::iterator> to_erase_;
-  std::vector<std::unique_ptr<entry_type>> to_insert_;
+  std::vector<std::unique_ptr<value_type>> to_insert_;
 };
 
 
