@@ -224,7 +224,8 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
   return t;
 }
 
-auto replacement_map::entry_type::pop_front(std::size_t n) -> entry_type& {
+
+auto replacement_map::entry_type::pop_front(size_type n) -> entry_type& {
   if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
 
   first += n;
@@ -237,10 +238,31 @@ auto replacement_map::entry_type::pop_front(std::size_t n) -> entry_type& {
   return *this;
 }
 
-auto replacement_map::entry_type::pop_back(std::size_t n) -> entry_type& {
+auto replacement_map::entry_type::pop_back(size_type n) -> entry_type& {
   if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
 
   size_ -= n;
+  return *this;
+}
+
+auto replacement_map::entry_type::keep_front(size_type n) -> entry_type& {
+  if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
+
+  size_ = n;
+  return *this;
+}
+
+auto replacement_map::entry_type::keep_back(size_type n) -> entry_type& {
+  if (n > size_) throw std::overflow_error("replacement_map::entry_type::pop_front");
+  const size_type advance = size_ - n;
+
+  first += advance;
+#if __cpp_lib_shared_ptr_arrays >= 201611
+  data_ = std::shared_ptr<const std::uint8_t[]>(data_, data_.get() + advance);
+#else
+  data_ = std::shared_ptr<const std::uint8_t>(data_, data_.get() + advance);
+#endif
+  size_ = n;
   return *this;
 }
 
