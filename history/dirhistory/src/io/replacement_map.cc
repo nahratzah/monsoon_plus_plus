@@ -11,30 +11,30 @@ replacement_map::~replacement_map() noexcept {
 auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t {
   // Find the first region *after* off.
   auto iter = map_.upper_bound(off);
-  assert(iter == map_.end() || iter->first > off);
+  assert(iter == map_.end() || iter->begin_offset() > off);
 
   // If the first region *after* off is the very first in the list, we can't
   // read anything here.
   // Same if the predecessor does not intersect the requested offset.
   if (iter == map_.begin() || std::prev(iter)->end_offset() <= off) {
     // Update nbytes to be clipped at next-region-start.
-    if (nbytes > iter->first - off) nbytes = iter->first - off;
+    if (nbytes > iter->begin_offset() - off) nbytes = iter->begin_offset() - off;
     return 0;
   }
   // Change iter to point at the at-or-before entry.
   --iter;
 
   // Validate assertions.
-  assert(iter->first <= off);
+  assert(iter->begin_offset() <= off);
 
   // Compute local offset into the *at* entry.
-  const std::size_t local_off = off - iter->first;
+  const std::size_t local_off = off - iter->begin_offset();
   // And bytes that we can thus read.
-  const std::size_t rlen = std::min(nbytes, std::size_t(iter->second.size() - local_off));
+  const std::size_t rlen = std::min(nbytes, std::size_t(iter->size() - local_off));
   // Validate our assertions: we must read something unless requested not to read anything.
   assert(rlen > 0 || nbytes == 0);
   // Do the read.
-  std::memcpy(buf, iter->second.data() + local_off, rlen);
+  std::memcpy(buf, reinterpret_cast<const std::uint8_t*>(iter->data()) + local_off, rlen);
   return rlen; // Indicate we actually read something.
 }
 
@@ -70,16 +70,16 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
 
   // Find the first region *after* off.
   map_type::iterator succ = map_.upper_bound(off);
-  assert(succ == map_.end() || succ->first > off);
+  assert(succ == map_.end() || succ->begin_offset() > off);
 
   // Find the region at-or-before off.
   const map_type::iterator pred = (succ == map_.begin() ? map_.end() : std::prev(succ));
-  assert(pred == map_.end() || pred->first <= off);
+  assert(pred == map_.end() || pred->begin_offset() <= off);
 
   // We may need to include some bytes from pred.
   if (pred != map_.end() && pred->end_offset() > off) {
     t.to_erase_.push_back(pred);
-    bytes_from_pred = off - pred->first;
+    bytes_from_pred = off - pred->begin_offset();
   }
 
   if (pred != map_.end() && pred->end_offset() > end_off) {
@@ -93,7 +93,7 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
       t.to_erase_.push_back(succ++);
 
     // We may need to include bytes from succ.
-    if (succ != map_.end() && succ->first < end_off) {
+    if (succ != map_.end() && succ->begin_offset() < end_off) {
       t.to_erase_.push_back(succ);
       bytes_from_succ = succ->end_offset() - end_off;
     }
@@ -101,9 +101,9 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
 
   // Reserve at least some bytes into the vector.
   vector_type vector;
-  const std::uint8_t* pred_buf = pred->second.data();
+  const std::uint8_t* pred_buf = reinterpret_cast<const std::uint8_t*>(pred->data());
   const std::uint8_t* byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
-  const std::uint8_t* succ_buf = succ->second.data() + succ->second.size() - bytes_from_succ;
+  const std::uint8_t* succ_buf = reinterpret_cast<const std::uint8_t*>(succ->data()) + succ->size() - bytes_from_succ;
   off -= bytes_from_pred;
   while (bytes_from_succ > 0 || nbytes > 0 || bytes_from_pred > 0) {
     const std::size_t Max = vector.max_size();
@@ -172,11 +172,11 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
   while (off < end_off) {
     // Find the first region *after* off.
     const map_type::iterator succ = map_.upper_bound(off);
-    assert(succ == map_.end() || succ->first > off);
+    assert(succ == map_.end() || succ->begin_offset() > off);
 
     // Find the region at-or-before off.
     map_type::iterator iter = (succ == map_.begin() ? map_.end() : std::prev(succ));
-    assert(iter == map_.end() || iter->first <= off);
+    assert(iter == map_.end() || iter->begin_offset() <= off);
     if (iter != map_.end() && iter->end_offset() >= end_off) break; // GUARD: stop if there are no intersecting gaps.
     assert(iter->end_offset() < end_off);
 
@@ -188,10 +188,10 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
     assert(iter == map_.end() || iter->end_offset() <= off);
 
     map_type::iterator iter_succ = (iter == map_.end() ? map_.end() : std::next(iter));
-    if (iter_succ->first >= end_off) iter_succ = map_.end();
-    assert(iter_succ == map_.end() || iter_succ->first > off);
+    if (iter_succ->begin_offset() >= end_off) iter_succ = map_.end();
+    assert(iter_succ == map_.end() || iter_succ->begin_offset() > off);
 
-    monsoon::io::fd::offset_type write_end_off = (iter_succ == map_.end() ? end_off : iter_succ->first);
+    monsoon::io::fd::offset_type write_end_off = (iter_succ == map_.end() ? end_off : iter_succ->begin_offset());
     assert(write_end_off <= end_off);
 
     while (off < write_end_off) {
@@ -245,8 +245,8 @@ void replacement_map::tx::commit() noexcept {
         entry.release();
 
         // Assert the inserted element causes no overlap.
-        assert(ipos == map_->begin() || std::prev(ipos)->end_offset() <= ipos->first);
-        assert(std::next(ipos) == map_->end() || std::next(ipos)->first >= ipos->end_offset());
+        assert(ipos == map_->begin() || std::prev(ipos)->end_offset() <= ipos->begin_offset());
+        assert(std::next(ipos) == map_->end() || std::next(ipos)->begin_offset() >= ipos->end_offset());
       });
 
   map_ = nullptr;

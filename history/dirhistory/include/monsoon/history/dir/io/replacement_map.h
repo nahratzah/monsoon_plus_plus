@@ -24,18 +24,32 @@ class monsoon_dirhistory_export_ replacement_map {
   private:
   using vector_type = std::vector<std::uint8_t>;
 
-  struct entry_type
+  class entry_type
   : public boost::intrusive::set_base_hook<>
   {
+    public:
     entry_type(monsoon::io::fd::offset_type first, vector_type second) noexcept
     : first(std::move(first)),
       second(std::move(second))
     {}
 
+    auto begin_offset() const noexcept -> monsoon::io::fd::offset_type {
+      return first;
+    }
+
     auto end_offset() const noexcept -> monsoon::io::fd::offset_type {
       return first + second.size();
     }
 
+    auto size() const noexcept -> std::size_t {
+      return second.size();
+    }
+
+    auto data() const noexcept -> const void* {
+      return second.data();
+    }
+
+    private:
     const monsoon::io::fd::offset_type first;
     const vector_type second;
   };
@@ -43,8 +57,8 @@ class monsoon_dirhistory_export_ replacement_map {
   struct entry_key_extractor_ {
     using type = monsoon::io::fd::offset_type;
 
-    auto operator()(const entry_type& e) const noexcept -> const type& {
-      return e.first;
+    auto operator()(const entry_type& e) const noexcept -> type {
+      return e.begin_offset();
     }
   };
 
