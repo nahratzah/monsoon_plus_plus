@@ -30,28 +30,32 @@ class monsoon_dirhistory_export_ replacement_map {
     public:
     entry_type(monsoon::io::fd::offset_type first, vector_type second) noexcept
     : first(std::move(first)),
-      second(std::move(second))
-    {}
+      data_(std::make_unique<std::uint8_t[]>(second.size())),
+      size_(second.size())
+    {
+      std::copy(second.begin(), second.end(), data_.get());
+    }
 
     auto begin_offset() const noexcept -> monsoon::io::fd::offset_type {
       return first;
     }
 
     auto end_offset() const noexcept -> monsoon::io::fd::offset_type {
-      return first + second.size();
+      return first + size();
     }
 
     auto size() const noexcept -> std::size_t {
-      return second.size();
+      return size_;
     }
 
     auto data() const noexcept -> const void* {
-      return second.data();
+      return data_.get();
     }
 
     private:
     const monsoon::io::fd::offset_type first;
-    const vector_type second;
+    const std::unique_ptr<std::uint8_t[]> data_;
+    const std::size_t size_;
   };
 
   struct entry_key_extractor_ {
