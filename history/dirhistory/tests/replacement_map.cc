@@ -18,7 +18,7 @@ auto read_all_at(const replacement_map& map, monsoon::io::fd::offset_type off, s
       break;
     }
 
-    CHECK_EQUAL(true, rlen > 0); // some data was read.
+    CHECK(rlen > 0); // some data was read.
     CHECK_EQUAL(len - total_rlen, nbytes); // nbytes is not changed.
 
     total_rlen += rlen;
