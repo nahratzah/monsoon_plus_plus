@@ -24,8 +24,11 @@ namespace monsoon::history::io {
 class monsoon_dirhistory_export_ replacement_map {
   public:
   class entry_type
-  : public boost::intrusive::set_base_hook<>
+  : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>>
   {
+    public:
+    entry_type() = default;
+
 #if __cpp_lib_shared_ptr_arrays >= 201611
     public:
     entry_type(monsoon::io::fd::offset_type first, std::unique_ptr<std::uint8_t[]>&& data, std::size_t size)
@@ -75,21 +78,32 @@ class monsoon_dirhistory_export_ replacement_map {
       return data_.get();
     }
 
+    ///\brief Remove bytes from the front of the entry.
+    ///\param[in] n Number of bytes to remove.
+    ///\return This entry.
+    ///\throw std::overflow_error if \p n is larger than the size of this entry.
     auto pop_front(std::size_t n = 1) -> entry_type&;
+
+    ///\brief Remove bytes from the rear of the entry.
+    ///\param[in] n Number of bytes to remove.
+    ///\return This entry.
+    ///\throw std::overflow_error if \p n is larger than the size of this entry.
     auto pop_back(std::size_t n = 1) -> entry_type&;
 
+    ///\brief Test if this entry is empty.
+    ///\return True if this entry holds zero bytes. False otherwise.
     auto empty() const noexcept -> bool {
       return size() == 0u;
     }
 
     private:
-    monsoon::io::fd::offset_type first;
+    monsoon::io::fd::offset_type first = 0;
 #if __cpp_lib_shared_ptr_arrays >= 201611
     std::shared_ptr<const std::uint8_t[]> data_;
 #else
     std::shared_ptr<const std::uint8_t> data_;
 #endif
-    std::size_t size_;
+    std::size_t size_ = 0;
   };
 
   private:
