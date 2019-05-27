@@ -6,11 +6,11 @@ namespace monsoon::history::io {
 namespace {
 
 
-inline auto replacement_map_clone(const replacement_map::value_type& r) -> replacement_map::value_type* {
+auto replacement_map_clone(const replacement_map::value_type& r) -> replacement_map::value_type* {
   return new replacement_map::value_type(r);
 }
 
-inline void replacement_map_dispose(replacement_map::value_type* ptr) {
+void replacement_map_dispose(replacement_map::value_type* ptr) {
   delete ptr;
 }
 
