@@ -125,6 +125,16 @@ class monsoon_dirhistory_export_ replacement_map {
   using iterator = const_iterator;
   class tx;
 
+  replacement_map() = default;
+  replacement_map(const replacement_map& y);
+
+  replacement_map(replacement_map&& y) noexcept
+  : map_(std::move(y.map_))
+  {}
+
+  auto operator=(const replacement_map& y) -> replacement_map&;
+  auto operator=(replacement_map&& y) noexcept -> replacement_map&;
+
   ~replacement_map() noexcept;
 
   auto begin() const -> const_iterator {

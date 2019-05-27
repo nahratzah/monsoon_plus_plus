@@ -3,10 +3,50 @@
 #include <stdexcept>
 
 namespace monsoon::history::io {
+namespace {
 
+
+inline auto replacement_map_clone(const replacement_map::entry_type& r) -> replacement_map::entry_type* {
+  return new replacement_map::entry_type(r);
+}
+
+inline void replacement_map_dispose(replacement_map::entry_type* ptr) {
+  delete ptr;
+}
+
+
+}
+
+
+replacement_map::replacement_map(const replacement_map& y)
+: replacement_map() // So the destructor will be invoked on exception.
+{
+  map_.clone_from(
+      y.map_,
+      &replacement_map_clone,
+      &replacement_map_dispose);
+}
+
+auto replacement_map::operator=(const replacement_map& y) -> replacement_map& {
+  if (this == &y) [[unlikely]]
+    return *this;
+
+  map_.clone_from(
+      y.map_,
+      &replacement_map_clone,
+      &replacement_map_dispose);
+
+  return *this;
+}
+
+auto replacement_map::operator=(replacement_map&& y) noexcept -> replacement_map& {
+  map_.swap(y.map_);
+  map_.clear_and_dispose(&replacement_map_dispose);
+  return *this;
+}
 
 replacement_map::~replacement_map() noexcept {
-  map_.clear_and_dispose([](entry_type* ptr) { delete ptr; });
+  map_.clear_and_dispose(&replacement_map_dispose);
 }
 
 auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t {
@@ -254,7 +294,7 @@ void replacement_map::tx::commit() noexcept {
       std::move_iterator(to_erase_.begin()),
       std::move_iterator(to_erase_.end()),
       [this](map_type::iterator&& iter) {
-        map_->erase_and_dispose(iter, [](entry_type* ptr) { delete ptr; });
+        map_->erase_and_dispose(iter, &replacement_map_dispose);
       });
 
   std::for_each(
