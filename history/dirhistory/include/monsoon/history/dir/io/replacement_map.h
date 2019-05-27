@@ -68,9 +68,35 @@ class monsoon_dirhistory_export_ replacement_map {
       boost::intrusive::constant_time_size<false>>;
 
   public:
+  using iterator = map_type::iterator;
+  using const_iterator = map_type::const_iterator;
   class tx;
 
   ~replacement_map() noexcept;
+
+  auto begin() -> iterator {
+    return map_.begin();
+  }
+
+  auto begin() const -> const_iterator {
+    return map_.begin();
+  }
+
+  auto cbegin() const -> const_iterator {
+    return begin();
+  }
+
+  auto end() -> iterator {
+    return map_.end();
+  }
+
+  auto end() const -> const_iterator {
+    return map_.end();
+  }
+
+  auto cend() const -> const_iterator {
+    return end();
+  }
 
   /**
    * \brief Read data from the replacement map if applicable.

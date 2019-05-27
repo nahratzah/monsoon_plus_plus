@@ -1,6 +1,7 @@
 #include "UnitTest++/UnitTest++.h"
 #include <monsoon/history/dir/io/replacement_map.h>
 #include <vector>
+#include <cstring>
 
 using monsoon::history::io::replacement_map;
 
@@ -119,6 +120,37 @@ TEST(write_replace_many_with_overlapping_head_and_tail) {
   auto buf = read_all_at<char>(map, 5, 7);
 
   CHECK_EQUAL(u8"x67890z", std::string_view(buf.data(), buf.size()));
+}
+
+TEST(iterate) {
+  replacement_map map;
+  map.write_at( 0, u8"xx", 2).commit();
+  map.write_at( 4, u8"y",  1).commit();
+  map.write_at(10, u8"zz", 2).commit();
+
+  replacement_map::const_iterator iter = map.cbegin();
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(0u, iter->begin_offset());
+  CHECK_EQUAL(2u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"xx", iter->data(), 2u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(4u, iter->begin_offset());
+  CHECK_EQUAL(5u, iter->end_offset());
+  CHECK_EQUAL(1u, iter->size());
+  if (iter->size() >= 1u) CHECK(std::memcmp(u8"y", iter->data(), 1u) == 0);
+
+  ++iter;
+  REQUIRE CHECK(iter != map.end());
+  CHECK_EQUAL(10u, iter->begin_offset());
+  CHECK_EQUAL(12u, iter->end_offset());
+  CHECK_EQUAL(2u, iter->size());
+  if (iter->size() >= 2u) CHECK(std::memcmp(u8"zz", iter->data(), 2u) == 0);
+
+  ++iter;
+  CHECK(iter == map.end());
 }
 
 int main(int argc, char** argv) {
