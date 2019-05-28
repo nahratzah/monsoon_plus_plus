@@ -1,4 +1,5 @@
 #include <monsoon/history/dir/io/txfile.h>
+#include <mutex>
 
 namespace monsoon::history::io {
 
@@ -69,6 +70,21 @@ auto txfile::transaction::read_at(offset_type off, void* buf, std::size_t nbytes
 
   // data is only present in the file.
   return owner_->fd_.read_at(offset_to_fd_offset_(off), buf, nbytes);
+}
+
+void txfile::transaction::commit() {
+  if (!*this) throw txfile_bad_transaction("txfile::transaction::commit");
+
+  if (!read_only_) {
+    std::unique_lock lck{ owner_->mtx_ };
+
+#if 0 // XXX
+    if (tx_id_.has_value()) owner_->wal_.commit(owner_->fd_, *tx_id_, seq_.record());
+    seq_.commit();
+#endif
+  }
+
+  owner_ = nullptr;
 }
 
 
