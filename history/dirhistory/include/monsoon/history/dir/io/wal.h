@@ -237,6 +237,14 @@ class monsoon_dirhistory_export_ wal_region {
   auto read_segment_(std::size_t idx) const -> wal_vector;
 
   public:
+  auto fd() const noexcept -> const monsoon::io::fd& {
+    return fd_;
+  }
+
+  auto fd() noexcept -> monsoon::io::fd& {
+    return fd_;
+  }
+
   auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t;
   auto size() const noexcept -> monsoon::io::fd::size_type;
 
