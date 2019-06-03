@@ -446,9 +446,13 @@ class monsoon_dirhistory_export_ wal_region::tx {
   auto file_size() const -> monsoon::io::fd::size_type;
 
   private:
+  ///\brief Reference to the WAL.
   std::weak_ptr<wal_region> wal_;
+  ///\brief Writes performed in this transaction.
   replacement_map writes_;
+  ///\brief Recorded change in file size.
   std::optional<monsoon::io::fd::size_type> new_file_size_;
+  ///\brief Internal transaction ID.
   wal_record::tx_id_type tx_id_;
 };
 
