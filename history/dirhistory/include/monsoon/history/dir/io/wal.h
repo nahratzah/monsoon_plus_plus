@@ -198,6 +198,7 @@ class monsoon_dirhistory_export_ wal_region {
 
   private:
   ///\brief Allocate a transaction ID.
+  [[nodiscard]]
   auto allocate_tx_id() -> wal_record::tx_id_type;
 
   ///\brief Number of segments that the WAL is divided in.
