@@ -10,8 +10,7 @@ constexpr std::size_t WAL_SIZE = 4u << 20;
 
 namespace {
 
-auto read(const txfile& f) -> std::string {
-  auto tx = f.begin();
+auto read(const txfile::transaction& tx) -> std::string {
   constexpr std::size_t GROWTH = 8192;
 
   std::string s;
@@ -27,6 +26,10 @@ auto read(const txfile& f) -> std::string {
   }
 
   [[unreachable]];
+}
+
+auto read(const txfile& f) -> std::string {
+  return read(f.begin());
 }
 
 void write_all_at(txfile::transaction& tx, monsoon::io::fd::offset_type off, std::string_view s) {
@@ -69,6 +72,37 @@ TEST(write_commit) {
   tx.commit();
 
   CHECK_EQUAL(u8"foobar", read(f));
+}
+
+TEST(multi_transaction) {
+  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
+  {
+    auto tx = f.begin(false);
+    tx.resize(1);
+    write_all_at(tx, 0, u8"X");
+    tx.commit();
+  }
+
+  auto tx1 = f.begin(false);
+  auto tx2 = f.begin(false);
+  auto tx3 = f.begin(false);
+  auto ro = f.begin();
+
+  write_all_at(tx1, 0, u8"1");
+  write_all_at(tx2, 0, u8"2");
+  write_all_at(tx3, 0, u8"3");
+
+  CHECK_EQUAL(u8"1", read(tx1));
+  CHECK_EQUAL(u8"2", read(tx2));
+  CHECK_EQUAL(u8"3", read(tx3));
+  CHECK_EQUAL(u8"X", read(ro));
+
+  tx1.commit();
+  tx2.commit();
+  tx3.commit();
+  ro.rollback();
+
+  CHECK_EQUAL(u8"3", read(f));
 }
 
 int main() {

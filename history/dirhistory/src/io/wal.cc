@@ -784,6 +784,9 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
     repl_.truncate(fd_size_);
   }
 
+  // Advance slot offset.
+  slot_off_ += xdr.size() - wal_record_end::XDR_SIZE;
+
   undo_op_fn(std::move(undo));
 }
 
