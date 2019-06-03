@@ -24,8 +24,6 @@ auto read(const txfile::transaction& tx) -> std::string {
     off += rlen;
     if (rlen == 0u) return s;
   }
-
-  [[unreachable]];
 }
 
 auto read(const txfile& f) -> std::string {
