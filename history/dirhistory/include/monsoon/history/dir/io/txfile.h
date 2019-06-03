@@ -81,7 +81,7 @@ class monsoon_dirhistory_export_ txfile {
 
   /**
    * \brief Open an existing txfile.
-   * \details
+   * \details Recovers the file.
    * \param[in] fd The file descriptor of the file.
    * \param[in] off The offset at which the WAL is found.
    * \param[in] len The length in bytes of the WAL.
@@ -96,6 +96,13 @@ class monsoon_dirhistory_export_ txfile {
   txfile(txfile&&) noexcept = default;
   txfile& operator=(txfile&&) noexcept = default;
 
+  /**
+   * \brief Initialize a txfile.
+   * \details Initializes the txfile to an empty file.
+   * \param[in] fd The file descriptor of the file.
+   * \param[in] off The offset at which the WAL is found.
+   * \param[in] len The length in bytes of the WAL.
+   */
   auto create(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> txfile;
 
   /**
