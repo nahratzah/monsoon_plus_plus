@@ -25,6 +25,13 @@ auto txfile::create(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, mons
 }
 
 
+void txfile::transaction::resize(size_type new_size) {
+  if (!*this) throw txfile_bad_transaction("txfile::transaction::write_at");
+  if (read_only_) throw txfile_read_only_transaction("txfile::transaction::write_at");
+
+  wal_.resize(new_size);
+}
+
 auto txfile::transaction::write_at(offset_type off, const void* buf, std::size_t nbytes) -> std::size_t {
   if (!*this) throw txfile_bad_transaction("txfile::transaction::write_at");
   if (read_only_) throw txfile_read_only_transaction("txfile::transaction::write_at");

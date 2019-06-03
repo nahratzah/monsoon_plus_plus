@@ -7,6 +7,7 @@
 #include <iostream>
 
 using monsoon::history::io::txfile;
+constexpr std::size_t WAL_SIZE = 4u << 20;
 
 namespace {
 
@@ -46,24 +47,26 @@ void write_all_at(txfile::transaction& tx, monsoon::io::fd::offset_type off, std
 #define TMPFILE() monsoon::io::fd::tmpfile(__FILE__)
 
 TEST(new_file) {
-  auto f = txfile::create(TMPFILE(), 0, 64);
+  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
 
   CHECK_EQUAL(u8"", read(f));
 }
 
 TEST(write_no_commit) {
-  auto f = txfile::create(TMPFILE(), 0, 64);
+  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
 
   auto tx = f.begin(false);
+  tx.resize(6);
   write_all_at(tx, 0, u8"foobar");
 
   CHECK_EQUAL(u8"", read(f));
 }
 
 TEST(write_commit) {
-  auto f = txfile::create(TMPFILE(), 0, 64);
+  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
 
   auto tx = f.begin(false);
+  tx.resize(6);
   write_all_at(tx, 0, u8"foobar");
   tx.commit();
 

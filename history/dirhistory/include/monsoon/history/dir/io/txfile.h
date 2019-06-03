@@ -263,6 +263,7 @@ class monsoon_dirhistory_export_ txfile::transaction {
    */
   void rollback() noexcept;
 
+  void resize(size_type new_size);
   auto write_at(offset_type off, const void* buf, std::size_t nbytes) -> std::size_t;
   auto read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t;
 
