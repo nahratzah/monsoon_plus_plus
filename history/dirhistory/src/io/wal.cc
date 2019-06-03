@@ -813,6 +813,10 @@ wal_region::tx::operator bool() const noexcept {
 }
 
 void wal_region::tx::write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
+  const auto file_size = size();
+  if (off > file_size || file_size - monsoon::io::fd::size_type(off) < len)
+    throw std::length_error("write past end of file (based on local transaction resize)");
+
   auto writes_tx = writes_.write_at(off, buf, len);
   std::shared_ptr<wal_region>(wal_)->tx_write_(tx_id_, off, buf, len);
   writes_tx.commit();

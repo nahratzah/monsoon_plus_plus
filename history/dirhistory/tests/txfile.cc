@@ -4,7 +4,6 @@
 #include <monsoon/io/fd.h>
 #include <string>
 #include <string_view>
-#include <iostream>
 
 using monsoon::history::io::txfile;
 constexpr std::size_t WAL_SIZE = 4u << 20;
@@ -22,7 +21,6 @@ auto read(const txfile& f) -> std::string {
     s.resize(old_size + GROWTH);
 
     const auto rlen = tx.read_at(off, &s[old_size], GROWTH);
-    std::cerr << "read " << rlen << " bytes at offset " << off << std::endl;
     s.resize(old_size + rlen);
     off += rlen;
     if (rlen == 0u) return s;
