@@ -53,6 +53,7 @@ install (FILES
   include/monsoon/io/gzip_stream-inl.h
   include/monsoon/io/positional_stream-inl.h
   include/monsoon/io/positional_stream.h
+  include/monsoon/io/limited_stream.h
   include/monsoon/io/stream.h
   DESTINATION include/monsoon/io)
 install (FILES
