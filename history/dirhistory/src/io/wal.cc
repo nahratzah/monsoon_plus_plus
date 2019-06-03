@@ -634,6 +634,13 @@ void wal_region::tx_write_(wal_record::tx_id_type tx_id, monsoon::io::fd::offset
   log_write_raw_(xdr);
 }
 
+void wal_region::tx_resize_(wal_record::tx_id_type tx_id, monsoon::io::fd::size_type new_size) {
+  if (new_size > std::numeric_limits<std::uint64_t>::max())
+    throw std::overflow_error("wal_region::tx::resize");
+
+  log_write_(wal_record_resize(tx_id, new_size));
+}
+
 auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes) -> replacement_map {
   // Create record of the commit.
   monsoon::xdr::xdr_bytevector_ostream<> xdr;
@@ -701,6 +708,7 @@ auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
 
   // Grab the allocation lock.
   std::lock_guard<std::mutex> alloc_lck{ alloc_mtx_ };
+  assert(tx_id < tx_id_states_.size());
   assert(tx_id_states_[tx_id]);
 
   // Write the marker of the record.
@@ -732,8 +740,18 @@ auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   swap(repl_, new_repl); // Never throws.
   // And update the tx_id_states_.
   tx_id_states_[tx_id] = false;
+  ++tx_id_completed_count_;
 
   return undo;
+}
+
+void wal_region::tx_rollback_(wal_record::tx_id_type tx_id) noexcept {
+  std::lock_guard<std::mutex> alloc_lck{ alloc_mtx_ };
+  assert(tx_id < tx_id_states_.size());
+  assert(tx_id_states_[tx_id]);
+
+  tx_id_states_[tx_id] = false;
+  ++tx_id_completed_count_;
 }
 
 

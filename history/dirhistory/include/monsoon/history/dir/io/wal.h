@@ -149,8 +149,9 @@ class monsoon_dirhistory_export_ wal_region {
   struct wal_header;
 
   public:
-  // Constructor tag signaling a newly created file.
+  ///\brief Constructor tag signaling a newly created file.
   struct create {};
+  class tx;
 
   private:
   ///\brief WAL segment sequence number type.
@@ -193,10 +194,10 @@ class monsoon_dirhistory_export_ wal_region {
     return off_ + len_;
   }
 
+  private:
   ///\brief Allocate a transaction ID.
   auto allocate_tx_id() -> wal_record::tx_id_type;
 
-  private:
   ///\brief Number of segments that the WAL is divided in.
   static constexpr std::size_t num_segments_ = 2;
 
@@ -267,11 +268,17 @@ class monsoon_dirhistory_export_ wal_region {
   ///\param[in] buf The buffer holding the data that is to be written.
   ///\param[in] len The length of the buffer.
   void tx_write_(wal_record::tx_id_type tx_id, monsoon::io::fd::offset_type off, const void* buf, std::size_t len);
+  ///\brief Write a WAL record for a resize operation to the log.
+  ///\param[in] tx_id The transaction ID of the write operation.
+  ///\param[in] new_size The new file size.
+  void tx_resize_(wal_record::tx_id_type tx_id, monsoon::io::fd::size_type new_size);
   ///\brief Write a commit message to the log.
   ///\param[in] tx_id The transaction ID of the commit operation.
   ///\param[in] writes The writes done as part of this transaction.
   ///\return A replacement_map recording for all replaced data in the file, what the before-commit contents was.
   auto tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes) -> replacement_map;
+  ///\brief Mark a transaction as canceled.
+  void tx_rollback_(wal_record::tx_id_type tx_id) noexcept;
 
   ///\brief Offset of the WAL.
   const monsoon::io::fd::offset_type off_;
@@ -317,6 +324,47 @@ class monsoon_dirhistory_export_ wal_region {
   monsoon::io::fd::size_type fd_size_;
   ///\brief Pending writes.
   replacement_map repl_;
+};
+
+
+class monsoon_dirhistory_local_ wal_region::tx {
+  public:
+  tx() noexcept = default;
+  tx(const tx&) = delete;
+  tx(tx&&) noexcept = default;
+  tx& operator=(const tx&) = delete;
+  tx& operator=(tx&&) noexcept = default;
+
+  tx(const std::shared_ptr<wal_region>& wal) noexcept
+  : wal_(wal)
+  {
+    if (wal != nullptr)
+      tx_id_ = wal->allocate_tx_id();
+  }
+
+  ~tx() noexcept {
+    rollback();
+  }
+
+  void write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
+    wal_.lock()->tx_write_(tx_id_, off, buf, len);
+  }
+
+  auto commit(replacement_map&& writes) -> replacement_map {
+    auto undo_op = wal_.lock()->tx_commit_(tx_id_, std::move(writes));
+    wal_.reset();
+    return undo_op;
+  }
+
+  void rollback() noexcept {
+    const auto wal = wal_.lock();
+    if (wal != nullptr) wal->tx_rollback_(tx_id_);
+    wal_.reset();
+  }
+
+  private:
+  std::weak_ptr<wal_region> wal_;
+  wal_record::tx_id_type tx_id_;
 };
 
 
