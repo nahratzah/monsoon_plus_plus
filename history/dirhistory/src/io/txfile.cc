@@ -57,5 +57,12 @@ void txfile::transaction::commit() {
   owner_ = nullptr;
 }
 
+void txfile::transaction::rollback() noexcept {
+  if (!*this) return;
+
+  wal_.rollback();
+  owner_ = nullptr;
+}
+
 
 } /* namespace monsoon::history::io */

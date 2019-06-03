@@ -103,7 +103,7 @@ class monsoon_dirhistory_export_ txfile {
    * \param[in] off The offset at which the WAL is found.
    * \param[in] len The length in bytes of the WAL.
    */
-  auto create(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> txfile;
+  static auto create(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> txfile;
 
   /**
    * \brief Start a new transaction.
