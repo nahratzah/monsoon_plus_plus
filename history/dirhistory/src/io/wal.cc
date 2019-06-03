@@ -428,7 +428,20 @@ auto wal_region::read_segment_(std::size_t idx) const -> wal_vector {
 
 auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  return read_at_(off, buf, len);
+}
 
+void wal_region::compact() {
+  std::lock_guard<std::mutex> lck{ log_mtx_ };
+  compact_();
+}
+
+auto wal_region::size() const noexcept -> monsoon::io::fd::size_type {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  return fd_size_;
+}
+
+auto wal_region::read_at_(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t {
   // Reads past the logic end of the file will fail.
   if (off >= fd_size_) return 0;
   // Clamp len, so we won't perform reads past-the-end.
@@ -451,16 +464,6 @@ auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_
   assert(off + wal_end_offset() >= fd_.size());
   std::fill_n(reinterpret_cast<std::uint8_t*>(buf), len, std::uint8_t(0u));
   return len;
-}
-
-void wal_region::compact() {
-  std::lock_guard<std::mutex> lck{ log_mtx_ };
-  compact_();
-}
-
-auto wal_region::size() const noexcept -> monsoon::io::fd::size_type {
-  std::shared_lock<std::shared_mutex> lck{ mtx_ };
-  return fd_size_;
 }
 
 void wal_region::log_write_(const wal_record& r, bool skip_flush) {

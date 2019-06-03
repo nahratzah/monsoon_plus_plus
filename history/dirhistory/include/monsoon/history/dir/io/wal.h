@@ -254,6 +254,13 @@ class monsoon_dirhistory_export_ wal_region {
   auto size() const noexcept -> monsoon::io::fd::size_type;
 
   private:
+  ///\brief Read from the WAL log.
+  ///\details Must be called with mtx_ held for share.
+  ///\param[in] off File offset at which the read happens.
+  ///\param[in] buf Buffer into which to read.
+  ///\param[in] len The length of the read.
+  ///\return The number of bytes read.
+  auto read_at_(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t;
   ///\brief Write a WAL record to the log.
   ///\param[in] r The record to write.
   ///\param[in] skip_flush If set, no file flushes will be done.
@@ -409,6 +416,8 @@ class monsoon_dirhistory_export_ wal_region::tx {
   ///\throws std::bad_weak_ptr if the transaction is invalid.
   template<typename IntermediateFn>
   auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len, IntermediateFn&& fn) const -> std::size_t {
+    const auto wal = std::shared_ptr<wal_region>(wal_);
+
     // If the transaction has an altered file size, apply it.
     if (new_file_size_.has_value()) {
       if (off >= *new_file_size_) return 0;
@@ -421,6 +430,9 @@ class monsoon_dirhistory_export_ wal_region::tx {
       if (local_rlen != 0u) return local_rlen;
     }
 
+    // The callback and the WAL both are protected using the mtx_.
+    std::shared_lock<std::shared_mutex> lck{ wal->mtx_ };
+
     // Second, evaluate callback read operation.
     {
       const auto fn_rlen = std::invoke(std::forward<IntermediateFn>(fn), off, buf, len); // May update len.
@@ -429,7 +441,7 @@ class monsoon_dirhistory_export_ wal_region::tx {
 
     // Third, read directly from the WAL.
     {
-      const auto wal_rlen = std::shared_ptr<wal_region>(wal_)->read_at(off, buf, len);
+      const auto wal_rlen = wal->read_at_(off, buf, len);
       if (wal_rlen != 0u) return wal_rlen;
     }
 
