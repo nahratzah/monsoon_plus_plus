@@ -1,6 +1,7 @@
 #include <monsoon/history/dir/io/wal.h>
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <iostream>
 #include <tuple>
 #include <unordered_map>
@@ -655,7 +656,7 @@ void wal_region::tx_resize_(wal_record::tx_id_type tx_id, monsoon::io::fd::size_
   log_write_(wal_record_resize(tx_id, new_size));
 }
 
-auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes, std::optional<monsoon::io::fd::size_type> new_file_size) -> replacement_map {
+void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes, std::optional<monsoon::io::fd::size_type> new_file_size, std::function<void(replacement_map)> undo_op_fn) {
   // Create record of the commit.
   monsoon::xdr::xdr_bytevector_ostream<> xdr;
   wal_record_commit(tx_id).write(xdr);
@@ -780,7 +781,7 @@ auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
     repl_.truncate(fd_size_);
   }
 
-  return undo;
+  undo_op_fn(std::move(undo));
 }
 
 void wal_region::tx_rollback_(wal_record::tx_id_type tx_id) noexcept {
@@ -819,10 +820,13 @@ void wal_region::tx::resize(monsoon::io::fd::size_type new_size) {
   new_file_size_.emplace(new_size);
 }
 
-auto wal_region::tx::commit() -> replacement_map {
-  auto undo_op = std::shared_ptr<wal_region>(wal_)->tx_commit_(tx_id_, std::move(writes_), new_file_size_);
+void wal_region::tx::commit(std::function<void(replacement_map)> undo_op_fn) {
+  std::shared_ptr<wal_region>(wal_)->tx_commit_(tx_id_, std::move(writes_), new_file_size_, std::move(undo_op_fn));
   wal_.reset();
-  return undo_op;
+}
+
+void wal_region::tx::commit() {
+  commit([]([[maybe_unused]] replacement_map discard) {});
 }
 
 void wal_region::tx::rollback() noexcept {

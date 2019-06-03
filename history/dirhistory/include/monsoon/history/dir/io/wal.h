@@ -293,7 +293,7 @@ class monsoon_dirhistory_export_ wal_region {
   ///\param[in] writes The writes done as part of this transaction.
   ///\param[in] new_file_size If present, a file size modification operation.
   ///\return A replacement_map recording for all replaced data in the file, what the before-commit contents was.
-  auto tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes, std::optional<monsoon::io::fd::size_type> new_file_size) -> replacement_map;
+  void tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes, std::optional<monsoon::io::fd::size_type> new_file_size, std::function<void(replacement_map)> undo_op_fn);
   ///\brief Mark a transaction as canceled.
   void tx_rollback_(wal_record::tx_id_type tx_id) noexcept;
 
@@ -385,9 +385,12 @@ class monsoon_dirhistory_export_ wal_region::tx {
   void resize(monsoon::io::fd::size_type new_size);
 
   ///\brief Commit this transaction.
-  ///\return A replacement map describing the undo operation for this transaction.
+  ///\param[in] undo_op_fn A callback that will accept the replacement_map with recorded overwritten data.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
-  auto commit() -> replacement_map;
+  void commit(std::function<void(replacement_map)> undo_op_fn);
+  ///\brief Commit this transaction.
+  ///\throws std::bad_weak_ptr if the transaction is invalid.
+  void commit();
 
   ///\brief Rollback this transaction.
   void rollback() noexcept;

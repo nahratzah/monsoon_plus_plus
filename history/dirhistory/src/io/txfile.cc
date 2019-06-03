@@ -55,8 +55,10 @@ void txfile::transaction::commit() {
   if (!read_only_) {
     std::unique_lock lck{ owner_->mtx_ };
 
-    seq_.record() = wal_.commit();
-    seq_.commit();
+    wal_.commit(
+        [this](replacement_map&& undo_map) noexcept {
+          seq_.commit(std::move(undo_map));
+        });
   }
 
   owner_ = nullptr;

@@ -80,20 +80,9 @@ class monsoon_dirhistory_export_ tx_sequencer
      * \details
      * Records that the transaction was committed and exposes the change set to
      * read operations.
+     * \param[in] undo_map Map containing the inverse operation.
      */
-    void commit() noexcept;
-
-    /**
-     * \brief Expose the record of changes.
-     * \details
-     * The record of changes holds information about overwritten bytes.
-     * This information is available to transactions started before this
-     * transaction was committed, to extract the before-this-transaction-commit
-     * state of the file.
-     */
-    auto record() -> replacement_map& {
-      return record_->replaced;
-    }
+    void commit(replacement_map&& undo_map) noexcept;
 
     private:
     std::shared_ptr<tx_sequencer> seq_;

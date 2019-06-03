@@ -31,8 +31,9 @@ auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std:
   return 0;
 }
 
-void tx_sequencer::tx::commit() noexcept {
+void tx_sequencer::tx::commit(replacement_map&& undo_map) noexcept {
   seq_->c_.erase_and_dispose(seq_->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+  record_->replaced = std::move(undo_map);
   record_->committed = true;
   seq_->c_.push_back(*record_);
   record_.detach();
