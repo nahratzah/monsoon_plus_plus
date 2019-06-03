@@ -189,6 +189,19 @@ TEST(write_but_dont_commit) {
   check_file_equals(u8"", *wal);
 }
 
+TEST(write_and_commit_and_compact) {
+  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto tx = wal_region::tx(wal);
+
+  tx.resize(8);
+  tx.write_at(0, u8"01234567", 8);
+  tx.commit();
+  wal->compact();
+
+  check_file_equals(u8"01234567", *wal);
+  check_file_equals(u8"01234567", wal->fd(), 256);
+}
+
 int main() {
   return UnitTest::RunAllTests();
 }

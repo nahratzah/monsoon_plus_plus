@@ -450,6 +450,11 @@ auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_
   return len;
 }
 
+void wal_region::compact() {
+  std::lock_guard<std::mutex> lck{ log_mtx_ };
+  compact_();
+}
+
 auto wal_region::size() const noexcept -> monsoon::io::fd::size_type {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
   return fd_size_;
@@ -524,8 +529,11 @@ void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xd
 }
 
 void wal_region::compact_() {
-  // Don't run a compaction if we know we won't free up any information.
-  if (tx_id_completed_count_ == 0u) return;
+  {
+    // Don't run a compaction if we know we won't free up any information.
+    std::lock_guard<std::mutex> alloc_lck{ alloc_mtx_ };
+    if (tx_id_completed_count_ == 0u) return;
+  }
 
   monsoon::xdr::xdr_bytevector_ostream<> wal_segment_header;
   wal_header(current_seq_ + 1u, fd_size_).write(wal_segment_header);
@@ -565,22 +573,19 @@ void wal_region::compact_() {
 
   // Apply the replacement map.
   {
-    std::shared_lock<std::shared_mutex> lck{ mtx_ };
+    std::lock_guard<std::shared_mutex> lck{ mtx_ };
     for (const auto& r : repl_) {
       auto off = r.begin_offset();
       auto buf = reinterpret_cast<const std::uint8_t*>(r.data());
       auto len = r.size();
       while (len > 0) {
-        const auto wlen = fd_.write_at(off, buf, len);
+        const auto wlen = fd_.write_at(off + wal_end_offset(), buf, len);
         off += wlen;
         buf += wlen;
         len -= wlen;
       }
     }
-  }
-  // Now that the replacement map is written out, we can clear it.
-  {
-    std::lock_guard<std::shared_mutex> lck{ mtx_ };
+    // Now that the replacement map is written out, we can clear it.
     repl_.clear();
   }
 

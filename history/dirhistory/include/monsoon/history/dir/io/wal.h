@@ -246,6 +246,7 @@ class monsoon_dirhistory_export_ wal_region {
   }
 
   auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t;
+  void compact();
   auto size() const noexcept -> monsoon::io::fd::size_type;
 
   private:
