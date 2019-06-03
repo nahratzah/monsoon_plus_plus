@@ -446,8 +446,12 @@ class monsoon_dirhistory_export_ wal_region::tx {
     }
 
     // If nothing can provide data, pretend the file is zero-filled.
-    std::fill_n(reinterpret_cast<std::uint8_t*>(buf), len, std::uint8_t(0u));
-    return len;
+    if (new_file_size_.has_value()) {
+      std::fill_n(reinterpret_cast<std::uint8_t*>(buf), len, std::uint8_t(0u));
+      return len;
+    }
+
+    return 0;
   }
 
   ///\brief Read operation.
