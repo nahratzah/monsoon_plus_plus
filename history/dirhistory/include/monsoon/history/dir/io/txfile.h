@@ -6,7 +6,6 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <shared_mutex>
 #include <utility>
 #include <monsoon/io/fd.h>
 #include <monsoon/history/dir/io/tx_sequencer.h>
@@ -136,8 +135,6 @@ class monsoon_dirhistory_export_ txfile {
 
     wal_region wal_;
     tx_sequencer sequencer_;
-    ///\brief Mutex guards the file contents, except for the WAL regions.
-    std::shared_mutex mtx_;
   };
 
   std::shared_ptr<impl_> pimpl_;

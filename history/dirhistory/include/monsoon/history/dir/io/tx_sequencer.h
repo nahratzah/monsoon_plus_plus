@@ -4,6 +4,7 @@
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <atomic>
 #include <cstdint>
+#include <shared_mutex>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/options.hpp>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
@@ -103,6 +104,7 @@ class monsoon_dirhistory_export_ tx_sequencer
 
   ///\brief Collection holding the records of the transactions.
   record_list c_;
+  mutable std::shared_mutex mtx_;
 };
 
 

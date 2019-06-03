@@ -36,16 +36,11 @@ auto txfile::transaction::write_at(offset_type off, const void* buf, std::size_t
 auto txfile::transaction::read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t {
   if (!*this) throw txfile_bad_transaction("txfile::transaction::read_at");
 
-  // Protect against changes in the transaction sequence.
-  std::shared_lock lck{ owner_->mtx_ };
-
   return wal_.read_at(
       off, buf, nbytes,
-      [this, &lck](offset_type off, void* buf, std::size_t& nbytes) -> std::size_t {
+      [this](offset_type off, void* buf, std::size_t& nbytes) -> std::size_t {
         // Read from the recorded change-sets of each transaction.
-        const auto rlen = seq_.read_at(off, buf, nbytes);
-        lck.unlock();
-        return rlen;
+        return seq_.read_at(off, buf, nbytes);
       });
 }
 
@@ -53,8 +48,6 @@ void txfile::transaction::commit() {
   if (!*this) throw txfile_bad_transaction("txfile::transaction::commit");
 
   if (!read_only_) {
-    std::unique_lock lck{ owner_->mtx_ };
-
     wal_.commit(
         [this](replacement_map&& undo_map) noexcept {
           seq_.commit(std::move(undo_map));
