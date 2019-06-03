@@ -230,7 +230,7 @@ std::optional<std::string> fd::get_path() const {
 #endif
 }
 
-void fd::flush() {
+void fd::flush([[maybe_unused]] bool data_only) {
   if (!FlushFileBuffers(handle_)) throw_last_error_();
 }
 
@@ -496,7 +496,12 @@ std::optional<std::string> fd::get_path() const {
   return fname_;
 }
 
-void fd::flush() {
+void fd::flush([[maybe_unused]] bool data_only) {
+#if _POSIX_SYNCHRONIZED_IO >= 200112L
+  if (data_only) {
+    if (fdatasync(handle_)) throw_errno_();
+  }
+#endif // _POSIX_SYNCHRONIZED_IO
   if (fsync(handle_)) throw_errno_();
 }
 

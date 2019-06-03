@@ -119,8 +119,10 @@ class monsoon_misc_export_ xdr_ostream {
 
   template<typename Alloc = std::allocator<uint8_t>>
       void put_opaque_n(std::size_t, const std::vector<std::uint8_t, Alloc>&);
+  void put_opaque_n(const void*, std::size_t);
   template<typename Alloc = std::allocator<uint8_t>>
       void put_opaque(const std::vector<std::uint8_t, Alloc>&);
+  void put_opaque(const void*, std::size_t);
 
   template<std::size_t Len>
       void put_array(const std::array<std::uint8_t, Len>&);

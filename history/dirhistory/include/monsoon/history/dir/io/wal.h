@@ -3,10 +3,12 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <algorithm>
-#include <bitset>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <queue>
+#include <shared_mutex>
 #include <stdexcept>
 #include <vector>
 #include <monsoon/io/fd.h>
@@ -23,12 +25,26 @@ namespace monsoon::history::io {
  * This error indicates that the WAL encountered an unrecoverable error.
  * When encountered, the WAL becomes unusable.
  */
-class wal_error
+class monsoon_dirhistory_export_ wal_error
 : public std::runtime_error
 {
   public:
   using std::runtime_error::runtime_error;
   ~wal_error();
+};
+
+/**
+ * \brief Exception for Write-Ahead-Log being filled.
+ * \details
+ * This error indicates a write to the WAL failed, due to the WAL having
+ * no more space to write log entries.
+ */
+class monsoon_dirhistory_export_ wal_bad_alloc
+: public wal_error
+{
+  public:
+  using wal_error::wal_error;
+  ~wal_bad_alloc();
 };
 
 
@@ -39,7 +55,6 @@ class wal_region;
 enum class wal_entry : std::uint8_t {
   end = 0, ///<\brief End of WAL segment.
   commit = 1, ///<\brief Transaction commit.
-  invalidate_previous_wal = 2, ///<\brief Preceding WAL segments have been processed and consequently are invalidated.
   write = 10, ///<\brief Write operation that is part of a transaction.
   resize = 11 ///<\brief File resize operation that is part of a transaction.
 };
@@ -50,7 +65,7 @@ enum class wal_entry : std::uint8_t {
  * \details
  * WAL records describe a single operation.
  */
-class wal_record {
+class monsoon_dirhistory_export_ wal_record {
   public:
   ///\brief Type of transaction IDs.
   using tx_id_type = std::uint32_t;
@@ -70,24 +85,22 @@ class wal_record {
   ///\brief Write this record to an XDR stream.
   virtual auto do_write(monsoon::xdr::xdr_ostream& out) const -> void = 0;
   ///\brief Apply the operation described in this WAL record.
-  virtual auto do_apply(monsoon::io::fd& fd) const -> void = 0;
-  ///\brief Apply the operation described in this WAL record.
-  virtual auto do_apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo_op) const -> void = 0;
+  virtual auto do_apply(wal_region& wal) const -> void = 0;
   public:
   ///\brief Read a WAL record from an XDR stream.
   static auto read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_record>;
   ///\brief Write this recod to an XDR stream.
   void write(monsoon::xdr::xdr_ostream& out) const;
+  ///\brief Raw operation that writes a header for an entry.
+  static void to_stream(monsoon::xdr::xdr_ostream& out, wal_entry e, tx_id_type tx_id);
   ///\brief Apply the operation described in this WAL record.
-  void apply(monsoon::io::fd& fd) const;
-  ///\brief Apply the operation described in this WAL record.
-  void apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo_op) const;
+  void apply(wal_region& wal) const;
   ///\brief Test if this WAL record denotes the end of a WAL segment.
   auto is_end() const noexcept -> bool;
   ///\brief Test if this WAL record indicates a transaction commit.
   auto is_commit() const noexcept -> bool;
-  ///\brief Test if this WAL record indicates preceding WAL segments have been processed and are invalidated.
-  auto is_invalidate_previous_wal() const noexcept -> bool;
+  ///\brief Test if this WAL record is a control record.
+  auto is_control_record() const noexcept -> bool;
   ///\brief Retrieve the transaction ID of this WAL record.
   auto tx_id() const noexcept -> std::uint32_t { return tx_id_; }
 
@@ -96,8 +109,6 @@ class wal_record {
   ///\brief Create a record describing a transaction commit.
   ///\params[in] tx_id The transaction ID.
   static auto make_commit(tx_id_type tx_id) -> std::unique_ptr<wal_record>;
-  ///\brief Create a record that invalidates preceding WAL segments.
-  static auto make_invalidate_previous_wal() -> std::unique_ptr<wal_record>;
   ///\brief Create a record that describes a write operation.
   ///\params[in] tx_id The transaction ID.
   ///\params[in] offset The position at which the write happens.
@@ -119,57 +130,10 @@ class wal_record {
 };
 
 
-///\brief Helper type that ensures a read operation spans a specific byte range.
-class wal_reader
-: public monsoon::io::stream_reader
-{
-  public:
-  ///\brief Default constructor create an invalid wal_reader.
-  wal_reader() noexcept = default;
-
-  /**
-   * \brief Create a new WAL reader.
-   * \details
-   * Only \p len bytes at \p off in the file \p fd are available for reading.
-   * \param[in] fd File descriptor to read from. Caller must ensure the file descriptor remains valid.
-   * \param[in] off Offset in the file at which reading should start.
-   * \param[in] len The number of bytes to read.
-   * \throws wal_error If an attempt is made to read at the end of the segment.
-   */
-  wal_reader(const monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
-  : fd_(&fd),
-    off_(off),
-    len_(len)
-  {}
-
-  wal_reader(const wal_reader& other) noexcept = default;
-
-  wal_reader(wal_reader&& other) noexcept
-  : fd_(std::exchange(other.fd_, nullptr)),
-    off_(std::exchange(other.off_, 0u)),
-    len_(std::exchange(other.len_, 0u))
-  {}
-
-  wal_reader& operator=(const wal_reader&) noexcept = default;
-
-  wal_reader& operator=(wal_reader&& other) noexcept {
-    fd_ = std::exchange(other.fd_, nullptr);
-    off_ = std::exchange(other.off_, 0);
-    len_ = std::exchange(other.len_, 0);
-    return *this;
-  }
-
-  ~wal_reader() noexcept override;
-
-  auto read(void* buf, std::size_t nbytes) -> std::size_t override;
-  void close() override;
-  auto at_end() const -> bool override;
-
-  private:
-  const monsoon::io::fd* fd_ = nullptr; // No ownership.
-  monsoon::io::fd::offset_type off_ = 0;
-  monsoon::io::fd::size_type len_ = 0;
-};
+class wal_record_end;
+class wal_record_commit;
+class wal_record_write;
+class wal_record_resize;
 
 
 /**
@@ -177,7 +141,17 @@ class wal_reader
  * \details
  * The WAL region handles the logistics of making a file appear transactional.
  */
-class wal_region {
+class monsoon_dirhistory_export_ wal_region {
+  friend wal_record_write;
+  friend wal_record_resize;
+
+  private:
+  struct wal_header;
+
+  public:
+  // Constructor tag signaling a newly created file.
+  struct create {};
+
   private:
   ///\brief WAL segment sequence number type.
   using wal_seqno_type = std::uint32_t;
@@ -189,36 +163,38 @@ class wal_region {
     std::size_t slot;
     ///\brief WAL segment sequence number.
     wal_seqno_type seq;
+    ///\brief Size of the file at the start of the segment.
+    monsoon::io::fd::size_type file_size;
     ///\brief Records in the WAL segment.
     std::vector<std::unique_ptr<wal_record>> data;
   };
 
   public:
-  ///\brief Default constructor creates an invalid WAL region.
-  wal_region() = default;
-  ///\brief Create a WAL region.
+  wal_region() = delete;
+  ///\brief Create a WAL region from an existing file.
   ///\param[in] fd The file in which to open the region.
   ///\param[in] off The offset in the file at which the WAL was created.
   ///\param[in] len The size of the WAL.
-  wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
-  ///\brief A WAL is move-constructible.
-  wal_region(wal_region&&) noexcept = default;
-  wal_region(const wal_region&) = delete;
-  ///\brief A WAL region is move-assignable.
-  wal_region& operator=(wal_region&&) noexcept = default;
-  wal_region& operator=(const wal_region&) = delete;
-  ~wal_region() = default;
-
-  ///\brief Initialize a WAL region.
-  ///\param[in] fd The file in which to create the region.
+  wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
+  ///\brief Create a WAL region from a newly initialized file.
+  ///\param[in] c A tag type to distinguish between the constructors.
+  ///\param[in] fd The file in which to open the region.
   ///\param[in] off The offset in the file at which to create the WAL.
   ///\param[in] len The size of the WAL.
-  static auto create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> wal_region;
+  wal_region(create c, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
+  wal_region(wal_region&&) noexcept = delete;
+  wal_region(const wal_region&) = delete;
+  wal_region& operator=(wal_region&&) noexcept = delete;
+  wal_region& operator=(const wal_region&) = delete;
+  ~wal_region() = default;
 
   ///\brief Retrieve the end of the WAL region.
   auto wal_end_offset() const noexcept -> monsoon::io::fd::offset_type {
     return off_ + len_;
   }
+
+  ///\brief Allocate a transaction ID.
+  auto allocate_tx_id() -> wal_record::tx_id_type;
 
   private:
   ///\brief Number of segments that the WAL is divided in.
@@ -234,28 +210,113 @@ class wal_region {
     return len / num_segments_;
   }
 
+  ///\brief Retrieve the begin offset of a given segment.
+  ///\param[in] slot The index of the slot for which to deduce the offset.
+  ///\return The offset of the first byte of this slot.
+  auto slot_begin_off(std::size_t slot) const noexcept -> monsoon::io::fd::offset_type {
+    return off_ + slot * segment_len_();
+  }
+
+  ///\brief Retrieve the end offset of a given segment.
+  ///\param[in] slot The index of the slot for which to deduce the offset.
+  ///\return The offset of the first past-the-end byte of this slot.
+  auto slot_end_off(std::size_t slot) const noexcept -> monsoon::io::fd::offset_type {
+    return slot_begin_off(slot) + segment_len_();
+  }
+
+  ///\brief Read a WAL segment header.
+  ///\param[in] fd The file descriptor.
+  ///\param[in] idx The slot index of the segment to read.
+  auto read_segment_header_(std::size_t idx) const -> wal_header;
   ///\brief Read a WAL segment.
   ///\param[in] fd The file descriptor.
   ///\param[in] idx The slot index of the segment to read.
-  auto read_segment_(monsoon::io::fd& fd, std::size_t idx) -> wal_vector;
-  ///\brief Create an in-memory representation of an empty segment.
-  static auto make_empty_segment_(wal_seqno_type seq, bool invalidate) -> monsoon::xdr::xdr_bytevector_ostream<>;
+  auto read_segment_(std::size_t idx) const -> wal_vector;
+
+  public:
+  auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t;
+
+  private:
+  ///\brief Write a WAL record to the log.
+  ///\param[in] r The record to write.
+  ///\param[in] skip_flush If set, no file flushes will be done.
+  ///This should only be set when copying into a new log, until the log is activated.
+  void log_write_(const wal_record& r, bool skip_flush = false);
+  ///\brief Write a WAL record to the log, that is encoded in the given byte sequence.
+  ///\param[in] xdr The raw bytes of zero or more WAL records, with a wal_record_end following it.
+  ///\param[in] skip_flush If set, no file flushes will be done.
+  ///This should only be set when copying into a new log, until the log is activated.
+  void log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xdr, bool skip_flush = false);
+  /**
+   * \brief Compact the log.
+   * \details
+   * Reads the log, filters out all transactions that have completed,
+   * and writes it out again. This action compresses the log, making
+   * space available for writes.
+   *
+   * During compaction, all pending writes will be flushed out as well.
+   */
+  void compact_();
+  ///\brief Write a WAL record for a write to the log.
+  ///\details This is equivalent to calling
+  ///`log_write(wal_record_write(...))`.
+  ///This method elides a copy operation of the buffer, making it a bit faster
+  ///to execute.
+  ///\param[in] tx_id The transaction ID of the write operation.
+  ///\param[in] off The offset at which the write takes place.
+  ///\param[in] buf The buffer holding the data that is to be written.
+  ///\param[in] len The length of the buffer.
+  void tx_write_(wal_record::tx_id_type tx_id, monsoon::io::fd::offset_type off, const void* buf, std::size_t len);
+  ///\brief Write a commit message to the log.
+  ///\param[in] tx_id The transaction ID of the commit operation.
+  ///\param[in] writes The writes done as part of this transaction.
+  ///\return A replacement_map recording for all replaced data in the file, what the before-commit contents was.
+  auto tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes) -> replacement_map;
 
   ///\brief Offset of the WAL.
-  monsoon::io::fd::offset_type off_;
+  const monsoon::io::fd::offset_type off_;
   ///\brief Length of the WAL.
-  monsoon::io::fd::size_type len_;
+  const monsoon::io::fd::size_type len_;
   ///\brief WAL segment sequence number.
   wal_seqno_type current_seq_;
   ///\brief Current WAL segment slot to which records are appended.
   std::size_t current_slot_;
-  ///\brief Bitset indicating for each slot if it is active or inactive.
-  ///\details
-  ///Active slots hold data that is required during replay.
-  ///Inactive slots host invalidated data only and should not be replayed.
-  std::bitset<num_segments_> slots_active_{ 0ull };
   ///\brief Append offset in the slot.
   monsoon::io::fd::offset_type slot_off_;
+
+  ///\brief Vector where tx_id is the index and bool indicates wether the transaction is in progress.
+  ///\details A transaction that is in progress has been started, but has neither been committed, nor been rolled back.
+  std::vector<bool> tx_id_states_;
+  ///\brief List of transaction IDs that are available for allocation.
+  ///\details
+  ///These IDs are all marked as inactive.
+  std::priority_queue<wal_record::tx_id_type, std::vector<wal_record::tx_id_type>, std::greater<wal_record::tx_id_type>> tx_id_avail_;
+  ///\brief Number of completed transactions in tx_id_states_.
+  ///\details
+  ///This holds the value `std::count(tx_id_states_.cbegin(), tx_id_states_.cend(), false)`.
+  std::vector<bool>::size_type tx_id_completed_count_ = 0;
+
+  ///\brief Mutex providing read/write access to the file, excluding the WAL.
+  ///\details
+  ///Parts of the file covered by repl_ are not protected with this mutex (but repl_ itself is).
+  ///Instead, the log_mtx_ covers those sections.
+  ///
+  ///This mutex may not be locked with alloc_mtx_ held.
+  mutable std::shared_mutex mtx_;
+  ///\brief Mutex providing access to the WAL.
+  ///\details
+  ///This mutex may not be locked with mtx_ or alloc_mtx_ held.
+  mutable std::mutex log_mtx_;
+  ///\brief Mutex providing access to the allocator data.
+  ///\details
+  ///Protects tx_id_states_ and tx_id_avail_.
+  mutable std::mutex alloc_mtx_;
+  ///\brief File descriptor.
+  monsoon::io::fd fd_;
+  ///\brief Current size of the file.
+  monsoon::io::fd::size_type fd_size_;
+  ///\brief Pending writes.
+  replacement_map repl_;
 };
 
 

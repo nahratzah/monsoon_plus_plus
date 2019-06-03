@@ -69,7 +69,7 @@ auto txfile::transaction::read_at(offset_type off, void* buf, std::size_t nbytes
   // nbytes will have been modified to not overlap any transactions that apply.
 
   // data is only present in the file.
-  return owner_->fd_.read_at(offset_to_fd_offset_(off), buf, nbytes);
+  return owner_->wal_.read_at(offset_to_fd_offset_(off), buf, nbytes);
 }
 
 void txfile::transaction::commit() {

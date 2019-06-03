@@ -124,18 +124,15 @@ class txfile {
     impl_& operator=(impl_&&) = delete;
 
     impl_(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
-    : fd_(std::move(fd)),
-      wal_(fd_, off, len)
+    : wal_(std::move(fd), off, len)
     {}
 
     impl_([[maybe_unused]] create_tag tag, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
-    : fd_(std::move(fd)),
-      wal_(wal_region::create(fd_, off, len))
+    : wal_(wal_region::create(), std::move(fd), off, len)
     {}
 
     ~impl_() noexcept;
 
-    monsoon::io::fd fd_;
     wal_region wal_;
     std::shared_ptr<tx_sequencer> sequencer_ = std::make_shared<tx_sequencer>();
     ///\brief Mutex guards the file contents, except for the WAL regions.

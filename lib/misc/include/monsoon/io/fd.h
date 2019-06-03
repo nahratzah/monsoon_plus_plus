@@ -56,7 +56,7 @@ class monsoon_misc_export_ fd
   offset_type offset() const;
   std::optional<std::string> get_path() const;
 
-  void flush();
+  void flush(bool data_only = false);
   size_type size() const;
   void truncate(size_type);
 

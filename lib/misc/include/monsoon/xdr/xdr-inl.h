@@ -366,8 +366,12 @@ inline void xdr_ostream::put_opaque_n(std::size_t len,
   if (v.size() != len)
     throw xdr_exception();
 
-  put_raw_bytes(v.data(), len);
-  if (v.size() % 4u != 0u) put_padding(4u - v.size() % 4);
+  put_opaque_n(v.data(), len);
+}
+
+inline void xdr_ostream::put_opaque_n(const void* buf, std::size_t len) {
+  put_raw_bytes(buf, len);
+  if (len % 4u != 0u) put_padding(4u - len % 4);
 }
 
 template<typename Alloc>
@@ -377,8 +381,15 @@ inline void xdr_ostream::put_opaque(
     throw xdr_exception();
   const std::uint32_t len = v.size();
 
+  put_opaque(v.data(), len);
+}
+
+inline void xdr_ostream::put_opaque(const void* buf, std::size_t len) {
+  if (len > 0xffffffffu)
+    throw xdr_exception();
+
   put_int32(len);
-  put_opaque_n(len, v);
+  put_opaque_n(buf, len);
 }
 
 template<std::size_t Len>

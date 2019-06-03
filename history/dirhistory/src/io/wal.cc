@@ -1,32 +1,49 @@
 #include <monsoon/history/dir/io/wal.h>
+#include <algorithm>
 #include <cassert>
+#include <iostream>
+#include <tuple>
 #include <unordered_map>
 #include <monsoon/xdr/xdr_stream.h>
+#include <monsoon/io/positional_stream.h>
+#include <monsoon/io/limited_stream.h>
+#include <objpipe/of.h>
 
 namespace monsoon::history::io {
-namespace {
 
 
-auto prepare_undo_information(const monsoon::io::fd& fd, const wal_region& wal, replacement_map& undo_op, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> std::vector<replacement_map::tx> {
-  std::vector<replacement_map::tx> tx;
+struct wal_region::wal_header {
+  static constexpr std::size_t XDR_SIZE = 12u;
 
-  assert(wal.wal_end_offset() <= off);
-  while (len > 0u) {
-    std::size_t bufsiz = 64u * 1024u * 1024u;
-    if (bufsiz > len) bufsiz = len;
-    tx.emplace_back(undo_op.write_at_from_file(off - wal.wal_end_offset(), fd, off, bufsiz, false));
-    off += bufsiz;
-    len -= bufsiz;
+  wal_header() noexcept = default;
+
+  wal_header(std::uint32_t seq, std::uint64_t file_size) noexcept
+  : file_size(file_size),
+    seq(seq)
+  {}
+
+  void write(monsoon::xdr::xdr_ostream& out) const {
+    out.put_uint32(seq);
+    out.put_uint64(file_size);
   }
 
-  return tx;
-}
+  static auto read(monsoon::xdr::xdr_istream& in) -> wal_header {
+    const std::uint32_t seq = in.get_uint32();
+    const std::uint64_t file_size = in.get_uint64();
+    return wal_header(seq, file_size);
+  }
+
+  std::uint64_t file_size = 0u;
+  std::uint32_t seq = 0u;
+};
 
 
 class wal_record_end
 : public wal_record
 {
   public:
+  static constexpr std::size_t XDR_SIZE = 4u;
+
   wal_record_end() noexcept
   : wal_record(0u)
   {}
@@ -35,8 +52,7 @@ class wal_record_end
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::end; }
   private:
   auto do_write([[maybe_unused]] monsoon::xdr::xdr_ostream& out) const -> void override {}
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd) const -> void override {}
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {}
+  auto do_apply([[maybe_unused]] wal_region& wal) const -> void override {}
 };
 
 
@@ -50,25 +66,7 @@ class wal_record_commit
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::commit; }
   private:
   auto do_write([[maybe_unused]] monsoon::xdr::xdr_ostream& out) const -> void override {}
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd) const -> void override {}
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {}
-};
-
-
-class wal_record_invalidate_previous_wal
-: public wal_record
-{
-  public:
-  wal_record_invalidate_previous_wal() noexcept
-  : wal_record(0u)
-  {}
-
-  ~wal_record_invalidate_previous_wal() noexcept override = default;
-  auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::invalidate_previous_wal; }
-  private:
-  auto do_write([[maybe_unused]] monsoon::xdr::xdr_ostream& out) const -> void override {}
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd) const -> void override {}
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {}
+  auto do_apply([[maybe_unused]] wal_region& wal) const -> void override {}
 };
 
 
@@ -84,6 +82,15 @@ class wal_record_write
     data(std::move(data))
   {}
 
+  wal_record_write(tx_id_type tx_id, std::uint64_t offset, const void* buf, std::size_t len)
+  : wal_record_write(
+      tx_id,
+      offset,
+      std::vector<std::uint8_t>(
+          reinterpret_cast<const std::uint8_t*>(buf),
+          reinterpret_cast<const std::uint8_t*>(buf) + len))
+  {}
+
   ~wal_record_write() noexcept override = default;
 
   static auto from_stream(tx_id_type tx_id, monsoon::xdr::xdr_istream& in)
@@ -94,35 +101,23 @@ class wal_record_write
 
   auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::write; }
 
+  static void to_stream(monsoon::xdr::xdr_ostream& out, tx_id_type tx_id, std::uint64_t offset, const void* buf, std::size_t len) {
+    wal_record::to_stream(out, wal_entry::write, tx_id);
+    to_stream_internal_(out, offset, buf, len);
+  }
+
   private:
-  auto do_write(monsoon::xdr::xdr_ostream& out) const -> void override {
+  static auto to_stream_internal_(monsoon::xdr::xdr_ostream& out, std::uint64_t offset, const void* buf, std::size_t len) -> void {
     out.put_uint64(offset);
-    out.put_opaque(data);
+    out.put_opaque(buf, len);
   }
 
-  auto do_apply(monsoon::io::fd& fd) const -> void override {
-    const std::uint8_t* buf = data.data();
-    auto len = data.size();
-    auto off = offset;
-
-    while (len > 0) {
-      const auto wlen = fd.write_at(off, buf, len);
-      buf += wlen;
-      len -= wlen;
-      off += wlen;
-    }
+  auto do_write(monsoon::xdr::xdr_ostream& out) const -> void override {
+    to_stream_internal_(out, offset, data.data(), data.size());
   }
 
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {
-    assert(wal.wal_end_offset() <= offset);
-
-    auto tx = undo_op.write_at_from_file(offset - wal.wal_end_offset(), fd, offset, data.size(), false);
-
-    // Apply changes on the file.
-    do_apply(fd);
-
-    // Apply changes on the undo_op.
-    tx.commit();
+  auto do_apply(wal_region& wal) const -> void override {
+    wal.repl_.write_at(offset, data.data(), data.size()).commit();
   }
 
   std::uint64_t offset;
@@ -155,30 +150,17 @@ class wal_record_resize
     out.put_uint64(new_size);
   }
 
-  auto do_apply(monsoon::io::fd& fd) const -> void override {
-    fd.truncate(new_size);
-  }
-
-  auto do_apply([[maybe_unused]] monsoon::io::fd& fd, [[maybe_unused]] wal_region& wal, [[maybe_unused]] replacement_map& undo_op) const -> void override {
-    assert(wal.wal_end_offset() <= new_size);
-
-    std::vector<replacement_map::tx> tx_list;
-    const auto old_size = fd.size();
-    if (old_size > new_size) tx_list = prepare_undo_information(fd, wal, undo_op, new_size, old_size - new_size);
-
-    do_apply(fd);
-
-    for (auto& tx : tx_list) tx.commit();
+  auto do_apply(wal_region& wal) const -> void override {
+    wal.fd_size_ = new_size;
   }
 
   std::uint64_t new_size;
 };
 
 
-} /* namespace monsoon::history::io::<unnamed> */
-
-
 wal_error::~wal_error() = default;
+
+wal_bad_alloc::~wal_bad_alloc() = default;
 
 
 wal_record::wal_record(tx_id_type tx_id)
@@ -203,10 +185,6 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
     case static_cast<std::uint8_t>(wal_entry::commit):
       result = std::make_unique<wal_record_commit>(tx_id);
       break;
-    case static_cast<std::uint8_t>(wal_entry::invalidate_previous_wal):
-      if (tx_id != 0u) throw wal_error("unrecognized WAL entry");
-      result = std::make_unique<wal_record_invalidate_previous_wal>();
-      break;
     case static_cast<std::uint8_t>(wal_entry::write):
       result = wal_record_write::from_stream(tx_id, in);
       break;
@@ -224,16 +202,16 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
 
 auto wal_record::write(monsoon::xdr::xdr_ostream& out) const -> void {
   assert((tx_id() & tx_id_mask) == tx_id());
-  out.put_uint32(static_cast<std::uint32_t>(get_wal_entry()) | (tx_id() << 8));
+  to_stream(out, get_wal_entry(), tx_id());
   do_write(out);
 }
 
-void wal_record::apply(monsoon::io::fd& fd) const {
-  do_apply(fd);
+auto wal_record::to_stream(monsoon::xdr::xdr_ostream& out, wal_entry e, tx_id_type tx_id) -> void {
+  out.put_uint32(static_cast<std::uint32_t>(e) | (tx_id << 8));
 }
 
-void wal_record::apply(monsoon::io::fd& fd, wal_region& wal, replacement_map& undo) const {
-  do_apply(fd, wal, undo);
+void wal_record::apply(wal_region& wal) const {
+  do_apply(wal);
 }
 
 auto wal_record::is_end() const noexcept -> bool {
@@ -244,8 +222,9 @@ auto wal_record::is_commit() const noexcept -> bool {
   return get_wal_entry() == wal_entry::commit;
 }
 
-auto wal_record::is_invalidate_previous_wal() const noexcept -> bool {
-  return get_wal_entry() == wal_entry::invalidate_previous_wal;
+auto wal_record::is_control_record() const noexcept -> bool {
+  const auto e = get_wal_entry();
+  return e == wal_entry::end;
 }
 
 auto wal_record::make_end() -> std::unique_ptr<wal_record> {
@@ -254,10 +233,6 @@ auto wal_record::make_end() -> std::unique_ptr<wal_record> {
 
 auto wal_record::make_commit(tx_id_type tx_id) -> std::unique_ptr<wal_record> {
   return std::make_unique<wal_record_commit>(tx_id);
-}
-
-auto wal_record::make_invalidate_previous_wal() -> std::unique_ptr<wal_record> {
-  return std::make_unique<wal_record_invalidate_previous_wal>();
 }
 
 auto wal_record::make_write(tx_id_type tx_id, std::uint64_t offset, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record> {
@@ -273,153 +248,174 @@ auto wal_record::make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::u
 }
 
 
-wal_reader::~wal_reader() noexcept = default;
-
-auto wal_reader::read(void* buf, std::size_t nbytes) -> std::size_t {
-  assert(fd_ != nullptr);
-  if (len_ == 0) throw wal_error("corrupt WAL segment: too long");
-
-  if (nbytes > len_) nbytes = len_;
-  const auto rlen = fd_->read_at(off_, buf, nbytes);
-  assert(rlen <= len_);
-  off_ += rlen;
-  len_ -= rlen;
-  return rlen;
-}
-
-void wal_reader::close() {}
-
-auto wal_reader::at_end() const -> bool {
-  return len_ == 0u;
-}
-
-
-wal_region::wal_region(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+wal_region::wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
 : off_(off),
-  len_(len)
+  len_(len),
+  fd_(std::move(fd))
 {
   static_assert(num_segments_ == 2u, "Algorithm assumes two segments.");
-  std::array<wal_vector, num_segments_> segments{
-    read_segment_(fd, 0),
-    read_segment_(fd, 1)
+  std::array<std::tuple<std::size_t, wal_header>, 2> segments{
+    std::make_tuple(0u, read_segment_header_(0)),
+    std::make_tuple(1u, read_segment_header_(1))
   };
-
   std::sort(
       segments.begin(),
       segments.end(),
-      [](const wal_vector& x, const wal_vector& y) -> bool {
+      [](const auto& x, const auto& y) -> bool {
         // Use a sliding window for sequencing distance.
         // Note: y.seq - x.seq may wrap-around, the comparison is based on that.
-        return y.seq - x.seq <= 0x7fffffffu;
+        return std::get<wal_header>(y).seq - std::get<wal_header>(x).seq <= 0x7fffffffu;
       });
 
-  assert(std::all_of(
-          segments.begin(), segments.end(),
-          [](const wal_vector& v) {
-            return !v.data.empty() && v.data.back()->is_end();
-          }));
+  current_slot_ = std::get<std::size_t>(segments[0]);
+  const auto old_slot = 1u - current_slot_;
+  const auto old_data = read_segment_(old_slot);
+  fd_size_ = old_data.file_size;
+  current_seq_ = old_data.seq + 1u;
 
-  const auto base_seq = segments.front().seq;
-  std::for_each(segments.begin(), segments.end(), [base_seq](wal_vector& v) { v.seq -= base_seq; });
+  // In-memory application of the WAL log.
+  // Note that if the WAL log is bad, this will throw.
+  {
+    std::unordered_map<wal_record::tx_id_type, std::vector<const wal_record*>> records_by_tx;
+    objpipe::of(std::cref(old_data.data))
+        .iterate()
+        .filter(
+            [](const auto& record_ptr) -> bool {
+              return !record_ptr->is_control_record();
+            })
+        .transform(
+            [&records_by_tx](const auto& ptr) {
+              std::vector<const wal_record*> result;
+              if (ptr->is_commit()) {
+                result.swap(records_by_tx[ptr->tx_id()]);
+              } else {
+                records_by_tx[ptr->tx_id()].push_back(ptr.get());
+              }
+              return result;
+            })
+        .iterate()
+        .deref()
+        .for_each(
+            [this](const wal_record& record) {
+              record.apply(*this);
+            });
+  }
 
-  if (!std::all_of(
-          segments.begin(),
-          segments.end(),
-          [](const wal_vector& v) -> bool {
-            return v.data.size() == 1u;
-          })) {
-    auto invalidation = segments.end();
-    for (auto iter = segments.begin(); iter != segments.end(); ++iter) {
-      if (std::any_of(
-              iter->data.begin(),
-              iter->data.end(),
-              [](const auto& wal_record_ptr) -> bool {
-                return wal_record_ptr->is_invalidate_previous_wal();
-              }))
-        invalidation = iter;
-    }
-    if (invalidation == segments.end())
-      throw wal_error("unable to determine start of WAL");
+  // If possible, recover the WAL log onto disk.
+  if (fd_.can_write()) {
+    using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
 
-    // Ensure we're operating on a sequential subset of entries.
-    for (auto iter = invalidation; iter != segments.end() - 1; ++iter) {
-      if (iter->seq + 1u != iter->seq)
-        throw wal_error("missing WAL sequence IDs");
-    }
-
-    // Drop all records preceding the invalidation.
-    for (auto i = std::find_if(invalidation->data.begin(), invalidation->data.end(), [](const auto& r) -> bool { return r->is_invalidate_previous_wal(); });
-        i != invalidation->data.end();
-        i = std::find_if(invalidation->data.begin(), invalidation->data.end(), [](const auto& r) -> bool { return r->is_invalidate_previous_wal(); })) {
-      invalidation->data.erase(invalidation->data.begin(), i);
-    }
-
-    // Replay the WAL.
-    std::unordered_map<wal_record::tx_id_type, std::vector<const wal_record*>> records;
-    bool invalidation_seen = false;
-    for (auto iter = invalidation; iter != segments.end(); ++iter) {
-      for (const auto& record_ptr : iter->data) {
-        if (invalidation_seen) {
-          records[record_ptr->tx_id()].push_back(record_ptr.get());
-          if (record_ptr->is_commit()) {
-            for (const auto r : records[record_ptr->tx_id()]) r->apply(fd);
-            records[record_ptr->tx_id()].clear();
-          }
-        }
+    // Write all pending writes.
+    for (const auto& w : repl_) {
+      auto buf = reinterpret_cast<const std::uint8_t*>(w.data());
+      auto len = w.size();
+      auto off = w.begin_offset();
+      while (len > 0) {
+        const auto wlen = fd_.write_at(off, buf, len);
+        buf += wlen;
+        len -= wlen;
+        off += wlen;
       }
     }
+    repl_.clear();
+    fd_.truncate(fd_size_);
+    fd_.flush(true);
 
-    // Sync state to disk.
-    fd.flush();
+    // Start a new segment.
+    auto xdr = monsoon::xdr::xdr_stream_writer<lp_writer>(lp_writer(segment_len_(), fd_, slot_begin_off(current_slot_)));
+    wal_header(current_seq_, fd_size_).write(xdr);
+    slot_off_ = xdr.underlying_stream().offset();
+    wal_record_end().write(xdr);
+
+    // Flush data onto disk.
+    fd_.flush(true);
   }
-
-  // Start a new WAL entry that invalidates all previous entries.
-  current_seq_ = base_seq + segments.back().seq + 1u;
-  current_slot_ = segments.front().slot;
-  const auto new_segment = make_empty_segment_(current_seq_, true);
-  if (new_segment.size() > segment_len_()) throw wal_error("WAL segments too small");
-  auto woff = off_ + segments.front().slot * segment_len_();
-  auto buf = new_segment.data();
-  auto buflen = new_segment.size();
-  slot_off_ = buflen;
-  while (buflen > 0) {
-    const auto wlen = fd.write_at(woff, buf, buflen);
-    woff += wlen;
-    buf += wlen;
-    buflen -= wlen;
-  }
-  slots_active_[segments.front().slot] = true;
-  fd.flush(); // Sync new segment.
-
-  assert(!slots_active_.all() && !slots_active_.none());
 }
 
-auto wal_region::create(monsoon::io::fd& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len) -> wal_region {
-  const auto buf_vector = std::vector<std::uint8_t>(len, std::uint8_t(0));
-  const std::uint8_t* buf = buf_vector.data();
-  auto nbytes = buf_vector.size();
-  auto woff = off;
+wal_region::wal_region([[maybe_unused]] create c, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+: off_(off),
+  len_(len),
+  current_seq_(0),
+  current_slot_(0),
+  fd_(std::move(fd)),
+  fd_size_(0)
+{
+  using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
 
-  while (nbytes > 0) {
-    const auto wlen = fd.write_at(woff, buf, nbytes);
-    woff += wlen;
-    buf += wlen;
-    nbytes -= wlen;
+  const auto other_slot = 1u - current_slot_;
+
+  {
+    auto xdr = monsoon::xdr::xdr_stream_writer<lp_writer>(lp_writer(segment_len_(len_), fd_, slot_begin_off(current_slot_)));
+    wal_header(0, 0).write(xdr);
+    slot_off_ = xdr.underlying_stream().offset();
+    wal_record_end().write(xdr);
   }
 
-  fd.flush();
-  return wal_region(fd, off, len);
+  {
+    auto xdr = monsoon::xdr::xdr_stream_writer<lp_writer>(lp_writer(segment_len_(len_), fd_, slot_begin_off(other_slot)));
+    wal_header(std::uint32_t(0) - 1u, 0).write(xdr);
+    wal_record_end().write(xdr);
+  }
+
+  fd_.flush();
 }
 
-auto wal_region::read_segment_(monsoon::io::fd& fd, std::size_t idx) -> wal_vector {
+auto wal_region::allocate_tx_id() -> wal_record::tx_id_type {
+  std::unique_lock<std::mutex> lck{ alloc_mtx_ };
+
+  // First, ensure there is space to allocate a transaction ID.
+  while (tx_id_avail_.empty() && tx_id_states_.size() > wal_record::tx_id_mask) [[unlikely]] {
+    // Check if there is even room to be created by compacting.
+    if (tx_id_completed_count_ == 0) [[unlikely]]
+      throw wal_bad_alloc("Ran out of WAL transaction IDs.");
+
+    // Compact the WAL log by replaying it.
+    // We must release the lock temporarily, hence why this part is in a loop.
+    lck.unlock();
+    compact_();
+    lck.lock();
+  }
+
+  // First recycle used IDs.
+  if (!tx_id_avail_.empty()) {
+    const auto tx_id = tx_id_avail_.top();
+    assert(tx_id < tx_id_states_.size());
+    assert((tx_id & wal_record::tx_id_mask) == tx_id);
+    tx_id_states_[tx_id] = true;
+    tx_id_avail_.pop();
+    return tx_id;
+  }
+
+  // Only allocate a new ID if there are none for recycling.
+  const wal_record::tx_id_type tx_id = tx_id_states_.size();
+  assert((tx_id & wal_record::tx_id_mask) == tx_id);
+  tx_id_states_.push_back(true);
+  return tx_id;
+}
+
+auto wal_region::read_segment_header_(std::size_t idx) const -> wal_header {
   assert(idx < num_segments_);
 
-  wal_vector result;
-  auto xdr_stream = monsoon::xdr::xdr_stream_reader<wal_reader>(
-      wal_reader(fd, off_ + idx * segment_len_(), segment_len_()));
+  using lp_reader = monsoon::io::limited_stream_reader<monsoon::io::positional_reader>;
 
+  auto xdr_stream = monsoon::xdr::xdr_stream_reader<lp_reader>(
+      lp_reader(segment_len_(), fd_, slot_begin_off(idx)));
+  return wal_header::read(xdr_stream);
+}
+
+auto wal_region::read_segment_(std::size_t idx) const -> wal_vector {
+  assert(idx < num_segments_);
+
+  using lp_reader = monsoon::io::limited_stream_reader<monsoon::io::positional_reader>;
+
+  auto xdr_stream = monsoon::xdr::xdr_stream_reader<lp_reader>(
+      lp_reader(segment_len_(), fd_, slot_begin_off(idx)));
+  const auto header = wal_header::read(xdr_stream);
+
+  wal_vector result;
   result.slot = idx;
-  result.seq = xdr_stream.get_uint32();
+  result.seq = header.seq;
+  result.file_size = header.file_size;
   do {
     result.data.push_back(wal_record::read(xdr_stream));
   } while (!result.data.back()->is_end());
@@ -427,13 +423,317 @@ auto wal_region::read_segment_(monsoon::io::fd& fd, std::size_t idx) -> wal_vect
   return result;
 }
 
-auto wal_region::make_empty_segment_(wal_seqno_type seq, bool invalidate) -> monsoon::xdr::xdr_bytevector_ostream<> {
-  monsoon::xdr::xdr_bytevector_ostream<> x;
+auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
 
-  x.put_uint32(seq);
-  if (invalidate) wal_record::make_invalidate_previous_wal()->write(x);
-  wal_record::make_end()->write(x);
-  return x;
+  // Reads past the logic end of the file will fail.
+  if (off >= fd_size_) return 0;
+  // Clamp len, so we won't perform reads past-the-end.
+  if (len > fd_size_ - off) len = fd_size_ - off;
+  // Zero length reads are very easy.
+  if (len == 0u) return 0u;
+
+  // Try to read from the list of pending writes.
+  const auto repl_rlen = repl_.read_at(off, buf, len); // May modify len.
+  if (repl_rlen != 0u) return repl_rlen;
+
+  // We have to fall back to the file.
+  const auto read_rlen = fd_.read_at(off, buf, len);
+  if (read_rlen != 0u) [[likely]] return read_rlen;
+
+  // If the file-read failed, it means the file is really smaller.
+  // Pretend the file is zero-filled.
+  assert(off >= fd_.size());
+  std::fill_n(reinterpret_cast<std::uint8_t*>(buf), len, std::uint8_t(0u));
+  return len;
+}
+
+void wal_region::log_write_(const wal_record& r, bool skip_flush) {
+  assert(!r.is_commit()); // Commit is special cased.
+
+  monsoon::xdr::xdr_bytevector_ostream<> xdr;
+  r.write(xdr);
+  assert(xdr.size() >= wal_record_end::XDR_SIZE);
+  wal_record_end().write(xdr);
+
+  log_write_raw_(xdr, skip_flush);
+}
+
+void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xdr, bool skip_flush) {
+  std::lock_guard<std::mutex> lck{ log_mtx_ };
+
+  assert(slot_begin_off(current_slot_) <= slot_off_ && slot_off_ < slot_end_off(current_slot_));
+
+#ifndef NDEBUG // Assert that the slot offset contains a record-end-marker.
+  {
+    using lp_reader = monsoon::io::limited_stream_reader<monsoon::io::positional_reader>;
+
+    assert(slot_end_off(current_slot_) - slot_off_ >= wal_record_end::XDR_SIZE);
+
+    auto xdr_read = monsoon::xdr::xdr_stream_reader<lp_reader>(lp_reader(wal_record_end::XDR_SIZE, fd_, slot_off_));
+    const auto last_record = wal_record::read(xdr_read);
+    assert(last_record->is_end());
+    assert(xdr_read.at_end());
+  }
+#endif
+
+  // Run a compaction cycle if the log has insuficient space for the new data.
+  if (slot_end_off(current_slot_) - slot_off_ < xdr.size()) {
+    compact_();
+
+    if (slot_end_off(current_slot_) - slot_off_ < xdr.size())
+      throw wal_bad_alloc("no space in WAL");
+  }
+
+  // Perform write-ahead of the record.
+  {
+    auto buf = xdr.data() + wal_record_end::XDR_SIZE;
+    auto len = xdr.size() - wal_record_end::XDR_SIZE;
+    auto off = slot_off_ + wal_record_end::XDR_SIZE;
+    while (len > 0u) {
+      const auto wlen = fd_.write_at(off, buf, len);
+      buf += wlen;
+      len -= wlen;
+      off += wlen;
+    }
+  }
+  if (!skip_flush) fd_.flush(true);
+
+  // Write the marker of the record.
+  {
+    auto buf = xdr.data();
+    auto len = wal_record_end::XDR_SIZE;
+    auto off = slot_off_;
+    while (len > 0u) {
+      const auto wlen = fd_.write_at(off, buf, len);
+      buf += wlen;
+      len -= wlen;
+      off += wlen;
+    }
+  }
+
+  // Advance slot offset.
+  slot_off_ += xdr.size() - wal_record_end::XDR_SIZE;
+}
+
+void wal_region::compact_() {
+  // Don't run a compaction if we know we won't free up any information.
+  if (tx_id_completed_count_ == 0u) return;
+
+  monsoon::xdr::xdr_bytevector_ostream<> wal_segment_header;
+  wal_header(current_seq_ + 1u, fd_size_).write(wal_segment_header);
+
+  using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
+
+  const auto new_slot = 1u - current_slot_;
+  auto xdr = monsoon::xdr::xdr_stream_writer<lp_writer>(lp_writer(
+          slot_end_off(new_slot) - slot_begin_off(new_slot) - wal_segment_header.size(),
+          fd_,
+          slot_begin_off(new_slot) + wal_segment_header.size()));
+
+  // Copy all information for in-progress transactions.
+  objpipe::of(std::move(read_segment_(current_slot_).data))
+      .iterate()
+      .deref()
+      .filter( // Skip control records.
+          [](const auto& record) -> bool {
+            return !record.is_control_record();
+          })
+      .filter( // Only valid transaction IDs.
+          [this](const auto& record) -> bool {
+            return tx_id_states_.size() > record.tx_id();
+          })
+      .filter( // Only copy in-progress transactions.
+          [this](const auto& record) -> bool {
+            return tx_id_states_[record.tx_id()];
+          })
+      .for_each(
+          [&xdr](const auto& record) {
+            record.write(xdr);
+          });
+  // Record the end-of-log offset.
+  const auto new_slot_off = xdr.underlying_stream().offset();
+  // And write an end-of-log record.
+  wal_record_end().write(xdr);
+
+  // Apply the replacement map.
+  {
+    std::shared_lock<std::shared_mutex> lck{ mtx_ };
+    for (const auto& r : repl_) {
+      auto off = r.begin_offset();
+      auto buf = reinterpret_cast<const std::uint8_t*>(r.data());
+      auto len = r.size();
+      while (len > 0) {
+        const auto wlen = fd_.write_at(off, buf, len);
+        off += wlen;
+        buf += wlen;
+        len -= wlen;
+      }
+    }
+  }
+  // Now that the replacement map is written out, we can clear it.
+  {
+    std::lock_guard<std::shared_mutex> lck{ mtx_ };
+    repl_.clear();
+  }
+
+  // Ensure all data is on disk, before activating the segment.
+  fd_.flush(true);
+
+  // Now that all the writes from the old segment have been applied,
+  // and all active transaction information has been copied,
+  // we can finally activate this new segment.
+  //
+  // Note that we don't flush after this write.
+  // We don't have to, as we know that all information in this log
+  // is the same as the application of the previous log on top of
+  // the (now updated) file contents.
+  // Until a new commit happens, both logs are equivalent.
+  {
+    auto buf = wal_segment_header.data();
+    auto len = wal_segment_header.size();
+    auto off = slot_begin_off(new_slot);
+    while (len > 0) {
+      const auto wlen = fd_.write_at(off, buf, len);
+      buf += wlen;
+      len -= wlen;
+      off += wlen;
+    }
+  }
+
+  {
+    std::lock_guard<std::mutex> alloc_lck{ alloc_mtx_ };
+    // Update tx_id allocation state.
+    while (!tx_id_states_.empty() && !tx_id_states_.back())
+      tx_id_states_.pop_back();
+    while (!tx_id_avail_.empty()) tx_id_avail_.pop(); // tx_id_avail_ lacks a clear() method.
+    for (wal_record::tx_id_type tx_id = 0u; tx_id < tx_id_states_.size() && tx_id <= wal_record::tx_id_mask; ++tx_id) {
+      if (!tx_id_states_[tx_id]) {
+        try {
+          tx_id_avail_.push(tx_id);
+        } catch (const std::bad_alloc&) {
+          // SKIP: ignore this exception
+        }
+      }
+    }
+  }
+
+  // Update segment information.
+  current_slot_ = new_slot;
+  slot_off_ = new_slot_off;
+  ++current_seq_;
+  tx_id_completed_count_ = 0;
+}
+
+void wal_region::tx_write_(wal_record::tx_id_type tx_id, monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
+  monsoon::xdr::xdr_bytevector_ostream<> xdr;
+  wal_record_write::to_stream(xdr, tx_id, off, buf, len);
+  assert(xdr.size() >= wal_record_end::XDR_SIZE);
+  wal_record_end().write(xdr);
+
+  log_write_raw_(xdr);
+}
+
+auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes) -> replacement_map {
+  // Create record of the commit.
+  monsoon::xdr::xdr_bytevector_ostream<> xdr;
+  wal_record_commit(tx_id).write(xdr);
+  assert(xdr.size() >= wal_record_end::XDR_SIZE);
+  wal_record_end().write(xdr);
+
+  // Grab the WAL lock.
+  std::lock_guard<std::mutex> log_lck{ log_mtx_ };
+  assert(slot_begin_off(current_slot_) <= slot_off_ && slot_off_ < slot_end_off(current_slot_));
+
+#ifndef NDEBUG // Assert that the slot offset contains a record-end-marker.
+  {
+    using lp_reader = monsoon::io::limited_stream_reader<monsoon::io::positional_reader>;
+
+    assert(slot_end_off(current_slot_) - slot_off_ >= wal_record_end::XDR_SIZE);
+
+    auto xdr_read = monsoon::xdr::xdr_stream_reader<lp_reader>(lp_reader(wal_record_end::XDR_SIZE, fd_, slot_off_));
+    const auto last_record = wal_record::read(xdr_read);
+    assert(last_record->is_end());
+    assert(xdr_read.at_end());
+  }
+#endif
+
+  // Run a compaction cycle if the log has insuficient space for the new data.
+  if (slot_end_off(current_slot_) - slot_off_ < xdr.size()) {
+    compact_();
+
+    if (slot_end_off(current_slot_) - slot_off_ < xdr.size())
+      throw wal_bad_alloc("no space in WAL");
+  }
+
+  // Grab the lock that protects against non-wal changes.
+  std::lock_guard<std::shared_mutex> lck{ mtx_ };
+
+  // Prepare a merging of the transactions in repl.
+  // We must prepare this after acquiring the mutex mtx_,
+  // but before the WAL record is written.
+  // We write into a copy of repl that we can swap later.
+  replacement_map new_repl = repl_;
+  for (const auto& w : writes)
+    repl_.write_at(w.begin_offset(), w.data(), w.size()).commit();
+
+  // Prepare the undo map.
+  // This map holds all data overwritten by this transaction.
+  replacement_map undo;
+  for (const auto& w : writes)
+    undo.write_at_from_file(w.begin_offset(), fd_, w.begin_offset() + wal_end_offset(), w.size()).commit();
+
+  // Write everything but the record header.
+  // By not writing the record header, the transaction itself looks as if
+  // the commit hasn't happened, because there's a wal_record_end message.
+  {
+    auto buf = xdr.data() + wal_record_end::XDR_SIZE;
+    auto len = xdr.size() - wal_record_end::XDR_SIZE;
+    auto off = slot_off_ + wal_record_end::XDR_SIZE;
+    while (len > 0u) {
+      const auto wlen = fd_.write_at(off, buf, len);
+      buf += wlen;
+      len -= wlen;
+      off += wlen;
+    }
+    fd_.flush();
+  }
+
+  // Grab the allocation lock.
+  std::lock_guard<std::mutex> alloc_lck{ alloc_mtx_ };
+  assert(tx_id_states_[tx_id]);
+
+  // Write the marker of the record.
+  {
+    auto buf = xdr.data();
+    auto len = wal_record_end::XDR_SIZE;
+    auto off = slot_off_;
+    while (len > 0u) {
+      const auto wlen = fd_.write_at(off, buf, len);
+      buf += wlen;
+      len -= wlen;
+      off += wlen;
+    }
+
+    // If this flush fails, we can't recover.
+    // The commit has been written in full and any attempt to undo it
+    // would likely run into the same error as the flush operation.
+    // So we'll log it and silently continue.
+    try {
+      fd_.flush();
+    } catch (const std::exception& e) {
+      std::cerr << "Warning: failed to flush WAL log: " << e.what() << std::endl;
+    } catch (...) {
+      std::cerr << "Warning: failed to flush WAL log." << std::endl;
+    }
+  }
+
+  // Now commit the change in repl_.
+  swap(repl_, new_repl); // Never throws.
+  // And update the tx_id_states_.
+  tx_id_states_[tx_id] = false;
+
+  return undo;
 }
 
 
