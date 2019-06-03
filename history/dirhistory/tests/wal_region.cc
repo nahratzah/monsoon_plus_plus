@@ -62,6 +62,24 @@ auto file_contents(const wal_region& wal) -> std::vector<std::uint8_t> {
   return v;
 }
 
+auto file_contents(const wal_region::tx& tx) -> std::vector<std::uint8_t> {
+  std::vector<std::uint8_t> v;
+  if (tx.size() > v.max_size()) throw std::length_error("WAL file too large for vector");
+  v.resize(tx.size());
+
+  auto buf = v.data();
+  auto len = v.size();
+  monsoon::io::fd::offset_type off = 0;
+  while (len > 0) {
+    const auto rlen = tx.read_at(off, buf, len);
+    buf += rlen;
+    len -= rlen;
+    off += rlen;
+  }
+
+  return v;
+}
+
 template<typename FD>
 void check_file_equals(std::vector<std::uint8_t> expect, const FD& fd, std::size_t off = 0) {
   CHECK_EQUAL(expect.size() + off, fd.size());
@@ -162,7 +180,9 @@ TEST(resize_and_commit) {
   auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
   auto tx = wal_region::tx(wal);
 
+  check_file_empty(tx);
   tx.resize(3);
+  check_file_equals({ 0u, 0u, 0u }, tx);
   tx.commit();
 
   check_file_equals({ 0u, 0u, 0u }, *wal);
@@ -174,6 +194,7 @@ TEST(write_and_commit) {
 
   tx.resize(8);
   tx.write_at(0, u8"01234567", 8);
+  check_file_equals(u8"01234567", tx);
   tx.commit();
 
   check_file_equals(u8"01234567", *wal);
@@ -185,6 +206,7 @@ TEST(write_but_dont_commit) {
 
   tx.resize(8);
   tx.write_at(0, u8"01234567", 8);
+  check_file_equals(u8"01234567", tx);
 
   check_file_equals(u8"", *wal);
 }

@@ -839,7 +839,7 @@ auto wal_region::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std::s
       });
 }
 
-auto wal_region::tx::file_size() const -> monsoon::io::fd::size_type {
+auto wal_region::tx::size() const -> monsoon::io::fd::size_type {
   if (new_file_size_.has_value()) return *new_file_size_;
   return std::shared_ptr<wal_region>(wal_)->size();
 }

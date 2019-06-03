@@ -448,7 +448,7 @@ class monsoon_dirhistory_export_ wal_region::tx {
   ///\brief Get the size of the file.
   ///\return The size of the file.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
-  auto file_size() const -> monsoon::io::fd::size_type;
+  auto size() const -> monsoon::io::fd::size_type;
 
   private:
   ///\brief Reference to the WAL.
