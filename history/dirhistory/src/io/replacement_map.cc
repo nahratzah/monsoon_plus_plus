@@ -78,7 +78,8 @@ auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::
   // Same if the predecessor does not intersect the requested offset.
   if (iter == map_.begin() || std::prev(iter)->end_offset() <= off) {
     // Update nbytes to be clipped at next-region-start.
-    if (nbytes > iter->begin_offset() - off) nbytes = iter->begin_offset() - off;
+    if (iter != map_.end() && nbytes > iter->begin_offset() - off)
+      nbytes = iter->begin_offset() - off;
     return 0;
   }
   // Change iter to point at the at-or-before entry.
