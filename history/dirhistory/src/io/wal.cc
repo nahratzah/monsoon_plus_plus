@@ -448,6 +448,11 @@ auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_
   return len;
 }
 
+auto wal_region::size() const noexcept -> monsoon::io::fd::size_type {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  return fd_size_;
+}
+
 void wal_region::log_write_(const wal_record& r, bool skip_flush) {
   assert(!r.is_commit()); // Commit is special cased.
 
@@ -641,7 +646,7 @@ void wal_region::tx_resize_(wal_record::tx_id_type tx_id, monsoon::io::fd::size_
   log_write_(wal_record_resize(tx_id, new_size));
 }
 
-auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes) -> replacement_map {
+auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writes, std::optional<monsoon::io::fd::size_type> new_file_size) -> replacement_map {
   // Create record of the commit.
   monsoon::xdr::xdr_bytevector_ostream<> xdr;
   wal_record_commit(tx_id).write(xdr);
@@ -741,6 +746,8 @@ auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   // And update the tx_id_states_.
   tx_id_states_[tx_id] = false;
   ++tx_id_completed_count_;
+  // Update the file size.
+  if (new_file_size.has_value()) fd_size_ = *new_file_size;
 
   return undo;
 }
