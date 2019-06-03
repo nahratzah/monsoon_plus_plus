@@ -311,7 +311,7 @@ wal_region::wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, m
       auto len = w.size();
       auto off = w.begin_offset();
       while (len > 0) {
-        const auto wlen = fd_.write_at(off, buf, len);
+        const auto wlen = fd_.write_at(off + wal_end_offset(), buf, len);
         buf += wlen;
         len -= wlen;
         off += wlen;
@@ -438,10 +438,12 @@ auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_
   // Try to read from the list of pending writes.
   const auto repl_rlen = repl_.read_at(off, buf, len); // May modify len.
   if (repl_rlen != 0u) return repl_rlen;
+  assert(len != 0u);
 
   // We have to fall back to the file.
   const auto read_rlen = fd_.read_at(off + wal_end_offset(), buf, len);
   if (read_rlen != 0u) [[likely]] return read_rlen;
+  assert(len != 0u);
 
   // If the file-read failed, it means the file is really smaller.
   // Pretend the file is zero-filled.
