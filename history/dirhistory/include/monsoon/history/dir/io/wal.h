@@ -263,14 +263,12 @@ class monsoon_dirhistory_export_ wal_region {
   auto read_at_(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t;
   ///\brief Write a WAL record to the log.
   ///\param[in] r The record to write.
-  ///\param[in] skip_flush If set, no file flushes will be done.
   ///This should only be set when copying into a new log, until the log is activated.
-  void log_write_(const wal_record& r, bool skip_flush = false);
+  void log_write_(const wal_record& r);
   ///\brief Write a WAL record to the log, that is encoded in the given byte sequence.
   ///\param[in] xdr The raw bytes of zero or more WAL records, with a wal_record_end following it.
-  ///\param[in] skip_flush If set, no file flushes will be done.
   ///This should only be set when copying into a new log, until the log is activated.
-  void log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xdr, bool skip_flush = false);
+  void log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xdr);
   /**
    * \brief Compact the log.
    * \details

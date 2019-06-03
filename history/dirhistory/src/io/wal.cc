@@ -360,6 +360,8 @@ wal_region::wal_region([[maybe_unused]] create c, monsoon::io::fd&& fd, monsoon:
     wal_record_end().write(xdr);
   }
 
+  // While we only require a dataflush, we do a full flush to get the
+  // file metadata synced up. Because it seems like a nice thing to do.
   fd_.flush();
 }
 
@@ -466,7 +468,7 @@ auto wal_region::read_at_(monsoon::io::fd::offset_type off, void* buf, std::size
   return len;
 }
 
-void wal_region::log_write_(const wal_record& r, bool skip_flush) {
+void wal_region::log_write_(const wal_record& r) {
   assert(!r.is_commit()); // Commit is special cased.
 
   monsoon::xdr::xdr_bytevector_ostream<> xdr;
@@ -474,10 +476,10 @@ void wal_region::log_write_(const wal_record& r, bool skip_flush) {
   assert(xdr.size() >= wal_record_end::XDR_SIZE);
   wal_record_end().write(xdr);
 
-  log_write_raw_(xdr, skip_flush);
+  log_write_raw_(xdr);
 }
 
-void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xdr, bool skip_flush) {
+void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xdr) {
   std::lock_guard<std::mutex> lck{ log_mtx_ };
 
   assert(slot_begin_off(current_slot_) <= slot_off_ && slot_off_ < slot_end_off(current_slot_));
@@ -515,7 +517,7 @@ void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xd
       off += wlen;
     }
   }
-  if (!skip_flush) fd_.flush(true);
+  fd_.flush(true);
 
   // Write the marker of the record.
   {
@@ -740,7 +742,7 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
       len -= wlen;
       off += wlen;
     }
-    fd_.flush();
+    fd_.flush(true);
   }
 
   // Grab the allocation lock.
@@ -764,6 +766,9 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
     // The commit has been written in full and any attempt to undo it
     // would likely run into the same error as the flush operation.
     // So we'll log it and silently continue.
+    //
+    // While we only require a dataflush, we do a full flush to get the
+    // file metadata synced up. Because it seems like a nice thing to do.
     try {
       fd_.flush();
     } catch (const std::exception& e) {
