@@ -53,6 +53,21 @@ void replacement_map::clear() noexcept {
   map_.clear_and_dispose(&replacement_map_dispose);
 }
 
+void replacement_map::truncate(monsoon::io::fd::size_type new_size) noexcept {
+  // Find the first region *after* new_size.
+  auto iter = map_.lower_bound(new_size);
+  assert(iter == map_.end() || iter->begin_offset() >= new_size);
+  assert(iter == map_.begin() || std::prev(iter)->begin_offset() < new_size);
+
+  map_.erase_and_dispose(iter, map_.end(), &replacement_map_dispose);
+
+  if (!map_.empty()) {
+    auto& back = *map_.rbegin();
+    if (back.end_offset() > new_size)
+      back.keep_front(new_size - back.begin_offset());
+  }
+}
+
 auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t {
   // Find the first region *after* off.
   auto iter = map_.upper_bound(off);

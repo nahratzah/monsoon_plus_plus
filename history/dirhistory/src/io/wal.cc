@@ -747,7 +747,10 @@ auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   tx_id_states_[tx_id] = false;
   ++tx_id_completed_count_;
   // Update the file size.
-  if (new_file_size.has_value()) fd_size_ = *new_file_size;
+  if (new_file_size.has_value()) {
+    fd_size_ = *new_file_size;
+    repl_.truncate(fd_size_);
+  }
 
   return undo;
 }

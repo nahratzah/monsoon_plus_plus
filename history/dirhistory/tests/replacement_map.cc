@@ -308,6 +308,40 @@ TEST(move_assignment) {
   CHECK(orig_map.begin() == orig_map.end());
 }
 
+TEST(truncate) {
+  replacement_map map;
+  map.write_at( 0, u8"aa", 2).commit();
+  map.write_at( 2, u8"b", 1).commit();
+
+  // Truncation past-the-end does nothing.
+  {
+    map.truncate(9000);
+    auto buf = read_all_at<char>(map, 0, 9000);
+    CHECK_EQUAL(u8"aab", std::string_view(buf.data(), buf.size()));
+  }
+
+  // Truncation at-the-end does nothing.
+  {
+    map.truncate(3);
+    auto buf = read_all_at<char>(map, 0, 9000);
+    CHECK_EQUAL(u8"aab", std::string_view(buf.data(), buf.size()));
+  }
+
+  // Truncation drops 1 segment in its entirety, and 1 partially.
+  {
+    map.truncate(1);
+    auto buf = read_all_at<char>(map, 0, 9000);
+    CHECK_EQUAL(u8"a", std::string_view(buf.data(), buf.size()));
+  }
+
+  // Truncation drops 1 segment in its entirety.
+  {
+    map.truncate(0);
+    auto buf = read_all_at<char>(map, 0, 9000);
+    CHECK_EQUAL(u8"", std::string_view(buf.data(), buf.size()));
+  }
+}
+
 int main(int argc, char** argv) {
   return UnitTest::RunAllTests();
 }

@@ -162,6 +162,10 @@ class monsoon_dirhistory_export_ replacement_map {
   ///\brief Remove all records from the replacement_map.
   void clear() noexcept;
 
+  ///\brief Remove all data at offset \p new_size and above.
+  ///\param[in] new_size The upper limit to apply to the replacement_map.
+  void truncate(monsoon::io::fd::size_type new_size) noexcept;
+
   ///\brief Swap this map with another map.
   void swap(replacement_map& y) noexcept {
     map_.swap(y.map_);
