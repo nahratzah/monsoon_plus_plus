@@ -440,12 +440,12 @@ auto wal_region::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_
   if (repl_rlen != 0u) return repl_rlen;
 
   // We have to fall back to the file.
-  const auto read_rlen = fd_.read_at(off, buf, len);
+  const auto read_rlen = fd_.read_at(off + wal_end_offset(), buf, len);
   if (read_rlen != 0u) [[likely]] return read_rlen;
 
   // If the file-read failed, it means the file is really smaller.
   // Pretend the file is zero-filled.
-  assert(off >= fd_.size());
+  assert(off + wal_end_offset() >= fd_.size());
   std::fill_n(reinterpret_cast<std::uint8_t*>(buf), len, std::uint8_t(0u));
   return len;
 }
@@ -689,13 +689,32 @@ auto wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   // We write into a copy of repl that we can swap later.
   replacement_map new_repl = repl_;
   for (const auto& w : writes)
-    repl_.write_at(w.begin_offset(), w.data(), w.size()).commit();
+    new_repl.write_at(w.begin_offset(), w.data(), w.size()).commit();
 
   // Prepare the undo map.
   // This map holds all data overwritten by this transaction.
   replacement_map undo;
-  for (const auto& w : writes)
-    undo.write_at_from_file(w.begin_offset(), fd_, w.begin_offset() + wal_end_offset(), w.size()).commit();
+  for (const auto& w : writes) {
+    const std::unique_ptr<std::uint8_t[]> buf = std::make_unique<std::uint8_t[]>(w.size());
+
+    auto off = w.begin_offset();
+    while (off < w.end_offset()) {
+      std::size_t len = w.end_offset() - off;
+      assert(len <= w.size());
+
+      const auto rlen = repl_.read_at(off, buf.get(), len);
+      if (rlen != 0u) {
+        undo.write_at(off, buf.get(), rlen).commit();
+      } else if (off >= fd_size_) {
+        std::fill_n(buf.get(), len, std::uint8_t(0));
+        undo.write_at(off, buf.get(), len).commit();
+      } else {
+        if (len > fd_size_ - off) len = fd_size_ - off;
+        undo.write_at_from_file(off, fd_, off + wal_end_offset(), len).commit();
+      }
+      off += len;
+    }
+  }
 
   // Write everything but the record header.
   // By not writing the record header, the transaction itself looks as if
@@ -783,7 +802,9 @@ wal_region::tx::operator bool() const noexcept {
 }
 
 void wal_region::tx::write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
+  auto writes_tx = writes_.write_at(off, buf, len);
   std::shared_ptr<wal_region>(wal_)->tx_write_(tx_id_, off, buf, len);
+  writes_tx.commit();
 }
 
 void wal_region::tx::resize(monsoon::io::fd::size_type new_size) {

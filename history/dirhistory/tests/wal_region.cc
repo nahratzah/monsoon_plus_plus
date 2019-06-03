@@ -4,28 +4,26 @@
 #include <monsoon/io/fd.h>
 #include <monsoon/io/positional_stream.h>
 #include <stdexcept>
-#include <iostream>
+#include <string_view>
 
 using monsoon::history::io::wal_region;
 
 namespace {
 
 template<typename FD>
-auto set_file_contents(FD&& fd, std::vector<std::uint8_t> v) -> FD&& {
-  fd.truncate(v.size());
-
-  auto buf = v.data();
-  auto len = v.size();
-  monsoon::io::fd::offset_type off = 0;
+void write_all_at(FD& fd, monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
   while (len > 0) {
     const auto wlen = fd.write_at(off, buf, len);
-    std::cerr << "wrote " << wlen << " bytes at offset " << off << std::endl;
-    buf += wlen;
+    buf = reinterpret_cast<const std::uint8_t*>(buf) + wlen;
     len -= wlen;
     off += wlen;
   }
-  std::cerr << "file is " << fd.size() << " bytes" << std::endl;
+}
 
+template<typename FD>
+auto set_file_contents(FD&& fd, std::vector<std::uint8_t> v) -> FD&& {
+  fd.truncate(v.size());
+  write_all_at(fd, 0, v.data(), v.size());
   return std::forward<FD>(fd);
 }
 
@@ -65,11 +63,27 @@ auto file_contents(const wal_region& wal) -> std::vector<std::uint8_t> {
 }
 
 template<typename FD>
-void check_file_equals(std::vector<std::uint8_t> expect, const FD& fd) {
-  CHECK_EQUAL(expect.size(), fd.size());
+void check_file_equals(std::vector<std::uint8_t> expect, const FD& fd, std::size_t off = 0) {
+  CHECK_EQUAL(expect.size() + off, fd.size());
   const auto fd_v = file_contents(fd);
-  if (expect.size() == fd_v.size())
-    CHECK_ARRAY_EQUAL(expect.data(), fd_v.data(), expect.size());
+  if (expect.size() + off == fd_v.size())
+    CHECK_ARRAY_EQUAL(expect.data() + off, fd_v.data() + off, expect.size());
+}
+
+template<typename FD>
+void check_file_equals(std::string_view expect, const FD& fd, std::size_t off = 0) {
+  CHECK_EQUAL(expect.size() + off, fd.size());
+  const auto fd_v = file_contents(fd);
+  const auto fd_s = std::string_view(reinterpret_cast<const char*>(fd_v.data()), fd_v.size()).substr(off);
+  CHECK_EQUAL(expect, fd_s);
+}
+
+template<typename FD>
+void check_file_empty(const FD& fd) {
+  CHECK_EQUAL(0u, fd.size());
+  const auto fd_v = file_contents(fd);
+  std::uint8_t expect[1];
+  CHECK_ARRAY_EQUAL(expect, fd_v.data(), 0);
 }
 
 } /* namespace <unnamed> */
@@ -98,7 +112,7 @@ TEST(new_file) {
         0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u
       },
       wal.fd());
-  check_file_equals({}, wal);
+  check_file_empty(wal);
 }
 
 TEST(existing_file_read_write) {
@@ -141,7 +155,38 @@ TEST(existing_file_read_write) {
         0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u
       },
       wal.fd());
-  check_file_equals({}, wal);
+  check_file_empty(wal);
+}
+
+TEST(resize_and_commit) {
+  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto tx = wal_region::tx(wal);
+
+  tx.resize(3);
+  tx.commit();
+
+  check_file_equals({ 0u, 0u, 0u }, *wal);
+}
+
+TEST(write_and_commit) {
+  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto tx = wal_region::tx(wal);
+
+  tx.resize(8);
+  tx.write_at(0, u8"01234567", 8);
+  tx.commit();
+
+  check_file_equals(u8"01234567", *wal);
+}
+
+TEST(write_but_dont_commit) {
+  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto tx = wal_region::tx(wal);
+
+  tx.resize(8);
+  tx.write_at(0, u8"01234567", 8);
+
+  check_file_equals(u8"", *wal);
 }
 
 int main() {
