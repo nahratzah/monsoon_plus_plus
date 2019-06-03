@@ -1,6 +1,7 @@
 #ifndef MONSOON_HISTORY_DIR_IO_TX_SEQUENCER_H
 #define MONSOON_HISTORY_DIR_IO_TX_SEQUENCER_H
 
+#include <monsoon/history/dir/dirhistory_export_.h>
 #include <atomic>
 #include <cstdint>
 #include <boost/intrusive/list.hpp>
@@ -18,7 +19,7 @@ namespace monsoon::history::io {
  * The transaction sequencer can be used to figure out if a transaction was
  * started before another transaction was committed.
  */
-class tx_sequencer
+class monsoon_dirhistory_export_ tx_sequencer
 : public std::enable_shared_from_this<tx_sequencer>
 {
   private:
@@ -44,13 +45,18 @@ class tx_sequencer
    * \details
    * The transaction exposes methods that operate on the sequencer.
    */
-  class tx {
+  class monsoon_dirhistory_export_ tx {
     friend tx_sequencer;
 
-    private:
-    explicit tx(tx_sequencer& seq);
-
     public:
+    ///\brief Start a new transaction.
+    ///\details
+    ///Read operations on the returned transaction will be sequenced between
+    ///all commits that have happened before, and before any commits that
+    ///happened after this transaction was started.
+    ///\return The new transaction.
+    explicit tx(std::shared_ptr<tx_sequencer> seq);
+
     tx() = default;
     ~tx() noexcept;
 
@@ -102,16 +108,6 @@ class tx_sequencer
   tx_sequencer& operator=(tx_sequencer&&) = delete;
 
   ~tx_sequencer() noexcept;
-
-  ///\brief Start a new transaction.
-  ///\details
-  ///Read operations on the returned transaction will be sequenced between
-  ///all commits that have happened before, and before any commits that
-  ///happened after this transaction was started.
-  ///\return The new transaction.
-  auto begin() -> tx {
-    return tx(*this);
-  }
 
   private:
   void do_maintenance_() noexcept;

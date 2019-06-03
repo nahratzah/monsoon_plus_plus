@@ -3,12 +3,12 @@
 namespace monsoon::history::io {
 
 
-tx_sequencer::tx::tx(tx_sequencer& seq)
-: seq_(seq.shared_from_this()),
+tx_sequencer::tx::tx(std::shared_ptr<tx_sequencer> seq)
+: seq_(std::move(seq)),
   record_(new struct record())
 {
   boost::intrusive_ptr<tx_sequencer::record> tmp = record_;
-  seq.c_.push_back(*tmp);
+  seq_->c_.push_back(*tmp);
   tmp.detach();
 }
 

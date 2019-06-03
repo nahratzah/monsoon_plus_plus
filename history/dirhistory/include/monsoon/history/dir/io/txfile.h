@@ -1,6 +1,7 @@
 #ifndef MONSOON_HISTORY_DIR_IO_TXFILE_H
 #define MONSOON_HISTORY_DIR_IO_TXFILE_H
 
+#include <monsoon/history/dir/dirhistory_export_.h>
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -15,7 +16,7 @@
 namespace monsoon::history::io {
 
 
-class txfile_transaction_error
+class monsoon_dirhistory_export_ txfile_transaction_error
 : public std::runtime_error
 {
   public:
@@ -23,7 +24,7 @@ class txfile_transaction_error
   ~txfile_transaction_error();
 };
 
-class txfile_bad_transaction
+class monsoon_dirhistory_export_ txfile_bad_transaction
 : public std::logic_error
 {
   public:
@@ -31,7 +32,7 @@ class txfile_bad_transaction
   ~txfile_bad_transaction();
 };
 
-class txfile_read_only_transaction
+class monsoon_dirhistory_export_ txfile_read_only_transaction
 : public txfile_bad_transaction
 {
   public:
@@ -69,7 +70,7 @@ class txfile_read_only_transaction
  * The transactional file has a concept of file size.
  * Only one transaction at a time can change the file size.
  */
-class txfile {
+class monsoon_dirhistory_export_ txfile {
   public:
   class transaction;
 
@@ -89,7 +90,7 @@ class txfile {
   txfile(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
 
   private:
-  struct create_tag {};
+  using create_tag = wal_region::create;
   txfile(create_tag tag, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
 
   public:
@@ -117,7 +118,7 @@ class txfile {
   auto begin() const -> transaction;
 
   private:
-  struct impl_ {
+  struct monsoon_dirhistory_local_ impl_ {
     impl_(const impl_&) = delete;
     impl_(impl_&&) = delete;
     impl_& operator=(const impl_&) = delete;
@@ -127,19 +128,19 @@ class txfile {
     : wal_(std::move(fd), off, len)
     {}
 
-    impl_([[maybe_unused]] create_tag tag, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
-    : wal_(wal_region::create(), std::move(fd), off, len)
+    impl_(create_tag tag, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+    : wal_(tag, std::move(fd), off, len)
     {}
 
     ~impl_() noexcept;
 
     wal_region wal_;
-    std::shared_ptr<tx_sequencer> sequencer_ = std::make_shared<tx_sequencer>();
+    tx_sequencer sequencer_;
     ///\brief Mutex guards the file contents, except for the WAL regions.
     std::shared_mutex mtx_;
   };
 
-  std::unique_ptr<impl_> pimpl_;
+  std::shared_ptr<impl_> pimpl_;
 };
 
 
@@ -148,7 +149,7 @@ class txfile {
  * \details
  * This object is used to interact with the contents of a txfile instance.
  */
-class txfile::transaction {
+class monsoon_dirhistory_export_ txfile::transaction {
   friend txfile;
 
   public:
@@ -166,6 +167,7 @@ class txfile::transaction {
     swap(x.read_only_, y.read_only_);
     swap(x.owner_, y.owner_);
     swap(x.seq_, y.seq_);
+    swap(x.wal_, y.wal_);
   }
 
   /**
@@ -181,7 +183,8 @@ class txfile::transaction {
   transaction(transaction&& x) noexcept
   : read_only_(x.read_only_),
     owner_(std::exchange(x.owner_, nullptr)),
-    seq_(std::move(x.seq_))
+    seq_(std::move(x.seq_)),
+    wal_(std::move(x.wal_))
   {}
 
   /**
@@ -195,6 +198,7 @@ class txfile::transaction {
     read_only_ = x.read_only_;
     owner_ = std::exchange(x.owner_, nullptr);
     seq_ = std::move(x.seq_);
+    wal_ = std::move(x.wal_);
     return *this;
   }
 
@@ -207,7 +211,8 @@ class txfile::transaction {
   explicit transaction(bool read_only, txfile& owner)
   : read_only_(read_only),
     owner_(owner.pimpl_.get()),
-    seq_(owner.pimpl_->sequencer_->begin())
+    seq_(std::shared_ptr<tx_sequencer>(owner.pimpl_, &owner.pimpl_->sequencer_)),
+    wal_(std::shared_ptr<wal_region>(owner.pimpl_, &owner.pimpl_->wal_))
   {}
 
   public:
@@ -258,19 +263,12 @@ class txfile::transaction {
   auto read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t;
 
   private:
-  auto offset_to_fd_offset_(offset_type off) const -> offset_type {
-    const offset_type fd_off = off + owner_->wal_.wal_end_offset();
-    if (fd_off < off) throw std::overflow_error("off");
-    return fd_off;
-  }
-
   bool read_only_;
   impl_* owner_ = nullptr;
+  ///\brief Hold on to the transaction sequencer.
   tx_sequencer::tx seq_;
-  ///\brief Hold the result of uncommitted write actions.
-  replacement_map replacements_;
-  ///\brief Hold on to the WAL transaction ID.
-  std::optional<wal_record::tx_id_type> tx_id_;
+  ///\brief Hold on to the WAL transaction.
+  wal_region::tx wal_;
 };
 
 
