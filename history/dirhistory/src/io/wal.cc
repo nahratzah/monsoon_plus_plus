@@ -765,4 +765,54 @@ void wal_region::tx_rollback_(wal_record::tx_id_type tx_id) noexcept {
 }
 
 
+wal_region::tx::tx(const std::shared_ptr<wal_region>& wal) noexcept
+: wal_(wal)
+{
+  if (wal != nullptr)
+    tx_id_ = wal->allocate_tx_id();
+}
+
+wal_region::tx::~tx() noexcept {
+  rollback();
+}
+
+wal_region::tx::operator bool() const noexcept {
+  return wal_.lock() != nullptr;
+}
+
+void wal_region::tx::write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
+  std::shared_ptr<wal_region>(wal_)->tx_write_(tx_id_, off, buf, len);
+}
+
+void wal_region::tx::resize(monsoon::io::fd::size_type new_size) {
+  std::shared_ptr<wal_region>(wal_)->tx_resize_(tx_id_, new_size);
+  new_file_size_.emplace(new_size);
+}
+
+auto wal_region::tx::commit() -> replacement_map {
+  auto undo_op = std::shared_ptr<wal_region>(wal_)->tx_commit_(tx_id_, std::move(writes_), new_file_size_);
+  wal_.reset();
+  return undo_op;
+}
+
+void wal_region::tx::rollback() noexcept {
+  const auto wal = wal_.lock();
+  if (wal != nullptr) wal->tx_rollback_(tx_id_);
+  wal_.reset();
+}
+
+auto wal_region::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t {
+  return read_at(
+      off, buf, len,
+      []([[maybe_unused]] const auto& off, [[maybe_unused]] const auto& buf, [[maybe_unused]] const auto& len) -> std::size_t {
+        return 0u;
+      });
+}
+
+auto wal_region::tx::file_size() const -> monsoon::io::fd::size_type {
+  if (new_file_size_.has_value()) return *new_file_size_;
+  return std::shared_ptr<wal_region>(wal_)->size();
+}
+
+
 } /* namespace monsoon::history::io */

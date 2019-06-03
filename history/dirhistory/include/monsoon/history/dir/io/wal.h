@@ -336,7 +336,7 @@ class monsoon_dirhistory_export_ wal_region {
  * \details
  * A WAL transaction runs at read-committed isolation.
  */
-class monsoon_dirhistory_local_ wal_region::tx {
+class monsoon_dirhistory_export_ wal_region::tx {
   public:
   tx() = default;
   tx(const tx&) = delete;
@@ -345,22 +345,13 @@ class monsoon_dirhistory_local_ wal_region::tx {
   tx& operator=(tx&&) noexcept = default;
 
   ///\brief Start a new transaction.
-  tx(const std::shared_ptr<wal_region>& wal) noexcept
-  : wal_(wal)
-  {
-    if (wal != nullptr)
-      tx_id_ = wal->allocate_tx_id();
-  }
+  tx(const std::shared_ptr<wal_region>& wal) noexcept;
 
   ///\brief Destructor.
-  ~tx() noexcept {
-    rollback();
-  }
+  ~tx() noexcept;
 
   ///\brief Test if this transaction is active.
-  explicit operator bool() const noexcept {
-    return wal_.lock() != nullptr;
-  }
+  explicit operator bool() const noexcept;
 
   ///\brief Test if this transaction is invalid.
   auto operator!() const noexcept -> bool {
@@ -372,34 +363,21 @@ class monsoon_dirhistory_local_ wal_region::tx {
   ///\param[in] buf Buffer with data.
   ///\param[in] len The size of the buffer.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
-  void write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
-    std::shared_ptr<wal_region>(wal_)->tx_write_(tx_id_, off, buf, len);
-  }
+  void write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len);
 
   ///\brief Transactional resize operation.
   ///\details Allows for the file to grow or shrink.
   ///\param[in] new_size The new file size.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
-  void resize(monsoon::io::fd::size_type new_size) {
-    std::shared_ptr<wal_region>(wal_)->tx_resize_(tx_id_, new_size);
-    new_file_size_.emplace(new_size);
-  }
+  void resize(monsoon::io::fd::size_type new_size);
 
   ///\brief Commit this transaction.
   ///\return A replacement map describing the undo operation for this transaction.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
-  auto commit() -> replacement_map {
-    auto undo_op = std::shared_ptr<wal_region>(wal_)->tx_commit_(tx_id_, std::move(writes_), new_file_size_);
-    wal_.reset();
-    return undo_op;
-  }
+  auto commit() -> replacement_map;
 
   ///\brief Rollback this transaction.
-  void rollback() noexcept {
-    const auto wal = wal_.lock();
-    if (wal != nullptr) wal->tx_rollback_(tx_id_);
-    wal_.reset();
-  }
+  void rollback() noexcept;
 
   ///\brief Read operation.
   ///\details Performs a read.
@@ -444,13 +422,20 @@ class monsoon_dirhistory_local_ wal_region::tx {
     return len;
   }
 
+  ///\brief Read operation.
+  ///\details Performs a read.
+  ///The data visible to the read operation is the set of committed transactions.
+  ///\param[in] off The file offset to read from.
+  ///\param[out] buf The buffer to read data into.
+  ///\param[in] len The size of the buffer.
+  ///\return The number of bytes read.
+  ///\throws std::bad_weak_ptr if the transaction is invalid.
+  auto read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t len) const -> std::size_t;
+
   ///\brief Get the size of the file.
   ///\return The size of the file.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
-  auto file_size() const -> monsoon::io::fd::size_type {
-    if (new_file_size_.has_value()) return *new_file_size_;
-    return std::shared_ptr<wal_region>(wal_)->size();
-  }
+  auto file_size() const -> monsoon::io::fd::size_type;
 
   private:
   std::weak_ptr<wal_region> wal_;
