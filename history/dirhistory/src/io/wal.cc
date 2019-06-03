@@ -318,7 +318,7 @@ wal_region::wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, m
       }
     }
     repl_.clear();
-    fd_.truncate(fd_size_);
+    fd_.truncate(monsoon::io::fd::size_type(wal_end_offset()) + fd_size_);
     fd_.flush(true);
 
     // Start a new segment.
@@ -341,6 +341,8 @@ wal_region::wal_region([[maybe_unused]] create c, monsoon::io::fd&& fd, monsoon:
   fd_size_(0)
 {
   using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
+
+  if (fd_.size() < wal_end_offset()) fd_.truncate(wal_end_offset());
 
   const auto other_slot = 1u - current_slot_;
 
