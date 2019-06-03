@@ -4,30 +4,32 @@ namespace monsoon::history::io {
 
 
 tx_sequencer::tx::tx(std::shared_ptr<tx_sequencer> seq)
-: seq_(std::move(seq)),
+: seq_(seq),
   record_(new record())
 {
-  std::lock_guard<std::shared_mutex> lck{ seq_->mtx_ };
+  std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
 
   boost::intrusive_ptr<tx_sequencer::record> tmp = record_;
-  seq_->c_.push_back(*tmp);
+  seq->c_.push_back(*tmp);
   tmp.detach();
 }
 
 tx_sequencer::tx::~tx() noexcept {
-  if (record_ != nullptr && !record_->committed) {
-    std::lock_guard<std::shared_mutex> lck{ seq_->mtx_ };
+  const auto seq = seq_.lock();
+  if (record_ != nullptr && !record_->committed && seq != nullptr) {
+    std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
 
-    seq_->c_.erase_and_dispose(seq_->c_.iterator_to(*record_), &tx_sequencer::disposer_);
-    seq_->do_maintenance_();
+    seq->c_.erase_and_dispose(seq->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+    seq->do_maintenance_();
   }
 }
 
 auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t& nbytes) const -> std::size_t {
-  std::shared_lock<std::shared_mutex> lck{ seq_->mtx_ };
+  const auto seq = std::shared_ptr<tx_sequencer>(seq_);
+  std::shared_lock<std::shared_mutex> lck{ seq->mtx_ };
 
-  for (record_list::const_iterator iter = seq_->c_.iterator_to(*record_);
-      iter != seq_->c_.end();
+  for (record_list::const_iterator iter = seq->c_.iterator_to(*record_);
+      iter != seq->c_.end();
       ++iter) {
     if (iter->committed) {
       const std::size_t rlen = iter->replaced.read_at(off, buf, nbytes);
@@ -38,16 +40,16 @@ auto tx_sequencer::tx::read_at(monsoon::io::fd::offset_type off, void* buf, std:
 }
 
 void tx_sequencer::tx::commit(replacement_map&& undo_map) noexcept {
-  {
-    std::lock_guard<std::shared_mutex> lck{ seq_->mtx_ };
+  const auto seq = std::shared_ptr<tx_sequencer>(seq_);
+  std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
 
-    seq_->c_.erase_and_dispose(seq_->c_.iterator_to(*record_), &tx_sequencer::disposer_);
-    record_->replaced = std::move(undo_map);
-    record_->committed = true;
-    seq_->c_.push_back(*record_);
-    record_.detach();
-    seq_->do_maintenance_();
-  }
+  seq->c_.erase_and_dispose(seq->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+  record_->replaced = std::move(undo_map);
+  record_->committed = true;
+  seq->c_.push_back(*record_);
+  record_.detach();
+  seq->do_maintenance_();
+
   seq_.reset();
 }
 

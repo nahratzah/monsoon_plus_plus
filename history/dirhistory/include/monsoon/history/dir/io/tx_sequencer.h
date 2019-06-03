@@ -86,7 +86,7 @@ class monsoon_dirhistory_export_ tx_sequencer
     void commit(replacement_map&& undo_map) noexcept;
 
     private:
-    std::shared_ptr<tx_sequencer> seq_;
+    std::weak_ptr<tx_sequencer> seq_;
     boost::intrusive_ptr<tx_sequencer::record> record_;
   };
 
