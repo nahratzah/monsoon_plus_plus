@@ -1,10 +1,10 @@
 #include "print.h"
 #include "UnitTest++/UnitTest++.h"
-#include <monsoon/history/dir/io/wal.h>
+#include <monsoon/tx/detail/wal.h>
 #include <monsoon/xdr/xdr.h>
 
-using monsoon::history::io::wal_record;
-using monsoon::history::io::wal_entry;
+using monsoon::tx::detail::wal_record;
+using monsoon::tx::detail::wal_entry;
 
 namespace std {
 

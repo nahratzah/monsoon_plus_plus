@@ -1,7 +1,7 @@
-#ifndef MONSOON_HISTORY_DIR_IO_REPLACEMENT_MAP_H
-#define MONSOON_HISTORY_DIR_IO_REPLACEMENT_MAP_H
+#ifndef MONSOON_TX_DETAIL_REPLACEMENT_MAP_H
+#define MONSOON_TX_DETAIL_REPLACEMENT_MAP_H
 
-#include <monsoon/history/dir/dirhistory_export_.h>
+#include <monsoon/tx/detail/export_.h>
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -12,7 +12,7 @@
 #include <boost/intrusive/options.hpp>
 #include <monsoon/io/fd.h>
 
-namespace monsoon::history::io {
+namespace monsoon::tx::detail {
 
 
 /**
@@ -21,7 +21,7 @@ namespace monsoon::history::io {
  * A replacement map holds on to file changes in memory and allows for them to
  * be applied during reads.
  */
-class monsoon_dirhistory_export_ replacement_map {
+class monsoon_tx_export_ replacement_map {
   public:
   class value_type
   : public boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true>>
@@ -239,7 +239,7 @@ inline void swap(replacement_map& x, replacement_map& y) noexcept {
 ///\brief Transactional write operation.
 ///\details Holds the current write operation in such a way that it can be either committed or rolled back.
 ///Only one transaction can be active at any moment.
-class monsoon_dirhistory_export_ replacement_map::tx {
+class monsoon_tx_export_ replacement_map::tx {
   friend replacement_map;
 
   public:
@@ -272,6 +272,6 @@ class monsoon_dirhistory_export_ replacement_map::tx {
 };
 
 
-} /* namespace monsoon::history::io */
+} /* namespace monsoon::tx::detail */
 
-#endif /* MONSOON_HISTORY_DIR_IO_REPLACEMENT_MAP_H */
+#endif /* MONSOON_TX_DETAIL_REPLACEMENT_MAP_H */

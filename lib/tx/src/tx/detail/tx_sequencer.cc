@@ -1,18 +1,7 @@
-#include <monsoon/history/dir/io/tx_sequencer.h>
+#include <monsoon/tx/detail/tx_sequencer.h>
 
-namespace monsoon::history::io {
+namespace monsoon::tx::detail {
 
-
-tx_sequencer::tx::tx(std::shared_ptr<tx_sequencer> seq)
-: seq_(seq),
-  record_(new record())
-{
-  std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
-
-  boost::intrusive_ptr<tx_sequencer::record> tmp = record_;
-  seq->c_.push_back(*tmp);
-  tmp.detach();
-}
 
 tx_sequencer::tx::~tx() noexcept {
   const auto seq = seq_.lock();
@@ -64,4 +53,4 @@ void tx_sequencer::do_maintenance_() noexcept {
 }
 
 
-} /* namespace monsoon::history::io */
+} /* namespace monsoon::tx::detail */

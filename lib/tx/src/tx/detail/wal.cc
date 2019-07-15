@@ -1,4 +1,4 @@
-#include <monsoon/history/dir/io/wal.h>
+#include <monsoon/tx/detail/wal.h>
 #include <algorithm>
 #include <cassert>
 #include <functional>
@@ -9,8 +9,11 @@
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/io/limited_stream.h>
 #include <objpipe/of.h>
+#include <monsoon/tx/instrumentation.h>
 
-namespace monsoon::history::io {
+using namespace instrumentation::literals;
+
+namespace monsoon::tx::detail {
 
 
 struct wal_region::wal_header {
@@ -249,10 +252,16 @@ auto wal_record::make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::u
 }
 
 
-wal_region::wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+wal_region::wal_region(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
 : off_(off),
   len_(len),
-  fd_(std::move(fd))
+  fd_(std::move(fd)),
+  instrumentation_grp_name_(std::move(name)),
+  instrumentation_grp_(make_group("wal", monsoon_tx_instrumentation())["name"_tag = instrumentation_grp_name_]),
+  commit_count_("commits", instrumentation_grp_),
+  write_ops_("writes", instrumentation_grp_),
+  compactions_("compactions", instrumentation_grp_),
+  file_flush_("file_flush", instrumentation_grp_)
 {
   static_assert(num_segments_ == 2u, "Algorithm assumes two segments.");
   std::array<std::tuple<std::size_t, wal_header>, 2> segments{
@@ -321,6 +330,7 @@ wal_region::wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, m
     repl_.clear();
     fd_.truncate(monsoon::io::fd::size_type(wal_end_offset()) + fd_size_);
     fd_.flush(true);
+    ++file_flush_;
 
     // Start a new segment.
     auto xdr = monsoon::xdr::xdr_stream_writer<lp_writer>(lp_writer(segment_len_(), fd_, slot_begin_off(current_slot_)));
@@ -330,16 +340,23 @@ wal_region::wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, m
 
     // Flush data onto disk.
     fd_.flush(true);
+    ++file_flush_;
   }
 }
 
-wal_region::wal_region([[maybe_unused]] create c, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
+wal_region::wal_region(std::string name, [[maybe_unused]] create c, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len)
 : off_(off),
   len_(len),
   current_seq_(0),
   current_slot_(0),
   fd_(std::move(fd)),
-  fd_size_(0)
+  fd_size_(0),
+  instrumentation_grp_name_(std::move(name)),
+  instrumentation_grp_(make_group("wal", monsoon_tx_instrumentation())["name"_tag = instrumentation_grp_name_]),
+  commit_count_("commits", instrumentation_grp_),
+  write_ops_("writes", instrumentation_grp_),
+  compactions_("compactions", instrumentation_grp_),
+  file_flush_("file_flush", instrumentation_grp_)
 {
   using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
 
@@ -363,6 +380,7 @@ wal_region::wal_region([[maybe_unused]] create c, monsoon::io::fd&& fd, monsoon:
   // While we only require a dataflush, we do a full flush to get the
   // file metadata synced up. Because it seems like a nice thing to do.
   fd_.flush();
+  ++file_flush_;
 }
 
 auto wal_region::allocate_tx_id() -> wal_record::tx_id_type {
@@ -518,6 +536,7 @@ void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xd
     }
   }
   fd_.flush(true);
+  ++file_flush_;
 
   // Write the marker of the record.
   {
@@ -534,6 +553,8 @@ void wal_region::log_write_raw_(const monsoon::xdr::xdr_bytevector_ostream<>& xd
 
   // Advance slot offset.
   slot_off_ += xdr.size() - wal_record_end::XDR_SIZE;
+
+  ++write_ops_;
 }
 
 void wal_region::compact_() {
@@ -543,6 +564,7 @@ void wal_region::compact_() {
     if (tx_id_completed_count_ == 0u) return;
   }
 
+  ++compactions_;
   monsoon::xdr::xdr_bytevector_ostream<> wal_segment_header;
   wal_header(current_seq_ + 1u, fd_size_).write(wal_segment_header);
 
@@ -599,6 +621,7 @@ void wal_region::compact_() {
 
   // Ensure all data is on disk, before activating the segment.
   fd_.flush(true);
+  ++file_flush_;
 
   // Now that all the writes from the old segment have been applied,
   // and all active transaction information has been copied,
@@ -743,6 +766,7 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
       off += wlen;
     }
     fd_.flush(true);
+    ++file_flush_;
   }
 
   // Grab the allocation lock.
@@ -771,6 +795,7 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
     // file metadata synced up. Because it seems like a nice thing to do.
     try {
       fd_.flush();
+      ++file_flush_;
     } catch (const std::exception& e) {
       std::cerr << "Warning: failed to flush WAL log: " << e.what() << std::endl;
     } catch (...) {
@@ -793,6 +818,8 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   slot_off_ += xdr.size() - wal_record_end::XDR_SIZE;
 
   undo_op_fn(std::move(undo));
+
+  ++commit_count_;
 }
 
 void wal_region::tx_rollback_(wal_record::tx_id_type tx_id) noexcept {
@@ -864,4 +891,4 @@ auto wal_region::tx::size() const -> monsoon::io::fd::size_type {
 }
 
 
-} /* namespace monsoon::history::io */
+} /* namespace monsoon::tx::detail */

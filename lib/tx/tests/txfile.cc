@@ -1,11 +1,11 @@
 #include "print.h"
 #include "UnitTest++/UnitTest++.h"
-#include <monsoon/history/dir/io/txfile.h>
+#include <monsoon/tx/txfile.h>
 #include <monsoon/io/fd.h>
 #include <string>
 #include <string_view>
 
-using monsoon::history::io::txfile;
+using monsoon::tx::txfile;
 constexpr std::size_t WAL_SIZE = 4u << 20;
 
 namespace {
@@ -46,13 +46,13 @@ void write_all_at(txfile::transaction& tx, monsoon::io::fd::offset_type off, std
 #define TMPFILE() monsoon::io::fd::tmpfile(__FILE__)
 
 TEST(new_file) {
-  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
+  auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
 
   CHECK_EQUAL(u8"", read(f));
 }
 
 TEST(write_no_commit) {
-  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
+  auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
 
   auto tx = f.begin(false);
   tx.resize(6);
@@ -62,7 +62,7 @@ TEST(write_no_commit) {
 }
 
 TEST(write_commit) {
-  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
+  auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
 
   auto tx = f.begin(false);
   tx.resize(6);
@@ -73,7 +73,7 @@ TEST(write_commit) {
 }
 
 TEST(multi_transaction) {
-  auto f = txfile::create(TMPFILE(), 0, WAL_SIZE);
+  auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
   {
     auto tx = f.begin(false);
     tx.resize(1);
@@ -101,6 +101,28 @@ TEST(multi_transaction) {
   ro.rollback();
 
   CHECK_EQUAL(u8"3", read(f));
+}
+
+TEST(cant_see_started_before_commited_after_data) {
+  auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
+  {
+    auto tx = f.begin(false);
+    tx.resize(6);
+    write_all_at(tx, 0, u8"XXXXXX");
+    tx.commit();
+  }
+
+  auto tx1 = f.begin(false);
+  write_all_at(tx1, 0, u8"foobar");
+  CHECK_EQUAL(u8"foobar", read(tx1));
+
+  auto tx2 = f.begin();
+  CHECK_EQUAL(u8"XXXXXX", read(tx2));
+
+  tx1.commit();
+
+  // tx2 doesn't see the commit of tx1.
+  CHECK_EQUAL(u8"XXXXXX", read(tx2));
 }
 
 int main() {

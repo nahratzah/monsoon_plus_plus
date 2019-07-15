@@ -1,12 +1,12 @@
 #include "print.h"
 #include "UnitTest++/UnitTest++.h"
-#include <monsoon/history/dir/io/wal.h>
+#include <monsoon/tx/detail/wal.h>
 #include <monsoon/io/fd.h>
 #include <monsoon/io/positional_stream.h>
 #include <stdexcept>
 #include <string_view>
 
-using monsoon::history::io::wal_region;
+using monsoon::tx::detail::wal_region;
 
 namespace {
 
@@ -110,7 +110,7 @@ void check_file_empty(const FD& fd) {
 #define TMPFILE_WITH_DATA(data) set_file_contents(TMPFILE(), data)
 
 TEST(new_file) {
-  auto wal = wal_region(wal_region::create(), TMPFILE(), 0, 64);
+  auto wal = wal_region("waltest", wal_region::create(), TMPFILE(), 0, 64);
 
   check_file_equals(
       {
@@ -135,6 +135,7 @@ TEST(new_file) {
 
 TEST(existing_file_read_write) {
   auto wal = wal_region(
+      "waltest",
       TMPFILE_WITH_DATA(
           std::vector<std::uint8_t>({
               0u, 0u, 0u, 0u, // seqence number
@@ -177,7 +178,7 @@ TEST(existing_file_read_write) {
 }
 
 TEST(resize_and_commit) {
-  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
   auto tx = wal_region::tx(wal);
 
   check_file_empty(tx);
@@ -189,7 +190,7 @@ TEST(resize_and_commit) {
 }
 
 TEST(write_and_commit) {
-  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
   auto tx = wal_region::tx(wal);
 
   tx.resize(8);
@@ -201,7 +202,7 @@ TEST(write_and_commit) {
 }
 
 TEST(write_but_dont_commit) {
-  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
   auto tx = wal_region::tx(wal);
 
   tx.resize(8);
@@ -212,7 +213,7 @@ TEST(write_but_dont_commit) {
 }
 
 TEST(write_and_commit_and_compact) {
-  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
   auto tx = wal_region::tx(wal);
 
   tx.resize(8);
@@ -225,14 +226,14 @@ TEST(write_and_commit_and_compact) {
 }
 
 TEST(write_and_commit_and_reopen) {
-  auto wal = std::make_shared<wal_region>(wal_region::create(), TMPFILE(), 0, 256);
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
   auto tx = wal_region::tx(wal);
 
   tx.resize(8);
   tx.write_at(0, u8"01234567", 8);
   tx.commit();
 
-  wal = std::make_shared<wal_region>(std::move(*wal).fd(), 0, 256);
+  wal = std::make_shared<wal_region>("waltest", std::move(*wal).fd(), 0, 256);
 
   check_file_equals(u8"01234567", *wal);
   check_file_equals(u8"01234567", wal->fd(), 256);

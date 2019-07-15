@@ -1,8 +1,8 @@
-#include <monsoon/history/dir/io/replacement_map.h>
+#include <monsoon/tx/detail/replacement_map.h>
 #include <memory>
 #include <stdexcept>
 
-namespace monsoon::history::io {
+namespace monsoon::tx::detail {
 namespace {
 
 
@@ -338,4 +338,4 @@ void replacement_map::tx::commit() noexcept {
 }
 
 
-} /* namespace monsoon::history::io */
+} /* namespace monsoon::tx::detail */

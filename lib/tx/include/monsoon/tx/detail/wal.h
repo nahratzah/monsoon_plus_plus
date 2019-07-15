@@ -1,7 +1,7 @@
-#ifndef MONSOON_HISTORY_DIR_IO_WAL_H
-#define MONSOON_HISTORY_DIR_IO_WAL_H
+#ifndef MONSOON_TX_DETAIL_WAL_H
+#define MONSOON_TX_DETAIL_WAL_H
 
-#include <monsoon/history/dir/dirhistory_export_.h>
+#include <monsoon/tx/detail/export_.h>
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -12,13 +12,16 @@
 #include <queue>
 #include <shared_mutex>
 #include <stdexcept>
+#include <string>
 #include <vector>
 #include <monsoon/io/fd.h>
 #include <monsoon/io/stream.h>
 #include <monsoon/xdr/xdr.h>
-#include <monsoon/history/dir/io/replacement_map.h>
+#include <monsoon/tx/detail/replacement_map.h>
+#include <instrumentation/group.h>
+#include <instrumentation/counter.h>
 
-namespace monsoon::history::io {
+namespace monsoon::tx::detail {
 
 
 /**
@@ -27,7 +30,7 @@ namespace monsoon::history::io {
  * This error indicates that the WAL encountered an unrecoverable error.
  * When encountered, the WAL becomes unusable.
  */
-class monsoon_dirhistory_export_ wal_error
+class monsoon_tx_export_ wal_error
 : public std::runtime_error
 {
   public:
@@ -41,7 +44,7 @@ class monsoon_dirhistory_export_ wal_error
  * This error indicates a write to the WAL failed, due to the WAL having
  * no more space to write log entries.
  */
-class monsoon_dirhistory_export_ wal_bad_alloc
+class monsoon_tx_export_ wal_bad_alloc
 : public wal_error
 {
   public:
@@ -67,7 +70,7 @@ enum class wal_entry : std::uint8_t {
  * \details
  * WAL records describe a single operation.
  */
-class monsoon_dirhistory_export_ wal_record {
+class monsoon_tx_export_ wal_record {
   public:
   ///\brief Type of transaction IDs.
   using tx_id_type = std::uint32_t;
@@ -143,7 +146,7 @@ class wal_record_resize;
  * \details
  * The WAL region handles the logistics of making a file appear transactional.
  */
-class monsoon_dirhistory_export_ wal_region {
+class monsoon_tx_export_ wal_region {
   friend wal_record_write;
   friend wal_record_resize;
 
@@ -175,16 +178,18 @@ class monsoon_dirhistory_export_ wal_region {
   public:
   wal_region() = delete;
   ///\brief Create a WAL region from an existing file.
+  ///\param[in] name A name used for instrumentation.
   ///\param[in] fd The file in which to open the region.
   ///\param[in] off The offset in the file at which the WAL was created.
   ///\param[in] len The size of the WAL.
-  wal_region(monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
+  wal_region(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
   ///\brief Create a WAL region from a newly initialized file.
+  ///\param[in] name A name used for instrumentation.
   ///\param[in] c A tag type to distinguish between the constructors.
   ///\param[in] fd The file in which to open the region.
   ///\param[in] off The offset in the file at which to create the WAL.
   ///\param[in] len The size of the WAL.
-  wal_region(create c, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
+  wal_region(std::string name, create c, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type len);
   wal_region(wal_region&&) noexcept = delete;
   wal_region(const wal_region&) = delete;
   wal_region& operator=(wal_region&&) noexcept = delete;
@@ -347,6 +352,11 @@ class monsoon_dirhistory_export_ wal_region {
   monsoon::io::fd::size_type fd_size_;
   ///\brief Pending writes.
   replacement_map repl_;
+
+  ///\brief Instrumentation.
+  const std::string instrumentation_grp_name_;
+  instrumentation::tagged_group<1> instrumentation_grp_;
+  instrumentation::counter commit_count_, write_ops_, compactions_, file_flush_;
 };
 
 
@@ -355,7 +365,7 @@ class monsoon_dirhistory_export_ wal_region {
  * \details
  * A WAL transaction runs at read-committed isolation.
  */
-class monsoon_dirhistory_export_ wal_region::tx {
+class monsoon_tx_export_ wal_region::tx {
   public:
   tx() = default;
   tx(const tx&) = delete;
@@ -480,6 +490,6 @@ class monsoon_dirhistory_export_ wal_region::tx {
 };
 
 
-} /* namespace monsoon::history::io */
+} /* namespace monsoon::tx::detail */
 
-#endif /* MONSOON_HISTORY_DIR_IO_WAL_H */
+#endif /* MONSOON_TX_DETAIL_WAL_H */

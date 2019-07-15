@@ -1,9 +1,9 @@
 #include "UnitTest++/UnitTest++.h"
-#include <monsoon/history/dir/io/replacement_map.h>
+#include <monsoon/tx/detail/replacement_map.h>
 #include <vector>
 #include <cstring>
 
-using monsoon::history::io::replacement_map;
+using monsoon::tx::detail::replacement_map;
 
 template<typename T>
 auto read_all_at(const replacement_map& map, monsoon::io::fd::offset_type off, std::size_t len) -> std::vector<T> {

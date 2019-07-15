@@ -15,5 +15,6 @@ install (FILES
   include/monsoon/memoid.h
   DESTINATION include/monsoon)
 
-add_subdirectory (misc)
+add_subdirectory(misc)
+add_subdirectory(tx)
 add_subdirectory(tests)

@@ -1,17 +1,19 @@
-#ifndef MONSOON_HISTORY_DIR_IO_TX_SEQUENCER_H
-#define MONSOON_HISTORY_DIR_IO_TX_SEQUENCER_H
+#ifndef MONSOON_TX_DETAIL_TX_SEQUENCER_H
+#define MONSOON_TX_DETAIL_TX_SEQUENCER_H
 
-#include <monsoon/history/dir/dirhistory_export_.h>
+#include <monsoon/tx/detail/export_.h>
 #include <atomic>
 #include <cstdint>
+#include <functional>
 #include <shared_mutex>
+#include <utility>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/options.hpp>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
-#include <monsoon/history/dir/io/replacement_map.h>
+#include <monsoon/tx/detail/replacement_map.h>
 
-namespace monsoon::history::io {
+namespace monsoon::tx::detail {
 
 
 /**
@@ -20,7 +22,7 @@ namespace monsoon::history::io {
  * The transaction sequencer can be used to figure out if a transaction was
  * started before another transaction was committed.
  */
-class monsoon_dirhistory_export_ tx_sequencer
+class monsoon_tx_export_ tx_sequencer
 : public std::enable_shared_from_this<tx_sequencer>
 {
   private:
@@ -46,7 +48,7 @@ class monsoon_dirhistory_export_ tx_sequencer
    * \details
    * The transaction exposes methods that operate on the sequencer.
    */
-  class monsoon_dirhistory_export_ tx {
+  class monsoon_tx_export_ tx {
     friend tx_sequencer;
 
     public:
@@ -55,8 +57,22 @@ class monsoon_dirhistory_export_ tx_sequencer
     ///Read operations on the returned transaction will be sequenced between
     ///all commits that have happened before, and before any commits that
     ///happened after this transaction was started.
+    ///\param[in,out] seq The sequencer object.
+    ///\param[in] cb Callback that will be invoked sequentially under the sequencer lock.
     ///\return The new transaction.
-    explicit tx(std::shared_ptr<tx_sequencer> seq);
+    template<typename CB>
+    explicit tx(std::shared_ptr<tx_sequencer> seq, CB&& cb)
+    : seq_(seq),
+      record_(new record())
+    {
+      std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
+
+      std::invoke(std::forward<CB>(cb));
+
+      boost::intrusive_ptr<tx_sequencer::record> tmp = record_;
+      seq->c_.push_back(*tmp);
+      tmp.detach();
+    }
 
     tx() = default;
     ~tx() noexcept;
@@ -108,6 +124,6 @@ class monsoon_dirhistory_export_ tx_sequencer
 };
 
 
-} /* namespace monsoon::history::io */
+} /* namespace monsoon::tx::detail */
 
-#endif /* MONSOON_HISTORY_DIR_IO_TX_SEQUENCER_H */
+#endif /* MONSOON_TX_DETAIL_TX_SEQUENCER_H */
