@@ -4,7 +4,6 @@
 #include <monsoon/overload.h>
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/impl.h>
-#include <monsoon/instrumentation.h>
 #include <cmath>
 #include <ostream>
 #include <cassert>
@@ -34,7 +33,7 @@ thread_local string_cache_type string_cache = string_cache_type::builder()
     .not_thread_safe()
     .no_concurrency()
     .load_factor(4)
-    .stats("metric_value_str", cache_instrumentation(), true)
+    .stats("metric_value_str", true)
     .build(string_cache_create());
 
 

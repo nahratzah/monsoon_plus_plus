@@ -11,7 +11,6 @@
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/allocator.h>
 #include <monsoon/history/dir/hdir_exception.h>
-#include <instrumentation/group.h>
 #include <instrumentation/timing.h>
 #include <instrumentation/time_track.h>
 
@@ -31,8 +30,6 @@ auto decode(const cache_search_type<T, P>& cst, typename T::allocator_type alloc
   xdr.close();
   return result;
 }
-
-monsoon_dirhistory_local_ instrumentation::group& cache_grp();
 
 template<typename T>
 using cache_allocator = monsoon::cache::cache_allocator<std::allocator<T>>;
@@ -161,7 +158,7 @@ struct monsoon_dirhistory_local_ dynamics_cache_create {
 
  private:
   template<typename T>
-  static inline instrumentation::timing decode_duration{ "timing_duration", cache_grp(), instrumentation::tag_map({ {"type", std::string_view(typeid(T).name())} }) };
+  static inline instrumentation::timing decode_duration{ "timing_duration", { {"type", typeid(T).name()} } };
 };
 
 using cache_type = monsoon::cache::extended_cache<

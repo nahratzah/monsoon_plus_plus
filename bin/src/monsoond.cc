@@ -4,6 +4,8 @@
 #include <monsoon/history/collect_history.h>
 #include <monsoon/history/print_history.h>
 #include <monsoon/collectors/self.h>
+#include <monsoon/instrumentation.h>
+#include <instrumentation/engine.h>
 #include <functional>
 #include <thread>
 #include <memory>
@@ -11,6 +13,8 @@
 using namespace monsoon;
 
 int main(int argc, char*argv[]) {
+  instrumentation::engine::global() = monsoon::monsoon_instrumentation();
+
   std::function<void(time_point)> task;
 
   // Grab something that will trip metric creation, so there's actually something to measure. :P

@@ -9,9 +9,6 @@
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/io/limited_stream.h>
 #include <objpipe/of.h>
-#include <monsoon/tx/instrumentation.h>
-
-using namespace instrumentation::literals;
 
 namespace monsoon::tx::detail {
 
@@ -256,12 +253,10 @@ wal_region::wal_region(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::
 : off_(off),
   len_(len),
   fd_(std::move(fd)),
-  instrumentation_grp_name_(std::move(name)),
-  instrumentation_grp_(make_group("wal", monsoon_tx_instrumentation())["name"_tag = instrumentation_grp_name_]),
-  commit_count_("commits", instrumentation_grp_),
-  write_ops_("writes", instrumentation_grp_),
-  compactions_("compactions", instrumentation_grp_),
-  file_flush_("file_flush", instrumentation_grp_)
+  commit_count_("monsoon.wal.commits", {{"name", name}}),
+  write_ops_("monsoon.wal.writes", {{"name", name}}),
+  compactions_("monsoon.wal.compactions", {{"name", name}}),
+  file_flush_("monsoon.wal.file_flush", {{"name", name}})
 {
   static_assert(num_segments_ == 2u, "Algorithm assumes two segments.");
   std::array<std::tuple<std::size_t, wal_header>, 2> segments{
@@ -351,12 +346,10 @@ wal_region::wal_region(std::string name, [[maybe_unused]] create c, monsoon::io:
   current_slot_(0),
   fd_(std::move(fd)),
   fd_size_(0),
-  instrumentation_grp_name_(std::move(name)),
-  instrumentation_grp_(make_group("wal", monsoon_tx_instrumentation())["name"_tag = instrumentation_grp_name_]),
-  commit_count_("commits", instrumentation_grp_),
-  write_ops_("writes", instrumentation_grp_),
-  compactions_("compactions", instrumentation_grp_),
-  file_flush_("file_flush", instrumentation_grp_)
+  commit_count_("monsoon.wal.commits", {{"name", name}}),
+  write_ops_("monsoon.wal.writes", {{"name", name}}),
+  compactions_("monsoon.wal.compactions", {{"name", name}}),
+  file_flush_("monsoon.wal.file_flush", {{"name", name}})
 {
   using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
 

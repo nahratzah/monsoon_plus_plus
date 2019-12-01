@@ -7,8 +7,6 @@
 #include <iostream>
 #include <memory>
 #include <tuple>
-#include <instrumentation/visitor.h>
-#include <instrumentation/print_visitor.h>
 
 auto open_dir(std::string dir)
 -> std::unique_ptr<monsoon::collect_history> {
@@ -21,8 +19,6 @@ int main(int argc, char** argv) {
         << " /path/to/history/dir\n";
     return 1;
   }
-
-  instrumentation::visitor::on_destroy_visitor(std::make_unique<instrumentation::print_visitor>(std::cerr));
 
   open_dir(argv[1])->emit({}, monsoon::path_matcher().push_back_double_wildcard(), monsoon::tag_matcher(), monsoon::path_matcher().push_back_double_wildcard())
       .filter([](const auto& x) { return std::holds_alternative<monsoon::metric_source::metric_emit>(x); })

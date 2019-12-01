@@ -16,11 +16,8 @@
 #include <queue>
 #include <objpipe/callback.h>
 #include <objpipe/merge.h>
-#include <monsoon/history/instrumentation.h>
-#include <instrumentation/timing_accumulate.h>
 #include <instrumentation/timing.h>
 #include <instrumentation/time_track.h>
-#include <instrumentation/group.h>
 #include <instrumentation/counter.h>
 #include <string_view>
 #include "timestamp_delta.h"
@@ -121,42 +118,41 @@ void tsdata_v2_tables::push_back(const emit_type&) {
 namespace {
 
 
-instrumentation::timing_accumulate tsdata_v2_tables_decode_timing(
-    "decode",
-    monsoon::history_instrumentation(),
-    {
-      {"file_type", "tsdata_v2"sv},
-      {"operation", "column_read"sv}
-    });
-instrumentation::timing_accumulate tsdata_v2_tables_less_timing(
-    "decode",
-    monsoon::history_instrumentation(),
-    {
-      {"file_type", "tsdata_v2"sv},
-      {"operation", "compare"sv}
-    });
-instrumentation::timing_accumulate tsdata_v2_tables_merge_timing(
-    "decode",
-    monsoon::history_instrumentation(),
-    {
-      {"file_type", "tsdata_v2"sv},
-      {"operation", "merge"sv}
-    });
+instrumentation::timing tsdata_v2_tables_decode_timing(
+    instrumentation::timing::cumulative(
+        "monsoon.dirhistory.decode",
+        {
+          {"file_type", "tsdata_v2"},
+          {"operation", "column_read"}
+        }));
+instrumentation::timing tsdata_v2_tables_less_timing(
+    instrumentation::timing::cumulative(
+        "monsoon.dirhistory.decode",
+        {
+          {"file_type", "tsdata_v2"},
+          {"operation", "compare"}
+        }));
+instrumentation::timing tsdata_v2_tables_merge_timing(
+    instrumentation::timing::cumulative(
+        "monsoon.dirhistory.decode",
+        {
+          {"file_type", "tsdata_v2"},
+          {"operation", "merge"}
+        }));
 instrumentation::timing tsdata_v2_tables_new_objpipe_timing(
-    "decode",
-    monsoon::history_instrumentation(),
+    "monsoon.dir_history.decode",
     {
-      {"file_type", "tsdata_v2"sv},
-      {"operation", "new_objpipe"sv}
+      {"file_type", "tsdata_v2"},
+      {"operation", "new_objpipe"}
     });
 
 auto emit_type_less = [](const tsdata_v2_tables::emit_type& x, const tsdata_v2_tables::emit_type& y) noexcept -> bool {
-  instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_less_timing };
+  instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_less_timing };
   return std::get<0>(x) < std::get<0>(y); // Compare time points.
 };
 
 auto emit_type_merge = [](tsdata_v2_tables::emit_type&& x, tsdata_v2_tables::emit_type&& y) -> tsdata_v2_tables::emit_type&& {
-  instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_merge_timing };
+  instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_merge_timing };
 #if __cpp_lib_node_extract >= 201703
   std::get<1>(x).merge(std::get<1>(y));
 #else
@@ -177,7 +173,7 @@ auto emit_fdtblock_pipe(
 
   return objpipe::new_callback<emit_type>(
       [=](auto cb) {
-        instrumentation::time_track<instrumentation::timing_accumulate> tt{ tsdata_v2_tables_decode_timing };
+        instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_decode_timing };
         auto tp_iter = time_points_ptr->begin();
         auto mv_iter = mv_column_ptr->begin();
 
@@ -267,8 +263,6 @@ auto tsdata_v2_tables::emit(
     const path_matcher& metric_filter)
     const
 -> objpipe::reader<emit_type> {
-  static instrumentation::group&& metric_grp = instrumentation::make_group("tsdata_v2_tables", monsoon::history_instrumentation());
-
   instrumentation::time_track<instrumentation::timing> tt{ tsdata_v2_tables_new_objpipe_timing };
   const std::shared_ptr<const file_data_tables> file_data_tables = read_();
 
@@ -282,19 +276,19 @@ auto tsdata_v2_tables::emit(
       });
 
   if (is_sorted() && is_distinct()) { // Operate on sequential blocks.
-    static instrumentation::counter stat("emit", metric_grp, { {"style", "linear"sv} });
+    static instrumentation::counter stat("monsoon.dirhistory.tsdata_v2_tables.emit", { {"style", "linear"} });
     ++stat;
     return block_chain.iterate();
   } else { // Parallel iteration of blocks.
     if (is_distinct()) { // Merge only.
-      static instrumentation::counter stat("emit", metric_grp, { {"style", "distinct_merge"sv} });
+      static instrumentation::counter stat("monsoon.dirhistory.tsdata_v2_tables.emit", { {"style", "distinct_merge"} });
       ++stat;
       return objpipe::merge(
           block_chain.begin(),
           block_chain.end(),
           emit_type_less);
     } else {
-      static instrumentation::counter stat("emit", metric_grp, { {"style", "full_merge"sv} });
+      static instrumentation::counter stat("monsoon.dirhistory.tsdata_v2_tables.emit", { {"style", "full_merge"} });
       ++stat;
       return objpipe::merge_combine(
           block_chain.begin(),

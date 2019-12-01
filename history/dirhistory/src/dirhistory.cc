@@ -18,7 +18,6 @@
 #include <vector>
 #include <list>
 #include <monsoon/history/collect_history.h>
-#include <monsoon/history/instrumentation.h>
 #include <monsoon/history/dir/tsdata.h>
 #include <monsoon/interpolate.h>
 #include <objpipe/callback.h>
@@ -26,6 +25,7 @@
 #include <objpipe/push_policies.h>
 #include <objpipe/merge.h>
 #include <objpipe/of.h>
+#include <instrumentation/engine.h>
 #include "v2/tsdata.h"
 
 namespace monsoon::history {
@@ -720,10 +720,14 @@ auto interpolation_based_emit(
 dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
 : dir_(std::move(dir)),
   writable_(open_for_write),
-  file_count_("files",
-      [this]() { return files_.size(); },
-      monsoon::history_instrumentation(),
-      instrumentation::tag_map({ {"path", this->dir_.native()} }))
+  file_count_(
+      instrumentation::engine::global().new_gauge_cb(
+          instrumentation::path("monsoon.history.file_count"),
+          instrumentation::tags({ {"path", this->dir_.native()} }),
+          [files=std::weak_ptr<std::vector<std::shared_ptr<tsdata>>>(this->files_)]() {
+            const auto fptr = files.lock();
+            return (fptr ? fptr->size() : 0u);
+          }))
 {
   using filesystem::perms;
 
@@ -748,17 +752,17 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
 
           auto fd = io::fd(fname.native(), mode);
           if (tsdata::is_tsdata(fd))
-            files_.push_back(tsdata::open(std::move(fd)));
+            files_->push_back(tsdata::open(std::move(fd)));
         }
       });
 
   if (open_for_write) { // Find a write candidate.
-    auto fiter = std::find_if(files_.begin(), files_.end(),
+    auto fiter = std::find_if(files_->begin(), files_->end(),
         [](const auto& tsdata_ptr) { return tsdata_ptr->is_writable(); });
-    if (fiter != files_.end()) {
+    if (fiter != files_->end()) {
       write_file_ = *fiter;
 
-      while (++fiter != files_.end()) {
+      while (++fiter != files_->end()) {
         if ((*fiter)->is_writable()
             && std::get<0>((*fiter)->time()) > std::get<0>(write_file_->time()))
           write_file_ = *fiter;
@@ -775,15 +779,15 @@ void dirhistory::do_push_back_(const metric_emit& ts) {
 }
 
 auto dirhistory::time() const -> std::tuple<time_point, time_point> {
-  if (files_.empty()) {
+  if (files_->empty()) {
     auto rv = time_point::now();
     return std::make_tuple(rv, rv);
   }
 
 #if __cplusplus >= 201703
   return std::transform_reduce(
-      std::next(files_.begin()), files_.end(),
-      files_.front()->time(),
+      std::next(files_->begin()), files_->end(),
+      files_->front()->time(),
       [](const auto& x, const auto& y) {
         return std::make_tuple(
             std::min(std::get<0>(x), std::get<0>(y)),
@@ -836,7 +840,7 @@ auto dirhistory::emit(
   auto tr_begin = tr.begin();
   auto tr_end = tr.end();
 
-  auto file_set = filter_files_(files_, tr_begin, tr_end);
+  auto file_set = filter_files_(*files_, tr_begin, tr_end);
   return interpolation_based_emit(
       merge_emit(
           file_set.begin(),
@@ -855,7 +859,7 @@ auto dirhistory::emit_time(
   auto tr_begin = tr.begin();
   auto tr_end = tr.end();
 
-  auto file_set = filter_files_(files_, tr_begin, tr_end);
+  auto file_set = filter_files_(*files_, tr_begin, tr_end);
   return merge_emit(
       file_set.begin(),
       file_set.end(),
@@ -891,7 +895,7 @@ void dirhistory::maybe_start_new_file_(time_point tp) {
       throw std::runtime_error("unable to create file");
     try {
       auto new_file_ptr = v2::tsdata_v2::new_list_file(std::move(new_file), tp); // write mime header
-      files_.push_back(new_file_ptr);
+      files_->push_back(new_file_ptr);
       write_file_ = new_file_ptr; // Fill in write_file_ pointer
     } catch (...) {
       new_file.unlink();

@@ -3,7 +3,6 @@
 #include <monsoon/config_support.h>
 #include <monsoon/cache/impl.h>
 #include <monsoon/grammar/intf/rules.h>
-#include <monsoon/instrumentation.h>
 #include <algorithm>
 #include <utility>
 #include <ostream>
@@ -14,7 +13,7 @@ namespace monsoon {
 
 tags::cache_type tags::cache_() {
   static cache_type impl = tags::cache_type::builder()
-      .stats("tags", cache_instrumentation())
+      .stats("tags")
       .build(cache_create_());
   return impl;
 }

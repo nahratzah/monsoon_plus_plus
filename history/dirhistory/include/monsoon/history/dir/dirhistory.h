@@ -3,7 +3,6 @@
 
 #include <monsoon/history/dir/dirhistory_export_.h>
 #include <monsoon/history/collect_history.h>
-#include <instrumentation/gauge.h>
 #include <vector>
 #include <memory>
 
@@ -60,11 +59,11 @@ class monsoon_dirhistory_export_ dirhistory
   static auto decide_fname_(time_point) -> filesystem::path;
 
   const filesystem::path dir_;
-  std::vector<std::shared_ptr<tsdata>> files_;
+  std::shared_ptr<std::vector<std::shared_ptr<tsdata>>> files_ = std::make_shared<std::vector<std::shared_ptr<tsdata>>>();
   std::shared_ptr<tsdata> write_file_; // May be null.
   const bool writable_;
 
-  instrumentation::gauge<std::int64_t> file_count_;
+  std::shared_ptr<void> file_count_;
 };
 
 

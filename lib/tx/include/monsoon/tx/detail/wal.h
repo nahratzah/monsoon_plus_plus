@@ -18,7 +18,6 @@
 #include <monsoon/io/stream.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/tx/detail/replacement_map.h>
-#include <instrumentation/group.h>
 #include <instrumentation/counter.h>
 
 namespace monsoon::tx::detail {
@@ -354,8 +353,6 @@ class monsoon_tx_export_ wal_region {
   replacement_map repl_;
 
   ///\brief Instrumentation.
-  const std::string instrumentation_grp_name_;
-  instrumentation::tagged_group<1> instrumentation_grp_;
   instrumentation::counter commit_count_, write_ops_, compactions_, file_flush_;
 };
 

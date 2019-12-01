@@ -5,7 +5,6 @@
 ///\ingroup collectors
 
 #include <monsoon/collector.h>
-#include <instrumentation/group.h>
 
 namespace monsoon::collectors {
 
@@ -13,16 +12,12 @@ namespace monsoon::collectors {
 class self
 : public collector
 {
- public:
+  public:
   self() noexcept;
-  self(const instrumentation::group& grp) noexcept;
   ~self() noexcept override;
 
   auto provides() const -> names_set override;
   auto run(objpipe::reader<time_point> tp_pipe) const -> objpipe::reader<collection> override;
-
- private:
-  const instrumentation::group& grp_;
 };
 
 

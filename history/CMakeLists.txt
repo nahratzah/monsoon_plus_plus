@@ -3,7 +3,6 @@ project (monsoon_history)
 add_library (monsoon_history
   src/collect_history.cc
   src/print_history.cc
-  src/instrumentation.cc
 )
 target_include_directories (monsoon_history PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -17,7 +16,6 @@ install (FILES
   include/monsoon/history/history_export_.h
   include/monsoon/history/collect_history.h
   include/monsoon/history/print_history.h
-  include/monsoon/history/instrumentation.h
   DESTINATION include/monsoon/history)
 
 add_subdirectory (dirhistory)
