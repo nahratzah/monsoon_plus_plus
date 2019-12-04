@@ -432,13 +432,9 @@ fd fd::tmpfile(const std::string& prefix) {
   fd new_fd;
 
   filesystem::path prefix_path = prefix + tmpl_replacement;
-  if (prefix_path.has_parent_path()) {
-    prefix_path = filesystem::absolute(prefix_path);
-  } else {
-    prefix_path = filesystem::absolute(
-        prefix_path,
-        filesystem::temp_directory_path());
-  }
+  if (!prefix_path.has_parent_path() && prefix_path.is_relative())
+    prefix_path = filesystem::temp_directory_path() / prefix_path;
+  prefix_path = filesystem::absolute(prefix_path);
 
 #if __cplusplus >= 201703L // std::string::data() is modifiable
   std::string template_name = prefix_path.native();

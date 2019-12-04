@@ -736,7 +736,7 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
   if (!dir_.is_absolute())
     throw std::invalid_argument("dirhistory requires an absolute path");
   if (open_for_write &&
-      !(filesystem::status(dir_).permissions() & perms::owner_write))
+      (filesystem::status(dir_).permissions() & perms::owner_write) != perms::none)
     throw std::invalid_argument("dirhistory path is not writable");
 
   // Scan directory for files to manage.
@@ -747,7 +747,7 @@ dirhistory::dirhistory(filesystem::path dir, bool open_for_write)
         if (filesystem::is_regular_file(fstat)) {
           io::fd::open_mode mode = io::fd::READ_WRITE;
           if (!open_for_write ||
-              !(fstat.permissions() & perms::owner_write))
+              (fstat.permissions() & perms::owner_write) != perms::none)
             mode = io::fd::READ_ONLY;
 
           auto fd = io::fd(fname.native(), mode);

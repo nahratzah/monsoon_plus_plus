@@ -176,7 +176,7 @@ auto operator-(histogram x) noexcept -> histogram {
 auto operator+(histogram&& x, const histogram& y) -> histogram {
   x.elems_.insert(x.elems_.end(), y.elems_.begin(), y.elems_.end());
   x.fixup_immed_unsorted_();
-  return x;
+  return std::move(x);
 }
 
 auto operator+(const histogram& x, histogram&& y) -> histogram {
@@ -186,7 +186,7 @@ auto operator+(const histogram& x, histogram&& y) -> histogram {
 auto operator+(histogram&& x, histogram&& y) -> histogram {
   x.elems_.insert(x.elems_.end(), y.elems_.begin(), y.elems_.end());
   x.fixup_immed_unsorted_();
-  return x;
+  return std::move(x);
 }
 
 auto operator+(const histogram& x, const histogram& y) -> histogram {
@@ -198,7 +198,7 @@ auto operator-(histogram&& x, histogram&& y) -> histogram {
   for (const auto& e : y.elems_)
     x.add_immed_(std::get<0>(e), -std::get<1>(e));
   x.fixup_immed_unsorted_();
-  return x;
+  return std::move(x);
 }
 
 auto operator-(const histogram& x, histogram&& y) -> histogram {
@@ -206,14 +206,14 @@ auto operator-(const histogram& x, histogram&& y) -> histogram {
     std::get<1>(e) = -std::get<1>(e);
   y.elems_.insert(y.elems_.end(), x.elems_.begin(), x.elems_.end());
   y.fixup_immed_unsorted_();
-  return y;
+  return std::move(y);
 }
 
 auto operator-(histogram&& x, const histogram& y) -> histogram {
   for (const auto& e : y.elems_)
     x.add_immed_(std::get<0>(e), -std::get<1>(e));
   x.fixup_immed_unsorted_();
-  return x;
+  return std::move(x);
 }
 
 auto operator-(const histogram& x, const histogram& y) -> histogram {
