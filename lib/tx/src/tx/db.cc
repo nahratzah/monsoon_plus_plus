@@ -144,6 +144,14 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
   return db(std::move(name), std::move(f));
 }
 
+auto db::begin(bool read_only) -> transaction {
+  return transaction(tx_id_seq_(), read_only, f_);
+}
+
+auto db::begin() const -> transaction {
+  return transaction(tx_id_seq_(), true, const_cast<txfile&>(f_));
+}
+
 
 db::transaction_obj::~transaction_obj() noexcept = default;
 

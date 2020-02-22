@@ -73,9 +73,13 @@ class monsoon_tx_export_ db {
   ///\brief Validate the header in front of the WAL and uses it to load the WAL.
   monsoon_tx_local_ auto validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile;
 
+  public:
+  auto begin(bool read_only) -> transaction;
+  auto begin() const -> transaction;
+
   private:
   txfile f_; // Underlying file.
-  sequence tx_id_seq_; // Allocate transaction IDs.
+  mutable sequence tx_id_seq_; // Allocate transaction IDs.
 };
 
 
@@ -105,6 +109,8 @@ class monsoon_tx_export_ db::transaction_obj {
  * Holds on to all changes for a database.
  */
 class monsoon_tx_export_ db::transaction {
+  friend db;
+
   public:
   using seq_type = std::uintmax_t;
 
@@ -115,6 +121,9 @@ class monsoon_tx_export_ db::transaction {
   transaction(transaction&&) noexcept;
   transaction& operator=(transaction&&) noexcept;
   ~transaction() noexcept;
+
+  private:
+  transaction(seq_type seq, bool read_only, txfile& f) noexcept;
 
   auto seq() const noexcept -> seq_type { return seq_; }
 
