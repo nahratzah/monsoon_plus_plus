@@ -138,7 +138,12 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
   // Build up static database elements.
   auto init_tx = f.begin();
   init_tx.resize(DB_HEADER_SIZE);
+  // Write the version.
+  const std::uint32_t version = boost::endian::big_to_native(VERSION);
+  write_all_from_buf(init_tx, DB_OFF_VERSION_, &version, sizeof(version));
+  // Initialize transaction sequence.
   sequence::init(init_tx, DB_OFF_TX_ID_SEQ_);
+  // Commit all written data.
   init_tx.commit();
 
   return db(std::move(name), std::move(f));
