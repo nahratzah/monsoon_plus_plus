@@ -1,6 +1,7 @@
 #ifndef MONSOON_TX_DB_H
 #define MONSOON_TX_DB_H
 
+#include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/txfile.h>
 #include <monsoon/tx/sequence.h>
 #include <cstdint>
@@ -10,14 +11,14 @@
 namespace monsoon::tx {
 
 
-class db_invalid_error : public std::runtime_error {
+class monsoon_tx_export_ db_invalid_error : public std::runtime_error {
   public:
   using std::runtime_error::runtime_error;
   ~db_invalid_error() noexcept override;
 };
 
 
-class db {
+class monsoon_tx_export_ db {
   public:
   static constexpr std::uint32_t VERSION = 0;
   static constexpr monsoon::io::fd::size_type DEFAULT_WAL_BYTES = 32 * 1024 * 1024;
@@ -67,10 +68,10 @@ class db {
   static auto create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0, monsoon::io::fd::size_type len = DEFAULT_WAL_BYTES) -> db;
 
   private:
-  db(std::string name, txfile&& f);
+  monsoon_tx_local_ db(std::string name, txfile&& f);
 
   ///\brief Validate the header in front of the WAL and uses it to load the WAL.
-  auto validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile;
+  monsoon_tx_local_ auto validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile;
 
   private:
   txfile f_; // Underlying file.
@@ -83,17 +84,16 @@ class db {
  * \details
  * Interface for specific types that participate in a transaction.
  */
-class db::transaction_obj {
+class monsoon_tx_export_ db::transaction_obj {
   friend transaction;
 
   public:
   virtual ~transaction_obj() noexcept;
 
-  protected:
-  void commit(txfile::transaction& tx);
-  void rollback() noexcept;
-
   private:
+  monsoon_tx_local_ void commit(txfile::transaction& tx);
+  monsoon_tx_local_ void rollback() noexcept;
+
   virtual void do_commit(txfile::transaction& tx) = 0;
   virtual void do_rollback() noexcept = 0;
 };
@@ -104,7 +104,7 @@ class db::transaction_obj {
  * \details
  * Holds on to all changes for a database.
  */
-class db::transaction {
+class monsoon_tx_export_ db::transaction {
   public:
   using seq_type = std::uintmax_t;
 
