@@ -7,6 +7,7 @@ find_package (Boost REQUIRED)
 add_library (monsoon_tx
   src/tx/txfile.cc
   src/tx/sequence.cc
+  src/tx/db.cc
   src/tx/detail/replacement_map.cc
   src/tx/detail/tx_sequencer.cc
   src/tx/detail/wal.cc
@@ -29,6 +30,8 @@ install (TARGETS monsoon_tx DESTINATION lib)
 install (FILES
   include/monsoon/tx/txfile.h
   include/monsoon/tx/sequence.h
+  include/monsoon/tx/db.h
+  include/monsoon/tx/db-inl.h
   DESTINATION include/monsoon/tx)
 install (FILES
   include/monsoon/tx/detail/export_.h
