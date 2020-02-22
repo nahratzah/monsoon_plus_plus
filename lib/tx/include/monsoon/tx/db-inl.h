@@ -29,6 +29,10 @@ inline auto db::transaction::operator=(transaction&& other) noexcept -> transact
   return *this;
 }
 
+inline auto db::transaction::before(const transaction& other) const noexcept -> bool {
+  return before(seq_, other.seq_);
+}
+
 inline auto db::transaction::after(const transaction& other) const noexcept -> bool {
   return other.before(*this);
 }

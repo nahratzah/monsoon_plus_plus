@@ -3,7 +3,9 @@
 #include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/io/limited_stream.h>
 #include <monsoon/io/positional_stream.h>
+#include <boost/endian/conversion.hpp>
 #include <cassert>
+#include <limits>
 
 namespace monsoon::tx {
 namespace {
@@ -65,6 +67,33 @@ void front_header::write(monsoon::xdr::xdr_ostream& o) {
 }
 
 
+template<typename R>
+void read_all_into_buf(R& r, monsoon::io::fd::offset_type off, void* buf, std::size_t len) {
+  auto byte_buf = reinterpret_cast<std::uint8_t*>(buf);
+
+  while (len > 0) {
+    const auto rlen = r.read_at(off, byte_buf, len);
+    if (rlen == 0) throw std::runtime_error("unable to read");
+    byte_buf += rlen;
+    len -= rlen;
+    off += rlen;
+  }
+}
+
+template<typename W>
+void write_all_from_buf(W& w, monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
+  auto byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
+
+  while (len > 0) {
+    const auto wlen = w.write_at(off, byte_buf, len);
+    if (wlen == 0) throw std::runtime_error("unable to read");
+    byte_buf += wlen;
+    len -= wlen;
+    off += wlen;
+  }
+}
+
+
 } /* namespace monsoon::tx::<unnamed> */
 
 
@@ -78,7 +107,16 @@ db::db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off)
 db::db(std::string name, txfile&& f)
 : f_(std::move(f)),
   tx_id_seq_(f_, DB_OFF_TX_ID_SEQ_)
-{}
+{
+  std::uint32_t version;
+
+  // Validate version.
+  auto t = f_.begin(true);
+  read_all_into_buf(t, DB_OFF_VERSION_, &version, sizeof(version));
+  boost::endian::big_to_native_inplace(version);
+  if (version > VERSION) throw db_invalid_error("unsupported database version");
+  t.commit();
+}
 
 auto db::validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile {
   front_header fh;
@@ -117,6 +155,10 @@ void db::transaction_obj::rollback() noexcept {
   do_rollback();
 }
 
+
+auto db::transaction::before(seq_type x, seq_type y) noexcept -> bool {
+  return y - x <= std::numeric_limits<seq_type>::max() / 2u;
+}
 
 void db::transaction::commit() {
   if (!active_) return;

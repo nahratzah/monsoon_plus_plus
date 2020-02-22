@@ -19,14 +19,17 @@ class db_invalid_error : public std::runtime_error {
 
 class db {
   public:
+  static constexpr std::uint32_t VERSION = 0;
   static constexpr monsoon::io::fd::size_type DEFAULT_WAL_BYTES = 32 * 1024 * 1024;
 
   // Database header will be exactly this size in bytes. There may be unused space.
   static constexpr monsoon::io::fd::offset_type DB_HEADER_SIZE = 4096;
 
   private:
+  // Offset: version number (4 bytes)
+  static constexpr monsoon::io::fd::offset_type DB_OFF_VERSION_ = 0;
   // Offset: tx_id_seq
-  static constexpr monsoon::io::fd::offset_type DB_OFF_TX_ID_SEQ_ = 0;
+  static constexpr monsoon::io::fd::offset_type DB_OFF_TX_ID_SEQ_ = DB_OFF_VERSION_ + 4u;
   // End of used space.
   static constexpr monsoon::io::fd::offset_type DB_OFF_END_ = DB_OFF_TX_ID_SEQ_ + sequence::SIZE;
 
@@ -115,6 +118,7 @@ class db::transaction {
 
   auto seq() const noexcept -> seq_type { return seq_; }
 
+  static auto before(seq_type x, seq_type y) noexcept -> bool;
   auto before(const transaction& other) const noexcept -> bool;
   auto after(const transaction& other) const noexcept -> bool;
 
