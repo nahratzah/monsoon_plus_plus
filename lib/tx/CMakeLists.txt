@@ -8,9 +8,12 @@ add_library (monsoon_tx
   src/tx/txfile.cc
   src/tx/sequence.cc
   src/tx/db.cc
+  src/tx/tree_error.cc
   src/tx/detail/replacement_map.cc
   src/tx/detail/tx_sequencer.cc
   src/tx/detail/wal.cc
+  src/tx/detail/tree_page.cc
+  src/tx/detail/tree_cfg.cc
 )
 target_include_directories (monsoon_tx PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -19,6 +22,7 @@ target_include_directories (monsoon_tx PUBLIC ${Boost_INCLUDE_DIR})
 target_link_libraries (monsoon_tx PUBLIC
   monsoon_misc
   instrumentation
+  cycle_ptr
 )
 target_link_libraries (monsoon_tx PRIVATE
   objpipe
@@ -32,12 +36,17 @@ install (FILES
   include/monsoon/tx/sequence.h
   include/monsoon/tx/db.h
   include/monsoon/tx/db-inl.h
+  include/monsoon/tx/tree.h
+  include/monsoon/tx/tree_error.h
   DESTINATION include/monsoon/tx)
 install (FILES
   include/monsoon/tx/detail/export_.h
   include/monsoon/tx/detail/replacement_map.h
   include/monsoon/tx/detail/tx_sequencer.h
   include/monsoon/tx/detail/wal.h
+  include/monsoon/tx/detail/tree_spec.h
+  include/monsoon/tx/detail/tree_page.h
+  include/monsoon/tx/detail/tree_cfg.h
   DESTINATION include/monsoon/tx/detail)
 
 add_subdirectory (tests)
