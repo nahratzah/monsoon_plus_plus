@@ -18,6 +18,7 @@ add_library (monsoon_misc
   src/positional_stream.cc
   src/xdr.cc
   src/gzip_stream.cc
+  src/aio.cc
 )
 target_include_directories (monsoon_misc PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -39,6 +40,11 @@ if (NOT WIN32)
   else ()
     message (WARNING "no mkstemp() function found")
   endif ()
+
+  find_library (RT_LIB rt)
+  if (RT_LIB)
+    target_link_libraries (monsoon_misc PRIVATE ${RT_LIB})
+  endif ()
 endif ()
 
 install (TARGETS monsoon_misc DESTINATION lib)
@@ -55,6 +61,7 @@ install (FILES
   include/monsoon/io/positional_stream.h
   include/monsoon/io/limited_stream.h
   include/monsoon/io/stream.h
+  include/monsoon/io/aio.h
   DESTINATION include/monsoon/io)
 install (FILES
   include/monsoon/xdr/xdr-inl.h
