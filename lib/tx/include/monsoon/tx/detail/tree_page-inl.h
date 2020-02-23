@@ -60,13 +60,14 @@ inline auto tree_elem<Key, Val>::lock_parent_for_read() const
   std::shared_lock<std::shared_mutex> lck;
   std::tie(p, lck) = this->abstract_tree_elem::lock_parent_for_read();
 
-  cycle_ptr::cycle_gptr<leaf_page<Key, Val>> casted_p =
 #ifdef NDEBUG
-      std::static_pointer_cast<leaf_page<Key, Val>>(p)
+  cycle_ptr::cycle_gptr<leaf_page<Key, Val>> casted_p =
+      std::static_pointer_cast<leaf_page<Key, Val>>(p);
 #else
-      std::dynamic_pointer_cast<leaf_page<Key, Val>>(p)
+  cycle_ptr::cycle_gptr<leaf_page<Key, Val>> casted_p =
+      std::dynamic_pointer_cast<leaf_page<Key, Val>>(p);
+  assert(casted_p != nullptr); // Means the dynamic type wasn't found.
 #endif
-  ;
 
   return std::make_tuple(std::move(casted_p), std::move(lck));
 }
@@ -78,13 +79,14 @@ inline auto tree_elem<Key, Val>::lock_parent_for_write() const
   std::unique_lock<std::shared_mutex> lck;
   std::tie(p, lck) = this->abstract_tree_elem::lock_parent_for_write();
 
-  cycle_ptr::cycle_gptr<leaf_page<Key, Val>> casted_p =
 #ifdef NDEBUG
-      std::static_pointer_cast<leaf_page<Key, Val>>(p)
+  cycle_ptr::cycle_gptr<leaf_page<Key, Val>> casted_p =
+      std::static_pointer_cast<leaf_page<Key, Val>>(p);
 #else
-      std::dynamic_pointer_cast<leaf_page<Key, Val>>(p)
+  cycle_ptr::cycle_gptr<leaf_page<Key, Val>> casted_p =
+      std::dynamic_pointer_cast<leaf_page<Key, Val>>(p);
+  assert(casted_p != nullptr); // Means the dynamic type wasn't found.
 #endif
-  ;
 
   return std::make_tuple(std::move(casted_p), std::move(lck));
 }
