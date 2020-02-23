@@ -8,6 +8,7 @@
 #include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/io/limited_stream.h>
+#include <monsoon/io/aio.h>
 #include <objpipe/of.h>
 
 namespace monsoon::tx::detail {
@@ -311,17 +312,10 @@ wal_region::wal_region(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::
     using lp_writer = monsoon::io::limited_stream_writer<monsoon::io::positional_writer>;
 
     // Write all pending writes.
-    for (const auto& w : repl_) {
-      auto buf = reinterpret_cast<const std::uint8_t*>(w.data());
-      auto len = w.size();
-      auto off = w.begin_offset();
-      while (len > 0) {
-        const auto wlen = fd_.write_at(off + wal_end_offset(), buf, len);
-        buf += wlen;
-        len -= wlen;
-        off += wlen;
-      }
-    }
+    monsoon::io::aio aio;
+    for (const auto& w : repl_)
+      aio.on(fd_).write_at(w.begin_offset() + wal_end_offset(), w.data(), w.size());
+    aio.start_and_join();
     repl_.clear();
     fd_.truncate(monsoon::io::fd::size_type(wal_end_offset()) + fd_size_);
     fd_.flush(true);
@@ -597,24 +591,16 @@ void wal_region::compact_() {
   // Apply the replacement map.
   {
     std::lock_guard<std::shared_mutex> lck{ mtx_ };
-    for (const auto& r : repl_) {
-      auto off = r.begin_offset();
-      auto buf = reinterpret_cast<const std::uint8_t*>(r.data());
-      auto len = r.size();
-      while (len > 0) {
-        const auto wlen = fd_.write_at(off + wal_end_offset(), buf, len);
-        off += wlen;
-        buf += wlen;
-        len -= wlen;
-      }
-    }
+    monsoon::io::aio aio;
+    for (const auto& r : repl_)
+      aio.on(fd_).write_at(r.begin_offset() + wal_end_offset(), r.data(), r.size());
+    // Ensure all data is on disk, before activating the segment.
+    aio.on(fd_).flush(true);
+    ++file_flush_;
+    aio.start_and_join();
     // Now that the replacement map is written out, we can clear it.
     repl_.clear();
   }
-
-  // Ensure all data is on disk, before activating the segment.
-  fd_.flush(true);
-  ++file_flush_;
 
   // Now that all the writes from the old segment have been applied,
   // and all active transaction information has been copied,
