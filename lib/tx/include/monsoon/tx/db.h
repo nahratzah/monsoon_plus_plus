@@ -97,10 +97,10 @@ class monsoon_tx_export_ db::transaction_obj {
   virtual ~transaction_obj() noexcept;
 
   private:
-  monsoon_tx_local_ void commit(txfile::transaction& tx);
+  monsoon_tx_local_ void commit(sequence::type commit_id, txfile::transaction& tx);
   monsoon_tx_local_ void rollback() noexcept;
 
-  virtual void do_commit(txfile::transaction& tx) = 0;
+  virtual void do_commit(sequence::type commit_id, txfile::transaction& tx) = 0;
   virtual void do_rollback() noexcept = 0;
 };
 
@@ -128,7 +128,7 @@ class monsoon_tx_export_ db::transaction {
   auto on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_gptr<typename T::tx_object>;
 
   private:
-  transaction(seq_type seq, bool read_only, txfile& f) noexcept;
+  transaction(seq_type seq, bool read_only, db& self) noexcept;
 
   public:
   auto seq() const noexcept -> seq_type { return seq_; }
@@ -149,7 +149,7 @@ class monsoon_tx_export_ db::transaction {
   bool read_only_;
   bool active_ = false;
   std::unordered_map<cycle_ptr::cycle_gptr<const void>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
-  txfile *f_;
+  db *self_;
 };
 
 

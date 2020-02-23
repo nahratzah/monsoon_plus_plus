@@ -11,7 +11,7 @@ inline db::transaction::transaction(transaction&& other) noexcept
   read_only_(std::move(other.read_only_)),
   active_(std::exchange(other.active_, false)),
   callbacks_(std::move(other.callbacks_)),
-  f_(std::exchange(other.f_, nullptr))
+  self_(std::exchange(other.self_, nullptr))
 {}
 
 inline auto db::transaction::operator=(transaction&& other) noexcept -> transaction& {
@@ -21,7 +21,7 @@ inline auto db::transaction::operator=(transaction&& other) noexcept -> transact
   read_only_ = std::move(other.read_only_);
   active_ = std::exchange(other.active_, false);
   callbacks_ = std::move(other.callbacks_);
-  f_ = std::exchange(other.f_, nullptr);
+  self_ = std::exchange(other.self_, nullptr);
   return *this;
 }
 
@@ -43,11 +43,11 @@ inline auto db::transaction::on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_
 #endif
 }
 
-inline db::transaction::transaction(seq_type seq, bool read_only, txfile& f) noexcept
+inline db::transaction::transaction(seq_type seq, bool read_only, db& self) noexcept
 : seq_(seq),
   read_only_(read_only),
   active_(true),
-  f_(&f)
+  self_(&self)
 {}
 
 inline auto db::transaction::before(const transaction& other) const noexcept -> bool {

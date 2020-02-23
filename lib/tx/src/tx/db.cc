@@ -150,18 +150,18 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
 }
 
 auto db::begin(bool read_only) -> transaction {
-  return transaction(tx_id_seq_(), read_only, f_);
+  return transaction(tx_id_seq_(), read_only, *this);
 }
 
 auto db::begin() const -> transaction {
-  return transaction(tx_id_seq_(), true, const_cast<txfile&>(f_));
+  return transaction(tx_id_seq_(), true, const_cast<db&>(*this));
 }
 
 
 db::transaction_obj::~transaction_obj() noexcept = default;
 
-void db::transaction_obj::commit(txfile::transaction& tx) {
-  do_commit(tx);
+void db::transaction_obj::commit(sequence::type commit_id, txfile::transaction& tx) {
+  do_commit(commit_id, tx);
 }
 
 void db::transaction_obj::rollback() noexcept {
@@ -175,11 +175,11 @@ auto db::transaction::before(seq_type x, seq_type y) noexcept -> bool {
 
 void db::transaction::commit() {
   if (!active_) throw std::logic_error("commit called on inactive transaction");
-  assert(f_ != nullptr);
+  assert(self_ != nullptr);
 
-  auto tx = f_->begin(read_only_);
-  for (auto& cb : callbacks_) cb.second->commit(tx);
-  tx.commit();
+  auto tx = self_->f_.begin(self_->tx_id_seq_, read_only_);
+  for (auto& cb : callbacks_) cb.second->commit(std::get<1>(tx), std::get<0>(tx));
+  std::get<0>(tx).commit();
 
   // Must be the last statement, so that exceptions will not mark this TX as done.
   active_ = false;
@@ -187,7 +187,7 @@ void db::transaction::commit() {
 
 void db::transaction::rollback() noexcept {
   if (!active_) return;
-  assert(f_ != nullptr);
+  assert(self_ != nullptr);
 
   for (auto& cb : callbacks_) cb.second->rollback();
   active_ = false;
