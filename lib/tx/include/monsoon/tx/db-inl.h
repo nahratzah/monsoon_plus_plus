@@ -29,6 +29,20 @@ inline db::transaction::~transaction() noexcept {
   if (active_) rollback();
 }
 
+template<typename T>
+inline auto db::transaction::on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_gptr<typename T::tx_object> {
+  auto& txo = callbacks_[v];
+  if (txo == nullptr) txo = cycle_ptr::make_cycle<typename T::tx_object>(*this, std::move(v));
+
+#ifdef NDEBUG
+  return std::static_pointer_cast<typename T::tx_object>(txo)
+#else
+  auto result_ptr = std::dynamic_pointer_cast<typename T::tx_object>(txo);
+  assert(result_ptr != nullptr); // Means the types are incorrect.
+  return result_ptr;
+#endif
+}
+
 inline db::transaction::transaction(seq_type seq, bool read_only, txfile& f) noexcept
 : seq_(seq),
   read_only_(read_only),

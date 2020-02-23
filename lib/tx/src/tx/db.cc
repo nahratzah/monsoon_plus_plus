@@ -174,11 +174,11 @@ auto db::transaction::before(seq_type x, seq_type y) noexcept -> bool {
 }
 
 void db::transaction::commit() {
-  if (!active_) return;
+  if (!active_) throw std::logic_error("commit called on inactive transaction");
   assert(f_ != nullptr);
 
   auto tx = f_->begin(read_only_);
-  for (auto& cb : callbacks_) cb->commit(tx);
+  for (auto& cb : callbacks_) cb.second->commit(tx);
   tx.commit();
 
   // Must be the last statement, so that exceptions will not mark this TX as done.
@@ -189,7 +189,7 @@ void db::transaction::rollback() noexcept {
   if (!active_) return;
   assert(f_ != nullptr);
 
-  for (auto& cb : callbacks_) cb->rollback();
+  for (auto& cb : callbacks_) cb.second->rollback();
   active_ = false;
 }
 

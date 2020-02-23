@@ -4,9 +4,11 @@
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/txfile.h>
 #include <monsoon/tx/sequence.h>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
-#include <vector>
+#include <unordered_map>
+#include <cycle_ptr/cycle_ptr.h>
 
 namespace monsoon::tx {
 
@@ -122,9 +124,13 @@ class monsoon_tx_export_ db::transaction {
   transaction& operator=(transaction&&) noexcept;
   ~transaction() noexcept;
 
+  template<typename T>
+  auto on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_gptr<typename T::tx_object>;
+
   private:
   transaction(seq_type seq, bool read_only, txfile& f) noexcept;
 
+  public:
   auto seq() const noexcept -> seq_type { return seq_; }
 
   static auto before(seq_type x, seq_type y) noexcept -> bool;
@@ -142,7 +148,7 @@ class monsoon_tx_export_ db::transaction {
   seq_type seq_;
   bool read_only_;
   bool active_ = false;
-  std::vector<std::unique_ptr<transaction_obj>> callbacks_;
+  std::unordered_map<cycle_ptr::cycle_gptr<const void>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
   txfile *f_;
 };
 
