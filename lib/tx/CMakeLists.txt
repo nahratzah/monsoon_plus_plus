@@ -8,6 +8,7 @@ add_library (monsoon_tx
   src/tx/txfile.cc
   src/tx/sequence.cc
   src/tx/db.cc
+  src/tx/tree.cc
   src/tx/tree_error.cc
   src/tx/detail/replacement_map.cc
   src/tx/detail/tx_sequencer.cc
@@ -37,6 +38,7 @@ install (FILES
   include/monsoon/tx/db.h
   include/monsoon/tx/db-inl.h
   include/monsoon/tx/tree.h
+  include/monsoon/tx/tree-inl.h
   include/monsoon/tx/tree_error.h
   DESTINATION include/monsoon/tx)
 install (FILES

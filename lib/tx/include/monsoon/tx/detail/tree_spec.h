@@ -88,8 +88,8 @@ constexpr auto sum_(const Integer& v) noexcept -> Integer {
 }
 
 ///\brief Trivial compile-time summation function.
-template<typename Integer>
-constexpr auto sum_(const Integer& x, const Integer& y, const Integer&... tail) noexcept -> Integer {
+template<typename Integer, typename... Tail>
+constexpr auto sum_(const Integer& x, const Integer& y, const Tail&... tail) noexcept -> Integer {
   return sum_(x + y, tail...);
 }
 
@@ -107,7 +107,8 @@ constexpr auto autoconf_tree_leaf_elems(std::size_t key_size, std::size_t val_si
 }
 
 ///\brief Compute elements per page.
-constexpr auto autoconf_tree_page_elems(std::size_t key_size, std::size_t val_size, std::size_t... augment_sizes) -> std::size_t {
+template<typename... AugmentSizes>
+constexpr auto autoconf_tree_page_elems(std::size_t key_size, std::size_t val_size, AugmentSizes... augment_sizes) -> std::size_t {
   return autoconf_tree_leaf_elems(key_size, sum_(val_size, augment_sizes...));
 }
 
