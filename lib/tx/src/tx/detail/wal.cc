@@ -198,7 +198,7 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
   }
 
   assert(result != nullptr
-      && static_cast<std::uint32_t>(result->get_wal_entry()) == discriminant);
+      && static_cast<std::uint32_t>(result->get_wal_entry()) == (discriminant & 0xff));
   return result;
 }
 

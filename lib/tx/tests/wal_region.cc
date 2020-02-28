@@ -239,6 +239,50 @@ TEST(write_and_commit_and_reopen) {
   check_file_equals(u8"01234567", wal->fd(), 256);
 }
 
+TEST(commit_order_matters) {
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
+  {
+    // We need three bytes of space.
+    auto r = wal_region::tx(wal);
+    r.resize(3);
+    r.commit();
+  }
+
+  auto tx1 = wal_region::tx(wal);
+  tx1.write_at(0, u8"one", 3);
+
+  auto tx2 = wal_region::tx(wal);
+  tx2.write_at(0, u8"two", 3);
+
+  tx2.commit(); // writes "two" at the position
+  tx1.commit(); // writes "one" at the position
+
+  check_file_equals(u8"one", *wal);
+}
+
+TEST(commit_order_matters_on_reopen) {
+  auto wal = std::make_shared<wal_region>("waltest", wal_region::create(), TMPFILE(), 0, 256);
+  {
+    // We need three bytes of space.
+    auto r = wal_region::tx(wal);
+    r.resize(3);
+    r.commit();
+  }
+
+  auto tx1 = wal_region::tx(wal);
+  tx1.write_at(0, u8"one", 3);
+
+  auto tx2 = wal_region::tx(wal);
+  tx2.write_at(0, u8"two", 3);
+
+  tx2.commit(); // writes "two" at the position
+  tx1.commit(); // writes "one" at the position
+
+  // Reopen.
+  wal = std::make_shared<wal_region>("waltest", std::move(*wal).fd(), 0, 256);
+  check_file_equals(u8"one", *wal);
+}
+
 int main() {
   return UnitTest::RunAllTests();
 }
