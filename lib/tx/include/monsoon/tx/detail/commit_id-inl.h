@@ -34,6 +34,10 @@ inline auto commit_manager::write_id_state_::get_cm_or_null() const noexcept -> 
   return seq_.get_cm_or_null();
 }
 
+inline auto commit_manager::write_id_state_::write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t {
+  return tx_.write_at(offset, buf, nbytes);
+}
+
 
 inline commit_manager::write_id::write_id(unique_alloc_ptr<write_id_state_, traits_type::rebind_alloc<write_id_state_>>&& impl) noexcept
 : pimpl_(std::move(impl))
@@ -48,6 +52,11 @@ inline commit_manager::write_id::~write_id() noexcept {
 inline auto commit_manager::write_id::apply(std::function<std::error_code()> validation, std::function<void()> phase2) -> std::error_code {
   assert(pimpl_ != nullptr);
   return pimpl_->apply(std::move(validation), std::move(phase2));
+}
+
+inline auto commit_manager::write_id::write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t {
+  assert(pimpl_ != nullptr);
+  return pimpl_->write_at(offset, buf, nbytes);
 }
 
 

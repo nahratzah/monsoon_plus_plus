@@ -10,10 +10,14 @@
 #include <mutex>
 #include <shared_mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <cycle_ptr/cycle_ptr.h>
 
 namespace monsoon::tx {
+
+
+class tx_aware_data;
 
 
 class monsoon_tx_export_ db_invalid_error : public std::runtime_error {
@@ -101,19 +105,19 @@ class monsoon_tx_export_ db::transaction_obj {
 
   private:
   monsoon_tx_local_ void commit_phase1(detail::commit_manager::write_id& tx);
-  monsoon_tx_local_ void commit_phase2() noexcept;
-  monsoon_tx_local_ auto validate() -> std::error_code;
+  monsoon_tx_local_ void commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept;
+  monsoon_tx_local_ auto validate(const detail::commit_manager::commit_id& write_id) -> std::error_code;
   monsoon_tx_local_ void rollback() noexcept;
 
   virtual void do_commit_phase1(detail::commit_manager::write_id& tx) = 0;
-  virtual void do_commit_phase2() noexcept = 0;
-  virtual auto do_validate() -> std::error_code = 0;
+  virtual void do_commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept = 0;
+  virtual auto do_validate(const detail::commit_manager::commit_id& write_id) -> std::error_code = 0;
   virtual void do_rollback() noexcept = 0;
 
   protected:
   ///\brief Mutex that controls modification of layout.
   ///\details A layout modification is anything that would affect the offset of a tx_aware_data.
-  mutable std::shared_mutex layout_lck;
+  virtual std::shared_mutex& layout_lck() const = 0;
 };
 
 
@@ -144,6 +148,8 @@ class monsoon_tx_export_ db::transaction {
   auto seq() const noexcept -> detail::commit_manager::commit_id { return seq_; }
   auto before(const transaction& other) const noexcept -> bool;
   auto after(const transaction& other) const noexcept -> bool;
+  ///\brief Test if we can see the given \p datum.
+  auto visible(const cycle_ptr::cycle_gptr<tx_aware_data>& datum) const noexcept -> bool;
 
   void commit();
   void rollback() noexcept;
@@ -161,13 +167,13 @@ class monsoon_tx_export_ db::transaction {
   void commit_phase1_(detail::commit_manager::write_id& tx);
   ///\brief Execute phase 2 commit.
   ///\details This is the phase where in-memory data is changed to reflect the commit.
-  void commit_phase2_() noexcept;
+  void commit_phase2_(const detail::commit_manager::commit_id& write_id) noexcept;
   ///\brief Test if all objects involved in the transaction.
   ///\details
   ///This is where we test that none of the objects we mutate were mutated by another transaction.
   ///We also test that all objects that must exist at commit time, still exist.
   ///We can also do more complicated validation, such as unique-ness constraints for new objects.
-  auto validate_() -> std::error_code;
+  auto validate_(const detail::commit_manager::commit_id& write_id) -> std::error_code;
   ///\brief Rollback all transaction objects.
   void rollback_() noexcept;
 
@@ -176,6 +182,13 @@ class monsoon_tx_export_ db::transaction {
   bool active_ = false;
   std::unordered_map<cycle_ptr::cycle_gptr<const void>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
   db *self_;
+
+  ///\brief Set of objects that are being deleted.
+  std::unordered_set<cycle_ptr::cycle_gptr<tx_aware_data>> deleted_set_;
+  ///\brief Set of objects that are being created.
+  std::unordered_set<cycle_ptr::cycle_gptr<tx_aware_data>> created_set_;
+  ///\brief Set of objects that must not be deleted/modified.
+  std::unordered_set<cycle_ptr::cycle_gptr<tx_aware_data>> require_set_;
 };
 
 

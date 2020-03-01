@@ -1,8 +1,11 @@
 #include <monsoon/tx/db.h>
+#include <monsoon/tx/db_errc.h>
+#include <monsoon/tx/tx_aware_data.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/io/limited_stream.h>
 #include <monsoon/io/positional_stream.h>
+#include <monsoon/io/rw.h>
 #include <boost/endian/conversion.hpp>
 #include <algorithm>
 #include <cassert>
@@ -166,18 +169,25 @@ void db::transaction_obj::commit_phase1(detail::commit_manager::write_id& tx) {
   do_commit_phase1(tx);
 }
 
-void db::transaction_obj::commit_phase2() noexcept {
-  do_commit_phase2();
+void db::transaction_obj::commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept {
+  do_commit_phase2(write_id);
 }
 
-auto db::transaction_obj::validate() -> std::error_code {
-  return do_validate();
+auto db::transaction_obj::validate(const detail::commit_manager::commit_id& write_id) -> std::error_code {
+  return do_validate(write_id);
 }
 
 void db::transaction_obj::rollback() noexcept {
   do_rollback();
 }
 
+
+auto db::transaction::visible(const cycle_ptr::cycle_gptr<tx_aware_data>& datum) const noexcept -> bool {
+  assert(datum != nullptr);
+  if (deleted_set_.count(datum) > 0) return false;
+  if (created_set_.count(datum) > 0) return true;
+  return datum->visible_in_tx(seq_);
+}
 
 void db::transaction::commit() {
   if (!active_) throw std::logic_error("commit called on inactive transaction");
@@ -191,11 +201,11 @@ void db::transaction::commit() {
 
     commit_phase1_(tx);
     tx.apply(
-        [this]() -> std::error_code {
-          return validate_();
+        [this, &tx]() -> std::error_code {
+          return validate_(tx.seq());
         },
-        [this]() noexcept {
-          commit_phase2_();
+        [this, &tx]() noexcept {
+          commit_phase2_(tx.seq());
         });
   }
 
@@ -223,7 +233,7 @@ auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<
       std::back_inserter(layout_locks),
       [](const auto& pair) -> std::shared_lock<std::shared_mutex> {
         return std::shared_lock<std::shared_mutex>(
-            pair.second->layout_lck,
+            pair.second->layout_lck(),
             std::defer_lock);
       });
 
@@ -246,6 +256,23 @@ auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<
 }
 
 void db::transaction::commit_phase1_(detail::commit_manager::write_id& tx) {
+  // Write all creation records.
+  // XXX create a bundle-write in the WAL where we can use 1 buffer and many offsets.
+  std::for_each(
+      created_set_.begin(), created_set_.end(),
+      [&tx, buf=tx_aware_data::make_creation_buffer(tx.seq().val())](const auto& datum_ptr) {
+        monsoon::io::write_at(tx, datum_ptr->offset() + tx_aware_data::CREATION_OFFSET, buf.data(), buf.size());
+      });
+
+  // Write all deletion records.
+  // XXX create a bundle-write in the WAL where we can use 1 buffer and many offsets.
+  std::for_each(
+      created_set_.begin(), created_set_.end(),
+      [&tx, buf=tx_aware_data::make_deletion_buffer(tx.seq().val())](const auto& datum_ptr) {
+        monsoon::io::write_at(tx, datum_ptr->offset() + tx_aware_data::DELETION_OFFSET, buf.data(), buf.size());
+      });
+
+  // Run phase1 on each transaction object.
   std::for_each(
       callbacks_.begin(), callbacks_.end(),
       [&tx](auto& cb) {
@@ -253,17 +280,49 @@ void db::transaction::commit_phase1_(detail::commit_manager::write_id& tx) {
       });
 }
 
-void db::transaction::commit_phase2_() noexcept {
+void db::transaction::commit_phase2_(const detail::commit_manager::commit_id& write_id) noexcept {
+  // In-memory: mark all created objects.
+  std::for_each(
+      created_set_.begin(), created_set_.end(),
+      [&write_id](const auto& datum_ptr) {
+        datum_ptr->set_created(write_id.val());
+      });
+
+  // In-memory: mark all deleted objects.
+  std::for_each(
+      deleted_set_.begin(), deleted_set_.end(),
+      [&write_id](const auto& datum_ptr) {
+        datum_ptr->set_deleted(write_id.val());
+      });
+
+  // Run phase2 on each transaction object.
   std::for_each(
       callbacks_.begin(), callbacks_.end(),
-      [](auto& cb) {
-        cb.second->commit_phase2();
+      [&write_id](auto& cb) {
+        cb.second->commit_phase2(write_id);
       });
 }
 
-auto db::transaction::validate_() -> std::error_code {
+auto db::transaction::validate_(const detail::commit_manager::commit_id& write_id) -> std::error_code {
+  // Validate all required objects are still here.
+  for (const auto& datum : require_set_) {
+    if (deleted_set_.count(datum) > 0)
+      return db_errc::deleted_required_object_in_tx;
+    if (created_set_.count(datum) == 0
+        && !datum->visible_in_tx(write_id))
+      return db_errc::deleted_required_object;
+  }
+
+  // Validate deleted objects are present (avoid double deletes).
+  for (const auto& datum : deleted_set_) {
+    if (created_set_.count(datum) == 0
+        && !datum->visible_in_tx(write_id))
+      return db_errc::double_delete;
+  }
+
+  // Run callback validations.
   for (auto& cb : callbacks_) {
-    std::error_code ec = cb.second->validate();
+    std::error_code ec = cb.second->validate(write_id);
     if (ec) return ec;
   }
   return {};

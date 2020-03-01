@@ -7,6 +7,7 @@ find_package (Boost COMPONENTS system REQUIRED)
 add_library (monsoon_tx
   src/tx/txfile.cc
   src/tx/sequence.cc
+  src/tx/db_errc.cc
   src/tx/db.cc
   src/tx/tree.cc
   src/tx/tree_error.cc
@@ -39,6 +40,7 @@ install (TARGETS monsoon_tx DESTINATION lib)
 install (FILES
   include/monsoon/tx/txfile.h
   include/monsoon/tx/sequence.h
+  include/monsoon/tx/db_errc.h
   include/monsoon/tx/db.h
   include/monsoon/tx/db-inl.h
   include/monsoon/tx/tree.h
