@@ -4,7 +4,9 @@
 #include <monsoon/io/limited_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <boost/endian/conversion.hpp>
+#include <algorithm>
 #include <cassert>
+#include <iterator>
 #include <limits>
 
 namespace monsoon::tx {
@@ -181,22 +183,20 @@ void db::transaction::commit() {
   if (!active_) throw std::logic_error("commit called on inactive transaction");
   assert(self_ != nullptr);
 
-  if (!read_only_) {
+  if (read_only_) {
+    rollback_();
+  } else {
     auto tx = self_->cm_->prepare_commit(self_->f_);
-    for (auto& cb : callbacks_) cb.second->commit_phase1(tx);
+    const auto layout_locks = lock_all_layouts_();
+
+    commit_phase1_(tx);
     tx.apply(
         [this]() -> std::error_code {
-          for (auto& cb : callbacks_) {
-            std::error_code ec = cb.second->validate();
-            if (ec) return ec;
-          }
-          return {};
+          return validate_();
         },
         [this]() noexcept {
-          for (auto& cb : callbacks_) cb.second->commit_phase2();
+          commit_phase2_();
         });
-  } else {
-    for (auto& cb : callbacks_) cb.second->rollback();
   }
 
   // Must be the last statement, so that exceptions will not mark this TX as done.
@@ -207,8 +207,74 @@ void db::transaction::rollback() noexcept {
   if (!active_) return;
   assert(self_ != nullptr);
 
-  for (auto& cb : callbacks_) cb.second->rollback();
+  rollback_();
   active_ = false;
+}
+
+auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<std::shared_mutex>> {
+  // Build up the layout locks.
+  // There are multiple layouts, and we must avoid deadlock.
+  std::vector<std::shared_lock<std::shared_mutex>> layout_locks;
+  layout_locks.reserve(callbacks_.size());
+
+  // Create unlocked list in arbitrary order.
+  std::transform(
+      callbacks_.begin(), callbacks_.end(),
+      std::back_inserter(layout_locks),
+      [](const auto& pair) -> std::shared_lock<std::shared_mutex> {
+        return std::shared_lock<std::shared_mutex>(
+            pair.second->layout_lck,
+            std::defer_lock);
+      });
+
+  // To make a deterministic lock order, we use the memory address of the mutex
+  // (which is a proxy for the memory address of the transaction_obj).
+  std::sort(
+      layout_locks.begin(), layout_locks.end(),
+      [](const std::shared_lock<std::shared_mutex>& x, const std::shared_lock<std::shared_mutex>& y) noexcept {
+        return x.mutex() < y.mutex();
+      });
+
+  // Now that we have all locks prepared and ordered deterministically, we can acquire the lock.
+  std::for_each(
+      layout_locks.begin(), layout_locks.end(),
+      [](std::shared_lock<std::shared_mutex>& lck) {
+        lck.lock();
+      });
+
+  return layout_locks;
+}
+
+void db::transaction::commit_phase1_(detail::commit_manager::write_id& tx) {
+  std::for_each(
+      callbacks_.begin(), callbacks_.end(),
+      [&tx](auto& cb) {
+        cb.second->commit_phase1(tx);
+      });
+}
+
+void db::transaction::commit_phase2_() noexcept {
+  std::for_each(
+      callbacks_.begin(), callbacks_.end(),
+      [](auto& cb) {
+        cb.second->commit_phase2();
+      });
+}
+
+auto db::transaction::validate_() -> std::error_code {
+  for (auto& cb : callbacks_) {
+    std::error_code ec = cb.second->validate();
+    if (ec) return ec;
+  }
+  return {};
+}
+
+void db::transaction::rollback_() noexcept {
+  std::for_each(
+      callbacks_.begin(), callbacks_.end(),
+      [](auto& cb) {
+        cb.second->rollback();
+      });
 }
 
 

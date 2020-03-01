@@ -7,7 +7,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <unordered_map>
+#include <vector>
 #include <cycle_ptr/cycle_ptr.h>
 
 namespace monsoon::tx {
@@ -106,6 +109,11 @@ class monsoon_tx_export_ db::transaction_obj {
   virtual void do_commit_phase2() noexcept = 0;
   virtual auto do_validate() -> std::error_code = 0;
   virtual void do_rollback() noexcept = 0;
+
+  protected:
+  ///\brief Mutex that controls modification of layout.
+  ///\details A layout modification is anything that would affect the offset of a tx_aware_data.
+  mutable std::shared_mutex layout_lck;
 };
 
 
@@ -145,6 +153,24 @@ class monsoon_tx_export_ db::transaction {
   auto read_write() const noexcept -> bool { return !read_only(); }
 
   private:
+  ///\brief Lock all transaction_obj layouts.
+  ///\details Allows us to rely on tx_aware_data offsets to be stable.
+  auto lock_all_layouts_() const -> std::vector<std::shared_lock<std::shared_mutex>>;
+  ///\brief Execute phase 1 commit on all transaction_obj.
+  ///\details This is the phase where writes to disk are prepared.
+  void commit_phase1_(detail::commit_manager::write_id& tx);
+  ///\brief Execute phase 2 commit.
+  ///\details This is the phase where in-memory data is changed to reflect the commit.
+  void commit_phase2_() noexcept;
+  ///\brief Test if all objects involved in the transaction.
+  ///\details
+  ///This is where we test that none of the objects we mutate were mutated by another transaction.
+  ///We also test that all objects that must exist at commit time, still exist.
+  ///We can also do more complicated validation, such as unique-ness constraints for new objects.
+  auto validate_() -> std::error_code;
+  ///\brief Rollback all transaction objects.
+  void rollback_() noexcept;
+
   detail::commit_manager::commit_id seq_;
   bool read_only_;
   bool active_ = false;
