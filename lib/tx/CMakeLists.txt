@@ -2,7 +2,7 @@ project (monsoon_tx)
 
 include (CheckFunctionExists)
 
-find_package (Boost REQUIRED)
+find_package (Boost COMPONENTS system REQUIRED)
 
 add_library (monsoon_tx
   src/tx/txfile.cc
@@ -15,15 +15,19 @@ add_library (monsoon_tx
   src/tx/detail/wal.cc
   src/tx/detail/tree_page.cc
   src/tx/detail/tree_cfg.cc
+  src/tx/tx_aware_data.cc
+  src/tx/detail/commit_id.cc
 )
 target_include_directories (monsoon_tx PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
 target_include_directories (monsoon_tx PUBLIC ${Boost_INCLUDE_DIR})
 target_link_libraries (monsoon_tx PUBLIC
+  monsoon_lib
   monsoon_misc
   instrumentation
   cycle_ptr
+  ${Boost_SYSTEM_LIBRARY}
 )
 target_link_libraries (monsoon_tx PRIVATE
   objpipe
@@ -40,6 +44,7 @@ install (FILES
   include/monsoon/tx/tree.h
   include/monsoon/tx/tree-inl.h
   include/monsoon/tx/tree_error.h
+  include/monsoon/tx/tx_aware_data.h
   DESTINATION include/monsoon/tx)
 install (FILES
   include/monsoon/tx/detail/export_.h
@@ -48,7 +53,10 @@ install (FILES
   include/monsoon/tx/detail/wal.h
   include/monsoon/tx/detail/tree_spec.h
   include/monsoon/tx/detail/tree_page.h
+  include/monsoon/tx/detail/tree_page-inl.h
   include/monsoon/tx/detail/tree_cfg.h
+  include/monsoon/tx/detail/commit_id.h
+  include/monsoon/tx/detail/commit_id-inl.h
   DESTINATION include/monsoon/tx/detail)
 
 add_subdirectory (tests)

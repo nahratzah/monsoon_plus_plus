@@ -7,6 +7,7 @@ include (CheckCXXCompilerFlag)
 enable_testing()
 option(BUILD_SHARED_LIBS "Build shared libraries" ON)
 option(BUILD_EXAMPLES "Build example binaries" ON)
+option(Boost_USE_STATIC_LIBS "Use static libraries for boost" OFF)
 
 # If on apple, use clang and libc++.
 if (APPLE)
@@ -18,7 +19,7 @@ endif ()
 
 # Set up the compiler.
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU" OR "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-  set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3")
+  set (CMAKE_CXX_FLAGS_RELWITHDEBINFO "${CMAKE_CXX_FLAGS_RELWITHDEBINFO} -O3 -g")
   set (CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
   set (CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wno-missing-noreturn -Wno-unused -Wsign-compare -Wuninitialized -Wno-unused-value -Wno-unknown-attributes")
 
@@ -110,4 +111,4 @@ if (BUILD_EXAMPLES)
   add_subdirectory (examples)
 endif()
 
-add_subdirectory (doc)
+# add_subdirectory (doc)

@@ -2,6 +2,7 @@
 #define MONSOON_TX_DETAIL_TREE_PAGE_H
 
 #include <monsoon/tx/txfile.h>
+#include <monsoon/tx/tx_aware_data.h>
 #include <monsoon/tx/detail/tree_cfg.h>
 #include <shared_mutex>
 #include <tuple>
@@ -28,12 +29,13 @@ class node_page;
 
 
 class abstract_tree_elem
-: protected cycle_ptr::cycle_base
+: protected cycle_ptr::cycle_base,
+  public tx_aware_data
 {
   friend abstract_leaf_page;
 
   protected:
-  abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_leaf_page> parent) noexcept;
+  abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_leaf_page> parent);
   virtual ~abstract_tree_elem() noexcept;
 
   public:
@@ -50,9 +52,6 @@ class abstract_tree_elem
   ///\note While the parent is locked, this element can't change parent.
   auto lock_parent_for_write() const
   -> std::tuple<cycle_ptr::cycle_gptr<abstract_leaf_page>, std::unique_lock<std::shared_mutex>>;
-
-  protected:
-  mutable std::shared_mutex mtx_;
 
   private:
   cycle_ptr::cycle_member_ptr<abstract_leaf_page> parent_;
@@ -101,14 +100,10 @@ class tree_elem
 : public abstract_tree_elem
 {
   public:
-  static constexpr std::size_t SIZE = Key::SIZE + Val::SIZE;
+  static constexpr std::size_t SIZE = tx_aware_data::TX_AWARE_SIZE + Key::SIZE + Val::SIZE;
 
-  tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, const Key& key, const Val& val)
-      noexcept(std::is_nothrow_copy_constructible_v<Key> &&
-               std::is_nothrow_copy_constructible_v<Val>);
-  tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, Key&& key, Val&& val)
-      noexcept(std::is_nothrow_move_constructible_v<Key> &&
-               std::is_nothrow_move_constructible_v<Val>);
+  tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, const Key& key, const Val& val);
+  tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, Key&& key, Val&& val);
   explicit tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, boost::asio::const_buffer buf);
 
   void encode(boost::asio::mutable_buffer buf) const override;

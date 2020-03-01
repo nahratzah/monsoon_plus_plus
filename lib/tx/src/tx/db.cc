@@ -106,7 +106,7 @@ db::db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off)
 
 db::db(std::string name, txfile&& f)
 : f_(std::move(f)),
-  tx_id_seq_(f_, DB_OFF_TX_ID_SEQ_)
+  cm_(detail::commit_manager::allocate(f_, DB_OFF_TX_ID_SEQ_))
 {
   std::uint32_t version;
 
@@ -142,7 +142,7 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
   const std::uint32_t version = boost::endian::big_to_native(VERSION);
   write_all_from_buf(init_tx, DB_OFF_VERSION_, &version, sizeof(version));
   // Initialize transaction sequence.
-  sequence::init(init_tx, DB_OFF_TX_ID_SEQ_);
+  detail::commit_manager::init(init_tx, DB_OFF_TX_ID_SEQ_);
   // Commit all written data.
   init_tx.commit();
 
@@ -150,18 +150,26 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
 }
 
 auto db::begin(bool read_only) -> transaction {
-  return transaction(tx_id_seq_(), read_only, *this);
+  return transaction(cm_->get_tx_commit_id(), read_only, *this);
 }
 
 auto db::begin() const -> transaction {
-  return transaction(tx_id_seq_(), true, const_cast<db&>(*this));
+  return transaction(cm_->get_tx_commit_id(), true, const_cast<db&>(*this));
 }
 
 
 db::transaction_obj::~transaction_obj() noexcept = default;
 
-void db::transaction_obj::commit(sequence::type commit_id, txfile::transaction& tx) {
-  do_commit(commit_id, tx);
+void db::transaction_obj::commit_phase1(detail::commit_manager::write_id& tx) {
+  do_commit_phase1(tx);
+}
+
+void db::transaction_obj::commit_phase2() noexcept {
+  do_commit_phase2();
+}
+
+auto db::transaction_obj::validate() -> std::error_code {
+  return do_validate();
 }
 
 void db::transaction_obj::rollback() noexcept {
@@ -169,17 +177,27 @@ void db::transaction_obj::rollback() noexcept {
 }
 
 
-auto db::transaction::before(seq_type x, seq_type y) noexcept -> bool {
-  return y - x <= std::numeric_limits<seq_type>::max() / 2u;
-}
-
 void db::transaction::commit() {
   if (!active_) throw std::logic_error("commit called on inactive transaction");
   assert(self_ != nullptr);
 
-  auto tx = self_->f_.begin(self_->tx_id_seq_, read_only_);
-  for (auto& cb : callbacks_) cb.second->commit(std::get<1>(tx), std::get<0>(tx));
-  std::get<0>(tx).commit();
+  if (!read_only_) {
+    auto tx = self_->cm_->prepare_commit(self_->f_);
+    for (auto& cb : callbacks_) cb.second->commit_phase1(tx);
+    tx.apply(
+        [this]() -> std::error_code {
+          for (auto& cb : callbacks_) {
+            std::error_code ec = cb.second->validate();
+            if (ec) return ec;
+          }
+          return {};
+        },
+        [this]() noexcept {
+          for (auto& cb : callbacks_) cb.second->commit_phase2();
+        });
+  } else {
+    for (auto& cb : callbacks_) cb.second->rollback();
+  }
 
   // Must be the last statement, so that exceptions will not mark this TX as done.
   active_ = false;

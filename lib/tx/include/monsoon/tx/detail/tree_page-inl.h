@@ -10,7 +10,7 @@
 namespace monsoon::tx::detail {
 
 
-inline abstract_tree_elem::abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_leaf_page> parent) noexcept
+inline abstract_tree_elem::abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_leaf_page> parent)
 : parent_(*this, std::move(parent))
 {}
 
@@ -24,8 +24,6 @@ inline abstract_node_page::abstract_node_page(cycle_ptr::cycle_gptr<abstract_nod
 
 template<typename Key, typename Val>
 inline tree_elem<Key, Val>::tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, const Key& key, const Val& val)
-    noexcept(std::is_nothrow_copy_constructible_v<Key> &&
-             std::is_nothrow_copy_constructible_v<Val>)
 : abstract_tree_elem(std::move(parent)),
   key_(key),
   val_(val)
@@ -33,8 +31,6 @@ inline tree_elem<Key, Val>::tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>>
 
 template<typename Key, typename Val>
 inline tree_elem<Key, Val>::tree_elem(cycle_ptr::cycle_gptr<leaf_page<Key, Val>> parent, Key&& key, Val&& val)
-    noexcept(std::is_nothrow_move_constructible_v<Key> &&
-             std::is_nothrow_move_constructible_v<Val>)
 : abstract_tree_elem(std::move(parent)),
   key_(std::move(key)),
   val_(std::move(val))

@@ -62,6 +62,7 @@ install (FILES
   include/monsoon/io/limited_stream.h
   include/monsoon/io/stream.h
   include/monsoon/io/aio.h
+  include/monsoon/io/rw.h
   DESTINATION include/monsoon/io)
 install (FILES
   include/monsoon/xdr/xdr-inl.h

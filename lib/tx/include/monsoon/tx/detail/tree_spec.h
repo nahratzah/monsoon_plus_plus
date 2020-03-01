@@ -1,6 +1,7 @@
 #ifndef MONSOON_TX_DETAIL_TREE_SPEC_H
 #define MONSOON_TX_DETAIL_TREE_SPEC_H
 
+#include <monsoon/tx/tx_aware_data.h>
 #include <cstddef>
 #include <type_traits>
 #include <boost/asio/buffer.hpp>
@@ -96,6 +97,7 @@ constexpr auto sum_(const Integer& x, const Integer& y, const Tail&... tail) noe
 ///\brief Automatically decide on a page size for leaf pages.
 ///\details This yields a suggestion.
 constexpr auto autoconf_tree_leaf_size_suggestion_(std::size_t key_size, std::size_t val_size) -> std::size_t {
+  // XXX: redo the computation
   std::size_t suggested_size = boost::integer::lcm(key_size + val_size, tree_prefer_byte_loss_lcm);
   return (suggested_size > tree_max_page_size ? tree_max_page_size : suggested_size);
 }

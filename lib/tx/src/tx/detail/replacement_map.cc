@@ -112,7 +112,11 @@ auto replacement_map::write_at_from_file(monsoon::io::fd::offset_type off, const
   auto fd_nbytes = nbytes;
   std::uint8_t* buffer_pos = buffer.get();
   while (fd_nbytes > 0) {
-    const auto rlen = fd.read_at(fd_off, buffer_pos, fd_nbytes);
+    auto rlen = fd.read_at(fd_off, buffer_pos, fd_nbytes);
+    if (rlen == 0) { // Pretend to read zeroes.
+      std::memset(buffer_pos, 0, fd_nbytes);
+      rlen = fd_nbytes;
+    }
     buffer_pos += rlen;
     fd_off += rlen;
     fd_nbytes -= rlen;

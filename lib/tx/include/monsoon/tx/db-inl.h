@@ -35,7 +35,7 @@ inline auto db::transaction::on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_
   if (txo == nullptr) txo = cycle_ptr::make_cycle<typename T::tx_object>(*this, std::move(v));
 
 #ifdef NDEBUG
-  return std::static_pointer_cast<typename T::tx_object>(txo)
+  return std::static_pointer_cast<typename T::tx_object>(txo);
 #else
   auto result_ptr = std::dynamic_pointer_cast<typename T::tx_object>(txo);
   assert(result_ptr != nullptr); // Means the types are incorrect.
@@ -43,7 +43,7 @@ inline auto db::transaction::on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_
 #endif
 }
 
-inline db::transaction::transaction(seq_type seq, bool read_only, db& self) noexcept
+inline db::transaction::transaction(detail::commit_manager::commit_id seq, bool read_only, db& self) noexcept
 : seq_(seq),
   read_only_(read_only),
   active_(true),
@@ -51,11 +51,11 @@ inline db::transaction::transaction(seq_type seq, bool read_only, db& self) noex
 {}
 
 inline auto db::transaction::before(const transaction& other) const noexcept -> bool {
-  return before(seq_, other.seq_);
+  return seq_ < other.seq_;
 }
 
 inline auto db::transaction::after(const transaction& other) const noexcept -> bool {
-  return other.before(*this);
+  return seq_ > other.seq_;
 }
 
 

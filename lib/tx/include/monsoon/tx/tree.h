@@ -4,6 +4,7 @@
 #include <monsoon/tx/db.h>
 #include <monsoon/tx/detail/tree_spec.h>
 #include <monsoon/tx/detail/tree_page.h>
+#include <monsoon/tx/detail/commit_id.h>
 #include <functional>
 #include <unordered_set>
 #include <cycle_ptr/allocator.h>
@@ -87,7 +88,7 @@ class abstract_tree::abstract_tx_object
   auto self() const -> cycle_ptr::cycle_gptr<abstract_tree>;
 
   private:
-  void do_commit(std::uint64_t commit_id, txfile::transaction& tx) override final;
+  void do_commit_phase1(detail::commit_manager::write_id& tx) override final;
   void do_rollback() noexcept override final;
 
   protected:

@@ -13,7 +13,7 @@ abstract_tree::abstract_tx_object::abstract_tx_object(db::transaction& tx, cycle
 
 abstract_tree::abstract_tx_object::~abstract_tx_object() noexcept = default;
 
-void abstract_tree::abstract_tx_object::do_commit(std::uint64_t commit_id, txfile::transaction& tx) {
+void abstract_tree::abstract_tx_object::do_commit_phase1(detail::commit_manager::write_id& tx) {
   // TODO: implement
 }
 

@@ -3,7 +3,7 @@
 
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/txfile.h>
-#include <monsoon/tx/sequence.h>
+#include <monsoon/tx/detail/commit_id.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -34,7 +34,7 @@ class monsoon_tx_export_ db {
   // Offset: tx_id_seq
   static constexpr monsoon::io::fd::offset_type DB_OFF_TX_ID_SEQ_ = DB_OFF_VERSION_ + 4u;
   // End of used space.
-  static constexpr monsoon::io::fd::offset_type DB_OFF_END_ = DB_OFF_TX_ID_SEQ_ + sequence::SIZE;
+  static constexpr monsoon::io::fd::offset_type DB_OFF_END_ = DB_OFF_TX_ID_SEQ_ + detail::commit_manager::SIZE;
 
   static_assert(DB_OFF_END_ <= DB_HEADER_SIZE, "db header should fit in reserved space");
 
@@ -81,7 +81,7 @@ class monsoon_tx_export_ db {
 
   private:
   txfile f_; // Underlying file.
-  mutable sequence tx_id_seq_; // Allocate transaction IDs.
+  std::shared_ptr<detail::commit_manager> cm_; // Allocate transaction IDs.
 };
 
 
@@ -97,10 +97,14 @@ class monsoon_tx_export_ db::transaction_obj {
   virtual ~transaction_obj() noexcept;
 
   private:
-  monsoon_tx_local_ void commit(sequence::type commit_id, txfile::transaction& tx);
+  monsoon_tx_local_ void commit_phase1(detail::commit_manager::write_id& tx);
+  monsoon_tx_local_ void commit_phase2() noexcept;
+  monsoon_tx_local_ auto validate() -> std::error_code;
   monsoon_tx_local_ void rollback() noexcept;
 
-  virtual void do_commit(sequence::type commit_id, txfile::transaction& tx) = 0;
+  virtual void do_commit_phase1(detail::commit_manager::write_id& tx) = 0;
+  virtual void do_commit_phase2() noexcept = 0;
+  virtual auto do_validate() -> std::error_code = 0;
   virtual void do_rollback() noexcept = 0;
 };
 
@@ -114,8 +118,6 @@ class monsoon_tx_export_ db::transaction {
   friend db;
 
   public:
-  using seq_type = std::uintmax_t;
-
   transaction(const transaction&) = delete;
   transaction& operator=(const transaction&) = delete;
 
@@ -128,12 +130,10 @@ class monsoon_tx_export_ db::transaction {
   auto on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_gptr<typename T::tx_object>;
 
   private:
-  transaction(seq_type seq, bool read_only, db& self) noexcept;
+  transaction(detail::commit_manager::commit_id seq, bool read_only, db& self) noexcept;
 
   public:
-  auto seq() const noexcept -> seq_type { return seq_; }
-
-  static auto before(seq_type x, seq_type y) noexcept -> bool;
+  auto seq() const noexcept -> detail::commit_manager::commit_id { return seq_; }
   auto before(const transaction& other) const noexcept -> bool;
   auto after(const transaction& other) const noexcept -> bool;
 
@@ -145,7 +145,7 @@ class monsoon_tx_export_ db::transaction {
   auto read_write() const noexcept -> bool { return !read_only(); }
 
   private:
-  seq_type seq_;
+  detail::commit_manager::commit_id seq_;
   bool read_only_;
   bool active_ = false;
   std::unordered_map<cycle_ptr::cycle_gptr<const void>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
