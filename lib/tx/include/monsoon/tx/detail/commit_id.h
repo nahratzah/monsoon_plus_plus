@@ -115,6 +115,7 @@ class monsoon_tx_export_ commit_manager
     auto write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t;
 
     private:
+    ///\brief Waits until this transaction is at the front of the transaction queue.
     void wait_until_front_transaction_(const commit_manager& cm);
 
     commit_id seq_;
