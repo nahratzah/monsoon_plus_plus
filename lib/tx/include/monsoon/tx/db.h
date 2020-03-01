@@ -101,7 +101,7 @@ class monsoon_tx_export_ db::transaction_obj {
   friend transaction;
 
   public:
-  virtual ~transaction_obj() noexcept;
+  virtual ~transaction_obj() noexcept = 0;
 
   private:
   monsoon_tx_local_ void commit_phase1(detail::commit_manager::write_id& tx);
@@ -109,10 +109,10 @@ class monsoon_tx_export_ db::transaction_obj {
   monsoon_tx_local_ auto validate(const detail::commit_manager::commit_id& write_id) -> std::error_code;
   monsoon_tx_local_ void rollback() noexcept;
 
-  virtual void do_commit_phase1(detail::commit_manager::write_id& tx) = 0;
-  virtual void do_commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept = 0;
-  virtual auto do_validate(const detail::commit_manager::commit_id& write_id) -> std::error_code = 0;
-  virtual void do_rollback() noexcept = 0;
+  virtual void do_commit_phase1(detail::commit_manager::write_id& tx);
+  virtual void do_commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept;
+  virtual auto do_validate(const detail::commit_manager::commit_id& write_id) -> std::error_code;
+  virtual void do_rollback() noexcept;
 
   protected:
   ///\brief Mutex that controls modification of layout.

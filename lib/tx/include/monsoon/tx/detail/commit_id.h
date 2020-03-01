@@ -107,13 +107,16 @@ class monsoon_tx_export_ commit_manager
     ///\brief Retrieve the commit manager.
     auto get_cm_or_null() const noexcept -> std::shared_ptr<commit_manager>;
     ///\brief Apply changes.
-    auto apply(std::function<std::error_code()> validation, std::function<void()> phase2) -> std::error_code;
+    template<typename Validation, typename Phase2>
+    auto apply(Validation&& validation, Phase2&& phase2) -> std::error_code;
     ///\brief Get the commit ID of the write operation.
     auto seq() const noexcept -> const commit_id& { return seq_; }
     ///\brief Add a write operation to this commit.
     auto write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t;
 
     private:
+    void wait_until_front_transaction_(const commit_manager& cm);
+
     commit_id seq_;
     txfile::transaction tx_;
     std::variant<std::monostate, std::condition_variable_any> wait_;
@@ -192,7 +195,8 @@ class monsoon_tx_export_ commit_manager::write_id {
 
   public:
   ///\brief Apply changes.
-  auto apply(std::function<std::error_code()> validation, std::function<void()> phase2) -> std::error_code;
+  template<typename Validation, typename Phase2>
+  auto apply(Validation&& validation, Phase2&& phase2) -> std::error_code;
   ///\brief Get the commit ID of the write operation.
   auto seq() const noexcept -> const commit_id& { return pimpl_->seq_; }
   ///\brief Add a write operation to this commit.

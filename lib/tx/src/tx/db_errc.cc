@@ -21,6 +21,8 @@ auto db_error_category_impl::message(int ev) const -> std::string {
   switch (static_cast<db_errc>(ev)) {
     default:
       return "(unrecognized error)";
+    case db_errc::gone_away:
+      return "database has shut down";
     case db_errc::deleted_required_object_in_tx:
       return "required object was deleted in the same transaction";
     case db_errc::deleted_required_object:

@@ -165,6 +165,11 @@ auto db::begin() const -> transaction {
 
 db::transaction_obj::~transaction_obj() noexcept = default;
 
+void db::transaction_obj::do_commit_phase1(detail::commit_manager::write_id& tx) {}
+void db::transaction_obj::do_commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept {}
+auto db::transaction_obj::do_validate(const detail::commit_manager::commit_id& write_id) -> std::error_code { return {}; }
+void db::transaction_obj::do_rollback() noexcept {}
+
 void db::transaction_obj::commit_phase1(detail::commit_manager::write_id& tx) {
   do_commit_phase1(tx);
 }

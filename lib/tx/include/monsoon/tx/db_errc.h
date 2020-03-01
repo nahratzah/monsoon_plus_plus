@@ -8,8 +8,10 @@ namespace monsoon::tx {
 
 
 enum class db_errc {
+  ///\brief Indicates the database (or part of it) has been destroyed.
+  gone_away = 10,
   ///\brief Indicates the transaction requires an object to be present, but it was deleted in this same transaction.
-  deleted_required_object_in_tx = 10,
+  deleted_required_object_in_tx = 20,
   ///\brief Indicates another transaction deleted a required object.
   deleted_required_object,
   ///\brief Indicates an object that was deleted in the current transaction, has already been deleted in another transaction.
