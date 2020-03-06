@@ -76,11 +76,12 @@ class monsoon_tx_export_ db
    * \param[in] off The offset at which the DB is found.
    * \param[in] wal_len The length in bytes of the WAL.
    */
-  static auto create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0, monsoon::io::fd::size_type len = DEFAULT_WAL_BYTES) -> db;
+  static auto create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0, monsoon::io::fd::size_type len = DEFAULT_WAL_BYTES) -> std::shared_ptr<db>;
 
-  private:
+  ///\brief Constructor used during create call.
   monsoon_tx_local_ db(std::string name, txfile&& f);
 
+  private:
   ///\brief Validate the header in front of the WAL and uses it to load the WAL.
   monsoon_tx_local_ auto validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile;
 

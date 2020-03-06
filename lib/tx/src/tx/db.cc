@@ -130,7 +130,7 @@ auto db::validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&
   return txfile(name, std::move(fd), off + front_header::SIZE, fh.wal_bytes);
 }
 
-auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type wal_len) -> db {
+auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type wal_len) -> std::shared_ptr<db> {
   if (wal_len > 0xffff'ffff'ffff'ffffULL)
     throw std::invalid_argument("wal size must be a 64-bit integer");
 
@@ -151,7 +151,7 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
   // Commit all written data.
   init_tx.commit();
 
-  return db(std::move(name), std::move(f));
+  return std::make_shared<db>(std::move(name), std::move(f));
 }
 
 auto db::begin(bool read_only) -> transaction {
