@@ -196,12 +196,13 @@ auto db::transaction::visible(const cycle_ptr::cycle_gptr<tx_aware_data>& datum)
 
 void db::transaction::commit() {
   if (!active_) throw std::logic_error("commit called on inactive transaction");
-  assert(self_ != nullptr);
+  assert(self_.lock() != nullptr);
 
   if (read_only_) {
     rollback_();
   } else {
-    auto tx = self_->cm_->prepare_commit(self_->f_);
+    const std::shared_ptr<db> self = std::shared_ptr<db>(self_);
+    auto tx = self->cm_->prepare_commit(self->f_);
     const auto layout_locks = lock_all_layouts_();
 
     commit_phase1_(tx);
@@ -220,7 +221,7 @@ void db::transaction::commit() {
 
 void db::transaction::rollback() noexcept {
   if (!active_) return;
-  assert(self_ != nullptr);
+  assert(self_.lock() != nullptr);
 
   rollback_();
   active_ = false;

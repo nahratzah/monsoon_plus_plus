@@ -11,7 +11,7 @@ inline db::transaction::transaction(transaction&& other) noexcept
   read_only_(std::move(other.read_only_)),
   active_(std::exchange(other.active_, false)),
   callbacks_(std::move(other.callbacks_)),
-  self_(std::exchange(other.self_, nullptr))
+  self_(std::move(other.self_))
 {}
 
 inline auto db::transaction::operator=(transaction&& other) noexcept -> transaction& {
@@ -21,7 +21,7 @@ inline auto db::transaction::operator=(transaction&& other) noexcept -> transact
   read_only_ = std::move(other.read_only_);
   active_ = std::exchange(other.active_, false);
   callbacks_ = std::move(other.callbacks_);
-  self_ = std::exchange(other.self_, nullptr);
+  self_ = std::move(other.self_);
   return *this;
 }
 
@@ -47,7 +47,7 @@ inline db::transaction::transaction(detail::commit_manager::commit_id seq, bool 
 : seq_(seq),
   read_only_(read_only),
   active_(true),
-  self_(&self)
+  self_(self.shared_from_this())
 {}
 
 inline auto db::transaction::before(const transaction& other) const noexcept -> bool {

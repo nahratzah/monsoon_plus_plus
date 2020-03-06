@@ -27,7 +27,9 @@ class monsoon_tx_export_ db_invalid_error : public std::runtime_error {
 };
 
 
-class monsoon_tx_export_ db {
+class monsoon_tx_export_ db
+: public std::enable_shared_from_this<db>
+{
   public:
   static constexpr std::uint32_t VERSION = 0;
   static constexpr monsoon::io::fd::size_type DEFAULT_WAL_BYTES = 32 * 1024 * 1024;
@@ -181,7 +183,7 @@ class monsoon_tx_export_ db::transaction {
   bool read_only_;
   bool active_ = false;
   std::unordered_map<cycle_ptr::cycle_gptr<const void>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
-  db *self_;
+  std::weak_ptr<db> self_;
 
   ///\brief Set of objects that are being deleted.
   std::unordered_set<cycle_ptr::cycle_gptr<tx_aware_data>> deleted_set_;
