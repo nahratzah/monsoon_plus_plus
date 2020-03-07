@@ -251,7 +251,7 @@ auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<
 
 void db::transaction::commit_phase1_(detail::commit_manager::write_id& tx) {
   // Write all creation records.
-  {
+  if (!created_set_.empty()) {
     const auto buf = tx_aware_data::make_creation_buffer(tx.seq().val());
     auto offs = objpipe::of(std::cref(created_set_))
         .iterate()
@@ -262,9 +262,9 @@ void db::transaction::commit_phase1_(detail::commit_manager::write_id& tx) {
   }
 
   // Write all deletion records.
-  {
+  if (!deleted_set_.empty()) {
     const auto buf = tx_aware_data::make_deletion_buffer(tx.seq().val());
-    auto offs = objpipe::of(std::cref(created_set_))
+    auto offs = objpipe::of(std::cref(deleted_set_))
         .iterate()
         .transform([](const auto& datum_ptr) { return datum_ptr->offset(); })
         .transform([](const auto& off) { return off + tx_aware_data::DELETION_OFFSET; })
