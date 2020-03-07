@@ -1,6 +1,7 @@
 #include <monsoon/tx/db.h>
 #include <monsoon/tx/db_errc.h>
 #include <monsoon/tx/tx_aware_data.h>
+#include <monsoon/tx/detail/commit_manager.h>
 #include <monsoon/tx/detail/commit_manager_impl.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
@@ -108,7 +109,7 @@ db::db(std::string name, txfile&& f)
     tx.commit();
     version = 1;
   }
-  cm_ = detail::commit_manager_impl::allocate(f_, DB_OFF_TX_ID_SEQ_);
+  cm_ = detail::commit_manager::allocate(f_, DB_OFF_TX_ID_SEQ_);
 }
 
 auto db::validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile {
