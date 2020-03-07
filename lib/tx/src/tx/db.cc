@@ -72,33 +72,6 @@ void front_header::write(monsoon::xdr::xdr_ostream& o) {
 }
 
 
-template<typename R>
-void read_all_into_buf(R& r, monsoon::io::fd::offset_type off, void* buf, std::size_t len) {
-  auto byte_buf = reinterpret_cast<std::uint8_t*>(buf);
-
-  while (len > 0) {
-    const auto rlen = r.read_at(off, byte_buf, len);
-    if (rlen == 0) throw std::runtime_error("unable to read");
-    byte_buf += rlen;
-    len -= rlen;
-    off += rlen;
-  }
-}
-
-template<typename W>
-void write_all_from_buf(W& w, monsoon::io::fd::offset_type off, const void* buf, std::size_t len) {
-  auto byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
-
-  while (len > 0) {
-    const auto wlen = w.write_at(off, byte_buf, len);
-    if (wlen == 0) throw std::runtime_error("unable to read");
-    byte_buf += wlen;
-    len -= wlen;
-    off += wlen;
-  }
-}
-
-
 } /* namespace monsoon::tx::<unnamed> */
 
 
@@ -110,17 +83,31 @@ db::db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off)
 {}
 
 db::db(std::string name, txfile&& f)
-: f_(std::move(f)),
-  cm_(detail::commit_manager::allocate(f_, DB_OFF_TX_ID_SEQ_))
+: f_(std::move(f))
 {
   std::uint32_t version;
 
   // Validate version.
   auto t = f_.begin(true);
-  read_all_into_buf(t, DB_OFF_VERSION_, &version, sizeof(version));
+  monsoon::io::read_at(t, DB_OFF_VERSION_, &version, sizeof(version));
   boost::endian::big_to_native_inplace(version);
   if (version > VERSION) throw db_invalid_error("unsupported database version");
   t.commit();
+
+  // Version 1: has a commit manager.
+  assert(version >= 0);
+  if (version == 0) {
+    auto tx = f_.begin(false);
+    // Update version.
+    const std::uint32_t new_version = boost::endian::native_to_big(std::uint32_t(1));
+    monsoon::io::write_at(tx, DB_OFF_VERSION_, &new_version, sizeof(new_version));
+    // Initialize transaction sequence.
+    detail::commit_manager::init(tx, DB_OFF_TX_ID_SEQ_);
+    // Commit the upgrade.
+    tx.commit();
+    version = 1;
+  }
+  cm_ = detail::commit_manager::allocate(f_, DB_OFF_TX_ID_SEQ_);
 }
 
 auto db::validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile {
@@ -141,13 +128,11 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
   auto f = txfile::create(name, std::move(fd), off + front_header::SIZE, wal_len);
 
   // Build up static database elements.
-  auto init_tx = f.begin();
+  auto init_tx = f.begin(false);
   init_tx.resize(DB_HEADER_SIZE);
   // Write the version.
-  const std::uint32_t version = boost::endian::big_to_native(VERSION);
-  write_all_from_buf(init_tx, DB_OFF_VERSION_, &version, sizeof(version));
-  // Initialize transaction sequence.
-  detail::commit_manager::init(init_tx, DB_OFF_TX_ID_SEQ_);
+  const std::uint32_t version = boost::endian::big_to_native(std::uint32_t(0));
+  monsoon::io::write_at(init_tx, DB_OFF_VERSION_, &version, sizeof(version));
   // Commit all written data.
   init_tx.commit();
 

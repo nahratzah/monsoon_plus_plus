@@ -31,16 +31,17 @@ class monsoon_tx_export_ db
 : public std::enable_shared_from_this<db>
 {
   public:
-  static constexpr std::uint32_t VERSION = 0;
+  static constexpr std::uint32_t VERSION = 1;
   static constexpr monsoon::io::fd::size_type DEFAULT_WAL_BYTES = 32 * 1024 * 1024;
 
   // Database header will be exactly this size in bytes. There may be unused space.
+  // Note that this value can never be changed, because it is used in file encoding.
   static constexpr monsoon::io::fd::offset_type DB_HEADER_SIZE = 4096;
 
   private:
   // Offset: version number (4 bytes)
   static constexpr monsoon::io::fd::offset_type DB_OFF_VERSION_ = 0;
-  // Offset: tx_id_seq
+  // Offset: tx_id_seq (present when VERSION = 1)
   static constexpr monsoon::io::fd::offset_type DB_OFF_TX_ID_SEQ_ = DB_OFF_VERSION_ + 4u;
   // End of used space.
   static constexpr monsoon::io::fd::offset_type DB_OFF_END_ = DB_OFF_TX_ID_SEQ_ + detail::commit_manager::SIZE;
