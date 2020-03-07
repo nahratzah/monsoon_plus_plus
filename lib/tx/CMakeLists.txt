@@ -18,6 +18,7 @@ add_library (monsoon_tx
   src/tx/detail/tree_cfg.cc
   src/tx/tx_aware_data.cc
   src/tx/detail/commit_manager.cc
+  src/tx/detail/commit_manager_impl.cc
 )
 target_include_directories (monsoon_tx PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -59,6 +60,8 @@ install (FILES
   include/monsoon/tx/detail/tree_cfg.h
   include/monsoon/tx/detail/commit_manager.h
   include/monsoon/tx/detail/commit_manager-inl.h
+  include/monsoon/tx/detail/commit_manager_impl.h
+  include/monsoon/tx/detail/commit_manager_impl-inl.h
   DESTINATION include/monsoon/tx/detail)
 
 add_subdirectory (tests)

@@ -58,7 +58,7 @@ class cheap_fn_ref {
    * \param functor The functor to wrap.
    */
   template<typename Functor>
-  explicit cheap_fn_ref(Functor&& functor) noexcept {
+  cheap_fn_ref(Functor&& functor) noexcept {
     fn_ = [](void* ptr) -> R {
       assert(ptr != nullptr);
       return std::invoke(*static_cast<std::remove_reference_t<Functor>*>(ptr));

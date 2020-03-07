@@ -1,6 +1,7 @@
 #include <monsoon/tx/db.h>
 #include <monsoon/tx/db_errc.h>
 #include <monsoon/tx/tx_aware_data.h>
+#include <monsoon/tx/detail/commit_manager_impl.h>
 #include <monsoon/xdr/xdr.h>
 #include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/io/limited_stream.h>
@@ -102,12 +103,12 @@ db::db(std::string name, txfile&& f)
     const std::uint32_t new_version = boost::endian::native_to_big(std::uint32_t(1));
     monsoon::io::write_at(tx, DB_OFF_VERSION_, &new_version, sizeof(new_version));
     // Initialize transaction sequence.
-    detail::commit_manager::init(tx, DB_OFF_TX_ID_SEQ_);
+    detail::commit_manager_impl::init(tx, DB_OFF_TX_ID_SEQ_);
     // Commit the upgrade.
     tx.commit();
     version = 1;
   }
-  cm_ = detail::commit_manager::allocate(f_, DB_OFF_TX_ID_SEQ_);
+  cm_ = detail::commit_manager_impl::allocate(f_, DB_OFF_TX_ID_SEQ_);
 }
 
 auto db::validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off) -> txfile {
