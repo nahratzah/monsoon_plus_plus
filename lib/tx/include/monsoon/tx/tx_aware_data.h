@@ -2,7 +2,7 @@
 #define MONSOON_TX_TX_AWARE_DATA_H
 
 #include <monsoon/tx/detail/export_.h>
-#include <monsoon/tx/detail/commit_id.h>
+#include <monsoon/tx/detail/commit_manager.h>
 #include <monsoon/tx/db.h>
 #include <array>
 #include <cstddef>

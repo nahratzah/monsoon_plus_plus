@@ -1,5 +1,5 @@
-#ifndef MONSOON_TX_DETAIL_COMMIT_ID_H
-#define MONSOON_TX_DETAIL_COMMIT_ID_H
+#ifndef MONSOON_TX_DETAIL_COMMIT_MANAGER_H
+#define MONSOON_TX_DETAIL_COMMIT_MANAGER_H
 
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/txfile.h>
@@ -216,6 +216,6 @@ auto operator>=(const commit_manager::commit_id& x, const commit_manager::commit
 
 } /* namespace monsoon::tx::detail */
 
-#include "commit_id-inl.h"
+#include "commit_manager-inl.h"
 
-#endif /* MONSOON_TX_DETAIL_COMMIT_ID_H */
+#endif /* MONSOON_TX_DETAIL_COMMIT_MANAGER_H */
