@@ -4,6 +4,7 @@
 #include <monsoon/misc_export_.h>
 #include <monsoon/io/fd.h>
 #include <cstddef>
+#include <unordered_map>
 
 #if !defined(WIN32) && __has_include(<aio.h>)
 # include <aio.h>
@@ -12,8 +13,6 @@
 # include <memory>
 # include <optional>
 # include <vector>
-#else
-# include <unordered_map>
 #endif
 
 namespace monsoon::io {
@@ -34,56 +33,59 @@ class monsoon_misc_export_ aio {
   void join();
   void start_and_join();
 
+  private:
 #if !defined(WIN32) && __has_include(<aio.h>)
-  class datum {
+  class op_
+  : public ::aiocb
+  {
     friend aio;
+    friend fd_target;
+    friend const_fd_target;
+
+    protected:
+    explicit op_(fd& f) noexcept;
 
     public:
-    datum()
-    : ptr_(std::make_unique<aiocb>())
-    {
-      std::memset(ptr_.get(), 0, sizeof(aiocb));
-    }
+    virtual ~op_() noexcept;
 
-    auto operator*() -> aiocb& { return *ptr_; }
-    auto operator*() const -> const aiocb& { return *ptr_; }
-    auto operator->() -> aiocb* { return ptr_.get(); }
-    auto operator->() const -> const aiocb* { return ptr_.get(); }
+    ///\returns True if the aio has been re-enqueued.
+    bool on_len(std::size_t len);
+
+    protected:
+    void reset_() noexcept;
+    void enqueue_();
 
     private:
-    std::unique_ptr<aiocb> ptr_;
+    virtual void do_on_len(std::size_t len) = 0;
+
+    bool started_ = false;
+    fd& f;
   };
 
-  class flush_datum {
-    friend aio;
+  class read_op_;
+  class write_op_;
+  class flush_op_;
 
+  class flush_barrier {
     public:
-    flush_datum(fd& f, bool data_only)
-    : ptr_(std::make_unique<aiocb>()),
-      data_only_(data_only)
-    {
-      std::memset(ptr_.get(), 0, sizeof(aiocb));
-      ptr_->aio_fildes = f.underlying();
-    }
+    constexpr flush_barrier() noexcept
+    : wait_count(0),
+      dataonly(false)
+    {}
 
-    private:
-    auto execute() const -> aiocb*;
+    constexpr flush_barrier(std::size_t wait_count, bool dataonly) noexcept
+    : wait_count(wait_count),
+      dataonly(dataonly)
+    {}
 
-    std::unique_ptr<aiocb> ptr_;
-    bool data_only_;
+    std::size_t wait_count = 0u;
+    bool dataonly = false;
   };
 
-  private:
-  void add_datum(datum&& d);
-  void add_datum(flush_datum&& d);
-  auto build_aiocb_vector_() const -> std::vector<aiocb*>;
-  void cancel_recover_() noexcept;
-
-  std::vector<aiocb*> aiocb_vector_;
-  std::vector<datum> datum_vector_;
-  std::vector<flush_datum> flush_vector_;
+  bool started_ = false;
+  std::vector<std::unique_ptr<op_>> ops_;
+  std::unordered_map<fd*, flush_barrier> flush_map_;
 #else
-  private:
   std::unordered_map<fd*, bool> flush_map_;
 #endif
 };
