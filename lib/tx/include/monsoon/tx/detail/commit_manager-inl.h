@@ -7,8 +7,8 @@
 namespace monsoon::tx::detail {
 
 
-inline auto commit_manager::make_commit_id(type val, const std::shared_ptr<state_>& s) noexcept -> commit_id {
-  return commit_id(val, s);
+inline auto commit_manager::make_commit_id(const std::shared_ptr<state_>& s) noexcept -> commit_id {
+  return commit_id(s);
 }
 
 inline auto commit_manager::make_write_id(std::shared_ptr<write_id_state_>&& s) noexcept -> write_id {
@@ -16,9 +16,8 @@ inline auto commit_manager::make_write_id(std::shared_ptr<write_id_state_>&& s) 
 }
 
 
-inline commit_manager::commit_id::commit_id(type val, const std::shared_ptr<state_>& s) noexcept
-: val_(val),
-  s_(s)
+inline commit_manager::commit_id::commit_id(const std::shared_ptr<state_>& s) noexcept
+: s_(s)
 {}
 
 inline auto commit_manager::commit_id::get_cm_or_null() const noexcept -> std::shared_ptr<commit_manager> {

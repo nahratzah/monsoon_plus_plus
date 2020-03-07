@@ -44,15 +44,15 @@ class monsoon_tx_export_ commit_manager_impl
   ///\brief Implement commit ID state.
   class monsoon_tx_local_ state_impl_ final
   : public state_,
-    public boost::intrusive::list_base_hook<>
+    public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::safe_link>>
   {
     public:
-    state_impl_(type tx_start, commit_manager_impl& cm)
-    : state_(tx_start),
+    state_impl_(type tx_start, type val, commit_manager_impl& cm)
+    : state_(tx_start, val),
       cm(cm.shared_from_this())
     {}
 
-    ~state_impl_() noexcept = default;
+    ~state_impl_() noexcept;
 
     auto get_cm_or_null() const noexcept -> std::shared_ptr<commit_manager> override;
 
@@ -88,7 +88,7 @@ class monsoon_tx_export_ commit_manager_impl
       boost::intrusive::constant_time_size<false>>;
 
   private:
-  commit_manager_impl(const txfile& f, monsoon::io::fd::offset_type off, allocator_type alloc);
+  commit_manager_impl(monsoon::io::fd::offset_type off, allocator_type alloc);
   ~commit_manager_impl() noexcept override;
 
   public:
@@ -127,15 +127,12 @@ class monsoon_tx_export_ commit_manager_impl
   mutable std::shared_mutex mtx_;
   ///\brief Lock held during commits, or to lock out commits.
   mutable std::shared_mutex commit_mtx_;
-  ///\brief Commit ID for read transactions.
-  ///\details Read transaction IDs are collapsed into a single ID.
-  std::shared_ptr<state_> s_;
   ///\brief Most-recent handed-out ID for a commit.
   type last_write_commit_id_;
   ///\brief Number of last_write_commit_id_ we have pre-allocated.
   type last_write_commit_id_avail_ = 0;
   ///\brief Most-recent completed ID for a commit.
-  type completed_commit_id_;
+  commit_id completed_commit_id_;
   ///\brief List of pending writes.
   ///\details The front of the list contains the first-to-be-written transaction.
   ///\note A write may not be ready to be written.

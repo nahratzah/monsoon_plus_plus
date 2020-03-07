@@ -30,10 +30,23 @@ auto cm_do_noexcept_(Fn&& fn) noexcept -> decltype(auto) {
 } /* namespace monsoon::tx::detail */
 
 
-commit_manager_impl::commit_manager_impl(const txfile& f, monsoon::io::fd::offset_type off, allocator_type alloc)
+commit_manager_impl::commit_manager_impl(monsoon::io::fd::offset_type off, allocator_type alloc)
 : off_(off),
   alloc_(alloc)
-{
+{}
+
+commit_manager_impl::~commit_manager_impl() noexcept = default;
+
+auto commit_manager_impl::allocate(const txfile& f, monsoon::io::fd::offset_type off, allocator_type alloc) -> std::shared_ptr<commit_manager_impl> {
+  class impl
+  : public commit_manager_impl
+  {
+    public:
+    impl(monsoon::io::fd::offset_type off, allocator_type alloc)
+    : commit_manager_impl(off, std::move(alloc))
+    {}
+  };
+
   auto tx = f.begin();
   commit_manager_buffer buf;
   monsoon::io::read_at(tx, off, &buf, sizeof(buf));
@@ -45,29 +58,16 @@ commit_manager_impl::commit_manager_impl(const txfile& f, monsoon::io::fd::offse
 
   if (buf.magic != magic)
     throw std::runtime_error("commit_manager: magic mismatch");
-  tx_start_ = buf.tx_start;
-  last_write_commit_id_ = buf.last_write;
-  completed_commit_id_ = buf.completed_commit;
-}
 
-commit_manager_impl::~commit_manager_impl() noexcept = default;
-
-auto commit_manager_impl::allocate(const txfile& f, monsoon::io::fd::offset_type off, allocator_type alloc) -> std::shared_ptr<commit_manager_impl> {
-  class impl
-  : public commit_manager_impl
-  {
-    public:
-    impl(const txfile& f, monsoon::io::fd::offset_type off, allocator_type alloc)
-    : commit_manager_impl(f, off, std::move(alloc))
-    {}
-  };
-
-  std::shared_ptr<commit_manager_impl> cm_ptr = std::allocate_shared<impl>(alloc, f, off, alloc);
+  std::shared_ptr<commit_manager_impl> cm_ptr = std::allocate_shared<impl>(alloc, off, alloc);
   assert(alloc == cm_ptr->alloc_);
 
-  auto s = std::allocate_shared<state_impl_>(alloc, cm_ptr->tx_start_, *cm_ptr);
+  cm_ptr->tx_start_ = buf.tx_start;
+  cm_ptr->last_write_commit_id_ = buf.last_write;
+
+  auto s = std::allocate_shared<state_impl_>(alloc, buf.tx_start, buf.completed_commit, *cm_ptr);
   cm_ptr->states_.push_back(*s); // Never throws.
-  cm_ptr->s_ = std::move(s);
+  cm_ptr->completed_commit_id_ = make_commit_id(s);
 
   return cm_ptr;
 }
@@ -90,7 +90,7 @@ void commit_manager_impl::init(txfile::transaction& tx, monsoon::io::fd::offset_
 auto commit_manager_impl::get_tx_commit_id() const -> commit_id {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
   assert(s_ != nullptr);
-  return make_commit_id(completed_commit_id_, s_);
+  return completed_commit_id_;
 }
 
 auto commit_manager_impl::prepare_commit(txfile& f) -> write_id {
@@ -124,8 +124,9 @@ auto commit_manager_impl::prepare_commit(txfile& f) -> write_id {
 
   // Compute transaction ID.
   --last_write_commit_id_avail_;
-  assert(s_ != nullptr);
-  auto cid = make_commit_id(++last_write_commit_id_, s_);
+  auto cid_state = std::allocate_shared<state_impl_>(alloc_, tx_start_, ++last_write_commit_id_, *this);
+  states_.push_back(*cid_state); // Never throws.
+  auto cid = make_commit_id(cid_state);
 
   // Write the completed-commit-id update in this transaction.
   const type big_endian_commit_id = boost::endian::native_to_big(cid.val());
@@ -185,6 +186,16 @@ void commit_manager_impl::maybe_start_front_write_locked_(const std::unique_lock
 }
 
 
+commit_manager_impl::state_impl_::~state_impl_() noexcept {
+  if (is_linked()) {
+    std::shared_ptr<commit_manager_impl> cm = this->cm.lock();
+    if (cm != nullptr) {
+      std::lock_guard<std::shared_mutex>{ cm->mtx_ };
+      cm->states_.erase(cm->states_.iterator_to(*this));
+    }
+  }
+}
+
 auto commit_manager_impl::state_impl_::get_cm_or_null() const noexcept -> std::shared_ptr<commit_manager> {
   return cm.lock();
 }
@@ -236,6 +247,7 @@ auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error
   std::error_code ec = validation();
   if (ec) return ec; // Validation failure.
 
+  const auto delay_release_of_old_cid = cm->completed_commit_id_;
   std::unique_lock<std::shared_mutex> wlck{ cm->mtx_ };
   tx_.commit(); // May throw.
 
@@ -246,7 +258,7 @@ auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error
 
     // Now that all in-memory and all on-disk data structures have the commit,
     // we can update the in-memory completed-commit-ID.
-    cm->completed_commit_id_ = seq_.val();
+    cm->completed_commit_id_ = seq_;
     cm->writes_.erase(cm->writes_.iterator_to(*this));
 
     // We no longer need to prevent other transactions from running.

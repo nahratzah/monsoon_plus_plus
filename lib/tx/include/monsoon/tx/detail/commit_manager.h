@@ -34,8 +34,9 @@ class monsoon_tx_export_ commit_manager {
   protected:
   class monsoon_tx_export_ state_ {
     protected:
-    state_(type tx_start) noexcept
-    : tx_start(tx_start)
+    state_(type tx_start, type val) noexcept
+    : tx_start(tx_start),
+      val(val)
     {}
 
     ~state_() noexcept = default;
@@ -44,7 +45,7 @@ class monsoon_tx_export_ commit_manager {
     ///\brief Retrieve the commit manager.
     virtual auto get_cm_or_null() const noexcept -> std::shared_ptr<commit_manager> = 0;
 
-    const type tx_start;
+    const type tx_start, val;
   };
 
   public:
@@ -57,11 +58,11 @@ class monsoon_tx_export_ commit_manager {
     commit_id() noexcept = default;
 
     private:
-    commit_id(type val, const std::shared_ptr<state_>& s) noexcept;
+    commit_id(const std::shared_ptr<state_>& s) noexcept;
 
     public:
     auto tx_start() const noexcept -> type { return s_->tx_start; }
-    auto val() const noexcept -> type { return val_; }
+    auto val() const noexcept -> type { return s_->val; }
     auto relative_val() const noexcept -> type { return val() - tx_start(); }
 
     explicit operator bool() const noexcept { return s_ != nullptr; }
@@ -70,7 +71,6 @@ class monsoon_tx_export_ commit_manager {
     auto get_cm_or_null() const noexcept -> std::shared_ptr<commit_manager>;
 
     private:
-    type val_;
     std::shared_ptr<state_> s_;
   };
 
@@ -123,7 +123,7 @@ class monsoon_tx_export_ commit_manager {
 
   protected:
   ///\brief Helper function to expose the commit_id constructor to derived types.
-  static auto make_commit_id(type val, const std::shared_ptr<state_>& s) noexcept -> commit_id;
+  static auto make_commit_id(const std::shared_ptr<state_>& s) noexcept -> commit_id;
   ///\brief Helper function to expose the write_id constructor to derived types.
   static auto make_write_id(std::shared_ptr<write_id_state_>&& s) noexcept -> write_id;
 };
