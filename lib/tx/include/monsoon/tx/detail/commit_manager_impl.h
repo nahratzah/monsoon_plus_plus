@@ -44,6 +44,7 @@ class monsoon_tx_export_ commit_manager_impl
   ///\brief Implement commit ID state.
   class monsoon_tx_local_ state_impl_ final
   : public state_,
+    public std::enable_shared_from_this<state_impl_>,
     public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::safe_link>>
   {
     public:
@@ -115,6 +116,10 @@ class monsoon_tx_export_ commit_manager_impl
   void null_commit_(write_id_state_impl_& s) noexcept;
   ///\brief See if we can start the front commit.
   void maybe_start_front_write_locked_(const std::unique_lock<std::shared_mutex>& lck) noexcept;
+  ///\brief Suggest a commit_id as the new tx_start_, for use by the vacuum algorithm.
+  auto suggest_vacuum_target_() const -> commit_id;
+  ///\brief Update after a vacuum operation completed.
+  void on_completed_vacuum_(txfile& f, commit_id vacuum_target);
 
   ///\brief Transaction IDs in the database start at this value.
   type tx_start_;

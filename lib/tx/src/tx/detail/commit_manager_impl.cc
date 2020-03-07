@@ -1,6 +1,7 @@
 #include <monsoon/tx/detail/commit_manager_impl.h>
 #include <monsoon/tx/db_errc.h>
 #include <monsoon/io/rw.h>
+#include <algorithm>
 #include <cassert>
 #include <stdexcept>
 #include <type_traits>
@@ -185,6 +186,49 @@ void commit_manager_impl::maybe_start_front_write_locked_(const std::unique_lock
   } while (!success);
 }
 
+auto commit_manager_impl::suggest_vacuum_target_() const -> commit_id {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+
+  assert(!states_.empty()); // States must contains completed_commit_id_.
+  assert(std::is_sorted(states_.begin(), states_.end()));
+
+  return make_commit_id(states_.front().shared_from_this());
+}
+
+void commit_manager_impl::on_completed_vacuum_(txfile& f, commit_id vacuum_target) {
+  auto tx = f.begin(false);
+  {
+    type ntx = vacuum_target.val(); // New tx_start.
+    boost::endian::native_to_big_inplace(ntx);
+    monsoon::io::write_at(tx, OFF_TX_START, &ntx, sizeof(ntx));
+  }
+
+  std::shared_ptr<state_impl_> new_state;
+  commit_id dont_release_old_cid_under_lock;
+
+  std::lock_guard<std::shared_mutex> lck{ mtx_ };
+  dont_release_old_cid_under_lock = completed_commit_id_;
+
+  assert(!states_.empty()); // States must contains completed_commit_id_.
+  assert(std::is_sorted(states_.begin(), states_.end()));
+
+#ifdef NDEBUG
+  const std::shared_ptr<const state_impl_> cci_state = std::static_pointer_cast<const state_impl_>(get_commit_id_state(completed_commit_id_));
+#else
+  const std::shared_ptr<const state_impl_> cci_state = std::dynamic_pointer_cast<const state_impl_>(get_commit_id_state(completed_commit_id_));
+  assert(cci_state != nullptr);
+#endif
+
+  new_state = std::allocate_shared<state_impl_>(alloc_, vacuum_target.val(), completed_commit_id_.val(), *this);
+  states_.insert(states_.iterator_to(*cci_state), *new_state);
+  completed_commit_id_ = make_commit_id(new_state);
+
+  assert(std::is_sorted(states_.begin(), states_.end()));
+
+  tx.commit();
+  tx_start_ = completed_commit_id_.tx_start();
+}
+
 
 commit_manager_impl::state_impl_::~state_impl_() noexcept {
   if (is_linked()) {
@@ -232,6 +276,7 @@ void commit_manager_impl::write_id_state_impl_::wait_until_front_transaction_(co
 }
 
 auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error_code> validation, cheap_fn_ref<> phase2) -> std::error_code {
+  commit_id delay_release_of_old_cid;
   const auto raw_cm = get_cm_or_null();
   if (raw_cm == nullptr) return db_errc::gone_away;
 #ifdef NDEBUG
@@ -247,8 +292,8 @@ auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error
   std::error_code ec = validation();
   if (ec) return ec; // Validation failure.
 
-  const auto delay_release_of_old_cid = cm->completed_commit_id_;
   std::unique_lock<std::shared_mutex> wlck{ cm->mtx_ };
+  delay_release_of_old_cid = cm->completed_commit_id_;
   tx_.commit(); // May throw.
 
   // Remaining code runs under no-except clause to maintain invariants.
