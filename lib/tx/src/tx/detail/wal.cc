@@ -9,6 +9,7 @@
 #include <monsoon/xdr/xdr_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/io/limited_stream.h>
+#include <monsoon/io/rw.h>
 #include <monsoon/io/aio.h>
 #include <objpipe/of.h>
 
@@ -811,7 +812,7 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   // Prepare the undo map.
   // This map holds all data overwritten by this transaction.
   replacement_map undo;
-  monsoon::io::aio undo_aio;
+  monsoon::io::aio io;
   for (const auto& w : writes) {
     const std::unique_ptr<std::uint8_t[]> buf = std::make_unique<std::uint8_t[]>(w.size());
 
@@ -828,29 +829,23 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
         undo.write_at(off, buf.get(), len).commit();
       } else {
         if (len > fd_size_ - off) len = fd_size_ - off;
-        undo.write_at_from_file(off, undo_aio.on(fd_), off + wal_end_offset(), len).commit();
+        undo.write_at_from_file(off, io.on(fd_), off + wal_end_offset(), len).commit();
       }
       off += len;
     }
   }
-  undo_aio.start_and_join();
 
   // Write everything but the record header.
   // By not writing the record header, the transaction itself looks as if
   // the commit hasn't happened, because there's a wal_record_end message.
-  {
-    auto buf = xdr.data() + wal_record_end::XDR_SIZE;
-    auto len = xdr.size() - wal_record_end::XDR_SIZE;
-    auto off = slot_off_ + wal_record_end::XDR_SIZE;
-    while (len > 0u) {
-      const auto wlen = fd_.write_at(off, buf, len);
-      buf += wlen;
-      len -= wlen;
-      off += wlen;
-    }
-    fd_.flush(true);
-    ++file_flush_;
-  }
+  io.on(fd_).write_at(
+      slot_off_ + wal_record_end::XDR_SIZE,
+      xdr.data() + wal_record_end::XDR_SIZE,
+      xdr.size() - wal_record_end::XDR_SIZE);
+  io.on(fd_).flush(true);
+
+  io.start_and_join();
+  ++file_flush_;
 
   // Grab the allocation lock.
   std::lock_guard<std::mutex> alloc_lck{ alloc_mtx_ };
@@ -858,32 +853,26 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   assert(tx_id_states_[tx_id]);
 
   // Write the marker of the record.
-  {
-    auto buf = xdr.data();
-    auto len = wal_record_end::XDR_SIZE;
-    auto off = slot_off_;
-    while (len > 0u) {
-      const auto wlen = fd_.write_at(off, buf, len);
-      buf += wlen;
-      len -= wlen;
-      off += wlen;
-    }
+  monsoon::io::write_at(
+      fd_,
+      slot_off_,
+      xdr.data(),
+      wal_record_end::XDR_SIZE);
 
-    // If this flush fails, we can't recover.
-    // The commit has been written in full and any attempt to undo it
-    // would likely run into the same error as the flush operation.
-    // So we'll log it and silently continue.
-    //
-    // While we only require a dataflush, we do a full flush to get the
-    // file metadata synced up. Because it seems like a nice thing to do.
-    try {
-      fd_.flush();
-      ++file_flush_;
-    } catch (const std::exception& e) {
-      std::cerr << "Warning: failed to flush WAL log: " << e.what() << std::endl;
-    } catch (...) {
-      std::cerr << "Warning: failed to flush WAL log." << std::endl;
-    }
+  // If this flush fails, we can't recover.
+  // The commit has been written in full and any attempt to undo it
+  // would likely run into the same error as the flush operation.
+  // So we'll log it and silently continue.
+  //
+  // While we only require a dataflush, we do a full flush to get the
+  // file metadata synced up. Because it seems like a nice thing to do.
+  try {
+    fd_.flush();
+    ++file_flush_;
+  } catch (const std::exception& e) {
+    std::cerr << "Warning: failed to flush WAL log: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "Warning: failed to flush WAL log." << std::endl;
   }
 
   // Now commit the change in repl_.
