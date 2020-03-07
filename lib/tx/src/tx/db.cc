@@ -8,6 +8,7 @@
 #include <monsoon/io/limited_stream.h>
 #include <monsoon/io/positional_stream.h>
 #include <monsoon/io/rw.h>
+#include <objpipe/of.h>
 #include <boost/endian/conversion.hpp>
 #include <algorithm>
 #include <cassert>
@@ -250,20 +251,26 @@ auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<
 
 void db::transaction::commit_phase1_(detail::commit_manager::write_id& tx) {
   // Write all creation records.
-  // XXX create a bundle-write in the WAL where we can use 1 buffer and many offsets.
-  std::for_each(
-      created_set_.begin(), created_set_.end(),
-      [&tx, buf=tx_aware_data::make_creation_buffer(tx.seq().val())](const auto& datum_ptr) {
-        monsoon::io::write_at(tx, datum_ptr->offset() + tx_aware_data::CREATION_OFFSET, buf.data(), buf.size());
-      });
+  {
+    const auto buf = tx_aware_data::make_creation_buffer(tx.seq().val());
+    auto offs = objpipe::of(std::cref(created_set_))
+        .iterate()
+        .transform([](const auto& datum_ptr) { return datum_ptr->offset(); })
+        .transform([](const auto& off) { return off + tx_aware_data::CREATION_OFFSET; })
+        .to_vector();
+    tx.write_at_many(std::move(offs), buf.data(), buf.size());
+  }
 
   // Write all deletion records.
-  // XXX create a bundle-write in the WAL where we can use 1 buffer and many offsets.
-  std::for_each(
-      created_set_.begin(), created_set_.end(),
-      [&tx, buf=tx_aware_data::make_deletion_buffer(tx.seq().val())](const auto& datum_ptr) {
-        monsoon::io::write_at(tx, datum_ptr->offset() + tx_aware_data::DELETION_OFFSET, buf.data(), buf.size());
-      });
+  {
+    const auto buf = tx_aware_data::make_deletion_buffer(tx.seq().val());
+    auto offs = objpipe::of(std::cref(created_set_))
+        .iterate()
+        .transform([](const auto& datum_ptr) { return datum_ptr->offset(); })
+        .transform([](const auto& off) { return off + tx_aware_data::DELETION_OFFSET; })
+        .to_vector();
+    tx.write_at_many(std::move(offs), buf.data(), buf.size());
+  }
 
   // Run phase1 on each transaction object.
   std::for_each(

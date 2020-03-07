@@ -49,6 +49,10 @@ inline auto commit_manager::write_id_state_::write_at(txfile::transaction::offse
   return tx_.write_at(offset, buf, nbytes);
 }
 
+inline void commit_manager::write_id_state_::write_at_many(std::vector<txfile::transaction::offset_type> offsets, const void* buf, std::size_t nbytes) {
+  tx_.write_at_many(std::move(offsets), buf, nbytes);
+}
+
 
 inline commit_manager::write_id::write_id(std::shared_ptr<write_id_state_>&& impl) noexcept
 : pimpl_(std::move(impl))
@@ -63,6 +67,11 @@ inline auto commit_manager::write_id::apply(Validation&& validation, Phase2&& ph
 inline auto commit_manager::write_id::write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t {
   assert(pimpl_ != nullptr);
   return pimpl_->write_at(offset, buf, nbytes);
+}
+
+inline void commit_manager::write_id::write_at_many(std::vector<txfile::transaction::offset_type> offsets, const void* buf, std::size_t nbytes) {
+  assert(pimpl_ != nullptr);
+  return pimpl_->write_at_many(std::move(offsets), buf, nbytes);
 }
 
 

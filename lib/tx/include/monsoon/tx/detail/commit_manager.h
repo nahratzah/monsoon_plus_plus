@@ -91,6 +91,8 @@ class monsoon_tx_export_ commit_manager {
     auto seq() const noexcept -> const commit_id& { return seq_; }
     ///\brief Add a write operation to this commit.
     auto write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t;
+    ///\brief Add a write operation to this commit.
+    void write_at_many(std::vector<txfile::transaction::offset_type> offsets, const void* buf, std::size_t nbytes);
 
     private:
     ///\brief Transaction apply implementation.
@@ -149,6 +151,8 @@ class monsoon_tx_export_ commit_manager::write_id {
   auto seq() const noexcept -> const commit_id& { return pimpl_->seq(); }
   ///\brief Add a write operation to this commit.
   auto write_at(txfile::transaction::offset_type offset, const void* buf, std::size_t nbytes) -> std::size_t;
+  ///\brief Add a write operation to this commit.
+  void write_at_many(std::vector<txfile::transaction::offset_type> offsets, const void* buf, std::size_t nbytes);
 
   private:
   std::shared_ptr<write_id_state_> pimpl_;
