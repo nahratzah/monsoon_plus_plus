@@ -24,6 +24,7 @@ install (FILES
   include/monsoon/hash_support.h
   include/monsoon/overload.h
   include/monsoon/memoid.h
+  include/monsoon/cheap_fn_ref.h
   include/monsoon/unique_alloc_ptr.h
   include/monsoon/shared_resource_allocator.h
   DESTINATION include/monsoon)
