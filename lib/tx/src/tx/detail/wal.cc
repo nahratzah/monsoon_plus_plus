@@ -811,6 +811,7 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
   // Prepare the undo map.
   // This map holds all data overwritten by this transaction.
   replacement_map undo;
+  monsoon::io::aio undo_aio;
   for (const auto& w : writes) {
     const std::unique_ptr<std::uint8_t[]> buf = std::make_unique<std::uint8_t[]>(w.size());
 
@@ -827,11 +828,12 @@ void wal_region::tx_commit_(wal_record::tx_id_type tx_id, replacement_map&& writ
         undo.write_at(off, buf.get(), len).commit();
       } else {
         if (len > fd_size_ - off) len = fd_size_ - off;
-        undo.write_at_from_file(off, fd_, off + wal_end_offset(), len).commit();
+        undo.write_at_from_file(off, undo_aio.on(fd_), off + wal_end_offset(), len).commit();
       }
       off += len;
     }
   }
+  undo_aio.start_and_join();
 
   // Write everything but the record header.
   // By not writing the record header, the transaction itself looks as if

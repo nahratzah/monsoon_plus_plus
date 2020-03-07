@@ -107,6 +107,8 @@ class aio::fd_target {
   void write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t buflen);
   void flush(bool data_only = false);
 
+  auto filesize() const -> monsoon::io::fd::size_type { return fd_->size(); }
+
   private:
   fd* fd_ = nullptr;
   aio* aio_ = nullptr;
@@ -131,6 +133,8 @@ class aio::const_fd_target {
   {}
 
   void read_at(monsoon::io::fd::offset_type off, void* buf, std::size_t buflen);
+
+  auto filesize() const -> monsoon::io::fd::size_type { return fd_->size(); }
 
   private:
   const fd* fd_ = nullptr;

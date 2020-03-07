@@ -1,4 +1,5 @@
 #include <monsoon/tx/detail/replacement_map.h>
+#include <monsoon/io/rw.h>
 #include <memory>
 #include <stdexcept>
 
@@ -16,6 +17,138 @@ void replacement_map_dispose(replacement_map::value_type* ptr) {
 
 
 }
+
+
+class replacement_map::reader_intf_ {
+  public:
+  virtual ~reader_intf_() noexcept;
+
+  virtual void read(void* buf, std::size_t len) = 0;
+  virtual auto size() const noexcept -> std::size_t = 0;
+  virtual void advance(std::size_t n) = 0;
+
+  auto operator+=(std::size_t n) -> reader_intf_& {
+    advance(n);
+    return *this;
+  }
+};
+
+class replacement_map::buf_reader_
+: public reader_intf_
+{
+  public:
+  buf_reader_(const void* buf, std::size_t len) noexcept
+  : buf_(buf),
+    len_(len)
+  {}
+
+  ~buf_reader_() noexcept override;
+
+  void read(void* buf, std::size_t len) override {
+    assert(len <= len_);
+    std::memcpy(buf, buf_, len);
+  }
+
+  auto size() const noexcept -> std::size_t override {
+    return len_;
+  }
+
+  void advance(std::size_t n) override {
+    assert(n <= len_);
+    buf_ = reinterpret_cast<const std::uint8_t*>(buf_) + n;
+    len_ -= n;
+  }
+
+  private:
+  const void* buf_;
+  std::size_t len_;
+};
+
+class replacement_map::fd_reader_
+: public reader_intf_
+{
+  public:
+  fd_reader_(const monsoon::io::fd& f, monsoon::io::fd::offset_type off, std::size_t len) noexcept
+  : f_(f),
+    off_(off),
+    len_(len)
+  {}
+
+  ~fd_reader_() noexcept override;
+
+  void read(void* buf, std::size_t len) override {
+    assert(len <= len_);
+    if (off_ >= f_.size()) {
+      std::memset(buf, 0, len);
+    } else {
+      if (f_.size() - off_ < len) {
+        const std::size_t rlen = f_.size() - off_;
+        std::memset(reinterpret_cast<std::uint8_t*>(buf) + rlen, 0, len - rlen);
+        len = rlen;
+      }
+
+      f_.read_at(off_, buf, len);
+    }
+  }
+
+  auto size() const noexcept -> std::size_t override {
+    return len_;
+  }
+
+  void advance(std::size_t n) override {
+    assert(n <= len_);
+    off_ += n;
+    len_ -= n;
+  }
+
+  private:
+  const monsoon::io::fd& f_;
+  monsoon::io::fd::offset_type off_;
+  std::size_t len_;
+};
+
+class replacement_map::aio_reader_
+: public reader_intf_
+{
+  public:
+  aio_reader_(monsoon::io::aio::const_fd_target f, monsoon::io::fd::offset_type off, std::size_t len) noexcept
+  : f_(f),
+    off_(off),
+    len_(len)
+  {}
+
+  ~aio_reader_() noexcept override;
+
+  void read(void* buf, std::size_t len) override {
+    assert(len <= len_);
+    if (off_ >= f_.filesize()) {
+      std::memset(buf, 0, len);
+    } else {
+      if (f_.filesize() - off_ < len) {
+        const std::size_t rlen = f_.filesize() - off_;
+        std::memset(reinterpret_cast<std::uint8_t*>(buf) + rlen, 0, len - rlen);
+        len = rlen;
+      }
+
+      f_.read_at(off_, buf, len);
+    }
+  }
+
+  auto size() const noexcept -> std::size_t override {
+    return len_;
+  }
+
+  void advance(std::size_t n) override {
+    assert(n <= len_);
+    off_ += n;
+    len_ -= n;
+  }
+
+  private:
+  monsoon::io::aio::const_fd_target f_;
+  monsoon::io::fd::offset_type off_;
+  std::size_t len_;
+};
 
 
 replacement_map::replacement_map(const replacement_map& y)
@@ -100,33 +233,29 @@ auto replacement_map::read_at(monsoon::io::fd::offset_type off, void* buf, std::
 }
 
 auto replacement_map::write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes, bool overwrite) -> tx {
-  if (overwrite)
-    return write_at_with_overwrite_(off, buf, nbytes);
-  else
-    return write_at_without_overwrite_(off, buf, nbytes);
+  auto r = buf_reader_(buf, nbytes);
+  return write_at_(off, r, overwrite);
 }
 
 auto replacement_map::write_at_from_file(monsoon::io::fd::offset_type off, const monsoon::io::fd& fd, monsoon::io::fd::offset_type fd_off, std::size_t nbytes, bool overwrite) -> tx {
-  auto buffer = std::make_unique<std::uint8_t[]>(nbytes);
-
-  auto fd_nbytes = nbytes;
-  std::uint8_t* buffer_pos = buffer.get();
-  while (fd_nbytes > 0) {
-    auto rlen = fd.read_at(fd_off, buffer_pos, fd_nbytes);
-    if (rlen == 0) { // Pretend to read zeroes.
-      std::memset(buffer_pos, 0, fd_nbytes);
-      rlen = fd_nbytes;
-    }
-    buffer_pos += rlen;
-    fd_off += rlen;
-    fd_nbytes -= rlen;
-  }
-
-  return write_at(off, buffer.get(), nbytes, overwrite);
+  auto r = fd_reader_(fd, fd_off, nbytes);
+  return write_at_(off, r, overwrite);
 }
 
-auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx {
-  const monsoon::io::fd::offset_type end_off = off + nbytes;
+auto replacement_map::write_at_from_file(monsoon::io::fd::offset_type off, monsoon::io::aio::const_fd_target fd, monsoon::io::fd::offset_type fd_off, std::size_t nbytes, bool overwrite) -> tx {
+  auto r = aio_reader_(std::move(fd), fd_off, nbytes);
+  return write_at_(off, r, overwrite);
+}
+
+auto replacement_map::write_at_(monsoon::io::fd::offset_type off, reader_intf_& r, bool overwrite) -> tx {
+  if (overwrite)
+    return write_at_with_overwrite_(off, r);
+  else
+    return write_at_without_overwrite_(off, r);
+}
+
+auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off, reader_intf_& r) -> tx {
+  const monsoon::io::fd::offset_type end_off = off + r.size();
   if (end_off < off) throw std::overflow_error("replacement_map: off + nbytes");
 
   tx t;
@@ -179,10 +308,9 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
   }
 
   // Reserve at least some bytes into the vector.
-  const std::uint8_t* byte_buf = reinterpret_cast<const std::uint8_t*>(buf);
-  while (nbytes > 0) {
+  while (r.size() > 0) {
     std::unique_ptr<std::uint8_t[]> vector;
-    std::size_t to_reserve = nbytes;
+    std::size_t to_reserve = r.size();
 
     for (;;) {
       try {
@@ -194,9 +322,8 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
       }
     }
 
-    std::copy_n(byte_buf, to_reserve, vector.get());
-    nbytes -= to_reserve;
-    byte_buf += to_reserve;
+    r.read(vector.get(), to_reserve);
+    r += to_reserve;
 
     t.to_insert_.emplace_back(std::make_unique<value_type>(off, std::move(vector), to_reserve));
     off += to_reserve;
@@ -205,8 +332,8 @@ auto replacement_map::write_at_with_overwrite_(monsoon::io::fd::offset_type off,
   return t;
 }
 
-auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type off, const void* buf, std::size_t nbytes) -> tx {
-  const monsoon::io::fd::offset_type end_off = off + nbytes;
+auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type off, reader_intf_& r) -> tx {
+  const monsoon::io::fd::offset_type end_off = off + r.size();
   if (end_off < off) throw std::overflow_error("replacement_map: off + nbytes");
 
   tx t;
@@ -229,7 +356,7 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
     if (iter != map_.end() && iter->end_offset() > off) {
       const monsoon::io::fd::offset_type skip = iter->end_offset() - off;
       off += skip;
-      buf = reinterpret_cast<const std::uint8_t*>(buf) + skip;
+      r += skip;
     }
     assert(iter == map_.end() || iter->end_offset() <= off);
 
@@ -253,10 +380,10 @@ auto replacement_map::write_at_without_overwrite_(monsoon::io::fd::offset_type o
         }
       }
 
-      std::copy_n(reinterpret_cast<const std::uint8_t*>(buf), to_reserve, vector.get());
+      r.read(vector.get(), to_reserve);
       t.to_insert_.emplace_back(std::make_unique<value_type>(off, std::move(vector), to_reserve));
       off += to_reserve;
-      buf = reinterpret_cast<const std::uint8_t*>(buf) + to_reserve;
+      r += to_reserve;
     }
 
     assert(off == write_end_off);
@@ -340,6 +467,12 @@ void replacement_map::tx::commit() noexcept {
   to_erase_.clear();
   to_insert_.clear();
 }
+
+
+replacement_map::reader_intf_::~reader_intf_() noexcept = default;
+replacement_map::buf_reader_::~buf_reader_() noexcept = default;
+replacement_map::fd_reader_::~fd_reader_() noexcept = default;
+replacement_map::aio_reader_::~aio_reader_() noexcept = default;
 
 
 } /* namespace monsoon::tx::detail */
