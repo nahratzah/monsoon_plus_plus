@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -60,7 +61,8 @@ enum class wal_entry : std::uint8_t {
   end = 0, ///<\brief End of WAL segment.
   commit = 1, ///<\brief Transaction commit.
   write = 10, ///<\brief Write operation that is part of a transaction.
-  resize = 11 ///<\brief File resize operation that is part of a transaction.
+  resize = 11, ///<\brief File resize operation that is part of a transaction.
+  write_many = 12, ///<\brief Multi-write operation that is part of a transaction.
 };
 
 
@@ -123,6 +125,26 @@ class monsoon_tx_export_ wal_record {
   ///\params[in] offset The position at which the write happens.
   ///\params[in] data The data that is to be written.
   static auto make_write(tx_id_type tx_id, std::uint64_t offset, const std::vector<std::uint8_t>& data) -> std::unique_ptr<wal_record>;
+  ///\brief Create a record that describes a write operation.
+  ///\params[in] tx_id The transaction ID.
+  ///\params[in] offset Multiple positions at which the write happens.
+  ///\params[in] data The data that is to be written.
+  static auto make_write_many(tx_id_type tx_id, const std::vector<std::uint64_t>& offsets, std::vector<std::uint8_t>&& data) -> std::unique_ptr<wal_record>;
+  ///\brief Create a record that describes a write operation.
+  ///\params[in] tx_id The transaction ID.
+  ///\params[in] offset The position at which the write happens.
+  ///\params[in] data The data that is to be written.
+  static auto make_write_many(tx_id_type tx_id, const std::vector<std::uint64_t>& offsets, const std::vector<std::uint8_t>& data) -> std::unique_ptr<wal_record>;
+  ///\brief Create a record that describes a write operation.
+  ///\params[in] tx_id The transaction ID.
+  ///\params[in] offset Multiple positions at which the write happens.
+  ///\params[in] data The data that is to be written.
+  static auto make_write_many(tx_id_type tx_id, std::vector<std::uint64_t>&& offsets, std::vector<std::uint8_t>&& data) -> std::unique_ptr<wal_record>;
+  ///\brief Create a record that describes a write operation.
+  ///\params[in] tx_id The transaction ID.
+  ///\params[in] offset The position at which the write happens.
+  ///\params[in] data The data that is to be written.
+  static auto make_write_many(tx_id_type tx_id, std::vector<std::uint64_t>&& offsets, const std::vector<std::uint8_t>& data) -> std::unique_ptr<wal_record>;
   ///\brief Create a record indicating the file is being resized.
   ///\params[in] tx_id The transaction ID.
   ///\params[in] new_size The new size of the file.
@@ -138,6 +160,7 @@ class wal_record_end;
 class wal_record_commit;
 class wal_record_write;
 class wal_record_resize;
+class wal_record_write_many;
 
 
 /**
@@ -147,6 +170,7 @@ class wal_record_resize;
  */
 class monsoon_tx_export_ wal_region {
   friend wal_record_write;
+  friend wal_record_write_many;
   friend wal_record_resize;
 
   private:
@@ -294,6 +318,16 @@ class monsoon_tx_export_ wal_region {
   ///\param[in] buf The buffer holding the data that is to be written.
   ///\param[in] len The length of the buffer.
   void tx_write_(wal_record::tx_id_type tx_id, monsoon::io::fd::offset_type off, const void* buf, std::size_t len);
+  ///\brief Write a WAL record for a write to the log.
+  ///\details This is equivalent to calling
+  ///`log_write(wal_record_write_many(...))`.
+  ///This method elides a copy operation of the buffer, making it a bit faster
+  ///to execute.
+  ///\param[in] tx_id The transaction ID of the write operation.
+  ///\param[in] offs The offsets at which the write takes place.
+  ///\param[in] buf The buffer holding the data that is to be written.
+  ///\param[in] len The length of the buffer.
+  void tx_write_many_(wal_record::tx_id_type tx_id, const std::vector<monsoon::io::fd::offset_type>& offs, const void* buf, std::size_t len);
   ///\brief Write a WAL record for a resize operation to the log.
   ///\param[in] tx_id The transaction ID of the write operation.
   ///\param[in] new_size The new file size.
@@ -390,6 +424,20 @@ class monsoon_tx_export_ wal_region::tx {
   ///\param[in] len The size of the buffer.
   ///\throws std::bad_weak_ptr if the transaction is invalid.
   void write_at(monsoon::io::fd::offset_type off, const void* buf, std::size_t len);
+
+  ///\brief Transactional write.
+  ///\param[in] offs The offsets at which to write.
+  ///\param[in] buf Buffer with data.
+  ///\param[in] len The size of the buffer.
+  ///\throws std::bad_weak_ptr if the transaction is invalid.
+  void write_at(std::vector<monsoon::io::fd::offset_type> off, const void* buf, std::size_t len);
+
+  ///\brief Transactional write.
+  ///\param[in] offs The offsets at which to write.
+  ///\param[in] buf Buffer with data.
+  ///\param[in] len The size of the buffer.
+  ///\throws std::bad_weak_ptr if the transaction is invalid.
+  void write_at(std::initializer_list<monsoon::io::fd::offset_type> off, const void* buf, std::size_t len);
 
   ///\brief Transactional resize operation.
   ///\details Allows for the file to grow or shrink.

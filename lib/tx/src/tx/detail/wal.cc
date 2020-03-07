@@ -3,6 +3,7 @@
 #include <cassert>
 #include <functional>
 #include <iostream>
+#include <iterator>
 #include <tuple>
 #include <unordered_map>
 #include <monsoon/xdr/xdr_stream.h>
@@ -160,6 +161,71 @@ class wal_record_resize
 };
 
 
+class wal_record_write_many
+: public wal_record
+{
+  public:
+  wal_record_write_many() = delete;
+
+  wal_record_write_many(tx_id_type tx_id, std::vector<std::uint64_t> offsets, std::vector<uint8_t> data)
+  : wal_record(tx_id),
+    offsets(std::move(offsets)),
+    data(std::move(data))
+  {}
+
+  wal_record_write_many(tx_id_type tx_id, std::vector<std::uint64_t> offsets, const void* buf, std::size_t len)
+  : wal_record_write_many(
+      tx_id,
+      std::move(offsets),
+      std::vector<std::uint8_t>(
+          reinterpret_cast<const std::uint8_t*>(buf),
+          reinterpret_cast<const std::uint8_t*>(buf) + len))
+  {}
+
+  ~wal_record_write_many() noexcept override = default;
+
+  static auto from_stream(tx_id_type tx_id, monsoon::xdr::xdr_istream& in)
+  -> std::unique_ptr<wal_record_write_many> {
+    const auto offsets = in.get_collection<std::vector<std::uint64_t>>(
+        [](monsoon::xdr::xdr_istream& in) {
+          return in.get_uint64();
+        });
+    return std::make_unique<wal_record_write_many>(tx_id, offsets, in.get_opaque());
+  }
+
+  auto get_wal_entry() const noexcept -> wal_entry override { return wal_entry::write_many; }
+
+  template<typename OffsetType>
+  static void to_stream(monsoon::xdr::xdr_ostream& out, tx_id_type tx_id, const std::vector<OffsetType>& offsets, const void* buf, std::size_t len) {
+    wal_record::to_stream(out, wal_entry::write_many, tx_id);
+    to_stream_internal_(out, offsets, buf, len);
+  }
+
+  private:
+  template<typename OffsetType>
+  static auto to_stream_internal_(monsoon::xdr::xdr_ostream& out, const std::vector<OffsetType>& offsets, const void* buf, std::size_t len) -> void {
+    out.put_collection(
+        [](monsoon::xdr::xdr_ostream& out, std::uint64_t offset) {
+          out.put_uint64(offset);
+        },
+        offsets.begin(), offsets.end());
+    out.put_opaque(buf, len);
+  }
+
+  auto do_write(monsoon::xdr::xdr_ostream& out) const -> void override {
+    to_stream_internal_(out, offsets, data.data(), data.size());
+  }
+
+  auto do_apply(wal_region& wal) const -> void override {
+    for (const auto& offset : offsets)
+      wal.repl_.write_at(offset, data.data(), data.size()).commit();
+  }
+
+  std::vector<std::uint64_t> offsets;
+  std::vector<std::uint8_t> data;
+};
+
+
 wal_error::~wal_error() = default;
 
 wal_bad_alloc::~wal_bad_alloc() = default;
@@ -192,6 +258,9 @@ auto wal_record::read(monsoon::xdr::xdr_istream& in) -> std::unique_ptr<wal_reco
       break;
     case static_cast<std::uint8_t>(wal_entry::resize):
       result = wal_record_resize::from_stream(tx_id, in);
+      break;
+    case static_cast<std::uint8_t>(wal_entry::write_many):
+      result = wal_record_write_many::from_stream(tx_id, in);
       break;
     default:
       throw wal_error("unrecognized WAL entry");
@@ -243,6 +312,26 @@ auto wal_record::make_write(tx_id_type tx_id, std::uint64_t offset, std::vector<
 
 auto wal_record::make_write(tx_id_type tx_id, std::uint64_t offset, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record> {
   return std::make_unique<wal_record_write>(tx_id, offset, data);
+}
+
+auto wal_record::make_write_many(tx_id_type tx_id, const std::vector<std::uint64_t>& offsets, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record> {
+  if (offsets.size() == 1) return make_write(tx_id, offsets[0], std::move(data));
+  return std::make_unique<wal_record_write_many>(tx_id, offsets, std::move(data));
+}
+
+auto wal_record::make_write_many(tx_id_type tx_id, const std::vector<std::uint64_t>& offsets, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record> {
+  if (offsets.size() == 1) return make_write(tx_id, offsets[0], data);
+  return std::make_unique<wal_record_write_many>(tx_id, offsets, data);
+}
+
+auto wal_record::make_write_many(tx_id_type tx_id, std::vector<std::uint64_t>&& offsets, std::vector<uint8_t>&& data) -> std::unique_ptr<wal_record> {
+  if (offsets.size() == 1) return make_write(tx_id, offsets[0], std::move(data));
+  return std::make_unique<wal_record_write_many>(tx_id, std::move(offsets), std::move(data));
+}
+
+auto wal_record::make_write_many(tx_id_type tx_id, std::vector<std::uint64_t>&& offsets, const std::vector<uint8_t>& data) -> std::unique_ptr<wal_record> {
+  if (offsets.size() == 1) return make_write(tx_id, offsets[0], data);
+  return std::make_unique<wal_record_write_many>(tx_id, std::move(offsets), data);
 }
 
 auto wal_record::make_resize(tx_id_type tx_id, std::uint64_t new_size) -> std::unique_ptr<wal_record> {
@@ -656,6 +745,19 @@ void wal_region::tx_write_(wal_record::tx_id_type tx_id, monsoon::io::fd::offset
   log_write_raw_(xdr);
 }
 
+void wal_region::tx_write_many_(wal_record::tx_id_type tx_id, const std::vector<monsoon::io::fd::offset_type>& offs, const void* buf, std::size_t len) {
+  if (offs.size() == 1) {
+    tx_write_(tx_id, offs[0], buf, len);
+  } else {
+    monsoon::xdr::xdr_bytevector_ostream<> xdr;
+    wal_record_write_many::to_stream(xdr, tx_id, offs, buf, len);
+    assert(xdr.size() >= wal_record_end::XDR_SIZE);
+    wal_record_end().write(xdr);
+
+    log_write_raw_(xdr);
+  }
+}
+
 void wal_region::tx_resize_(wal_record::tx_id_type tx_id, monsoon::io::fd::size_type new_size) {
   if (new_size > std::numeric_limits<std::uint64_t>::max())
     throw std::overflow_error("wal_region::tx::resize");
@@ -834,6 +936,33 @@ void wal_region::tx::write_at(monsoon::io::fd::offset_type off, const void* buf,
   auto writes_tx = writes_.write_at(off, buf, len);
   std::shared_ptr<wal_region>(wal_)->tx_write_(tx_id_, off, buf, len);
   writes_tx.commit();
+}
+
+void wal_region::tx::write_at(std::vector<monsoon::io::fd::offset_type> offs, const void* buf, std::size_t len) {
+  if (offs.empty()) return;
+
+  std::sort(offs.begin(), offs.end());
+  for (auto off_iter = std::next(offs.begin()); off_iter != offs.end(); ++off_iter) {
+    if (*std::prev(off_iter) > *off_iter - len)
+      throw std::length_error("overlapped write");
+  }
+
+  const auto file_size = size();
+  replacement_map tmp = writes_;
+
+  for (const auto& off : offs) {
+    if (off > file_size || file_size - monsoon::io::fd::size_type(off) < len)
+      throw std::length_error("write past end of file (based on local transaction resize)");
+
+    tmp.write_at(off, buf, len).commit();
+  }
+
+  std::shared_ptr<wal_region>(wal_)->tx_write_many_(tx_id_, std::move(offs), buf, len);
+  writes_ = std::move(tmp); // never throws
+}
+
+void wal_region::tx::write_at(std::initializer_list<monsoon::io::fd::offset_type> offs, const void* buf, std::size_t len) {
+  return write_at(std::vector<monsoon::io::fd::offset_type>(offs), buf, len);
 }
 
 void wal_region::tx::resize(monsoon::io::fd::size_type new_size) {

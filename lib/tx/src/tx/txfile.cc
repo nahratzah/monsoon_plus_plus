@@ -36,8 +36,8 @@ txfile::transaction::transaction(bool read_only, const std::shared_ptr<impl_>& o
 {}
 
 void txfile::transaction::resize(size_type new_size) {
-  if (!*this) throw txfile_bad_transaction("txfile::transaction::write_at");
-  if (read_only_) throw txfile_read_only_transaction("txfile::transaction::write_at");
+  if (!*this) throw txfile_bad_transaction("txfile::transaction::resize");
+  if (read_only_) throw txfile_read_only_transaction("txfile::transaction::resize");
 
   wal_.resize(new_size);
 }
@@ -48,6 +48,13 @@ auto txfile::transaction::write_at(offset_type off, const void* buf, std::size_t
 
   wal_.write_at(off, buf, nbytes);
   return nbytes;
+}
+
+void txfile::transaction::write_at_many(std::vector<offset_type> off, const void* buf, std::size_t nbytes) {
+  if (!*this) throw txfile_bad_transaction("txfile::transaction::write_at_many");
+  if (read_only_) throw txfile_read_only_transaction("txfile::transaction::write_at_many");
+
+  wal_.write_at(std::move(off), buf, nbytes);
 }
 
 auto txfile::transaction::read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t {

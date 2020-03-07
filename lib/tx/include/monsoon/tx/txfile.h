@@ -294,6 +294,7 @@ class monsoon_tx_export_ txfile::transaction {
 
   void resize(size_type new_size);
   auto write_at(offset_type off, const void* buf, std::size_t nbytes) -> std::size_t;
+  void write_at_many(std::vector<offset_type> off, const void* buf, std::size_t nbytes);
   auto read_at(offset_type off, void* buf, std::size_t nbytes) const -> std::size_t;
 
   private:

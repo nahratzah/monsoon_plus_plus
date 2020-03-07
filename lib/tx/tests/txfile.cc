@@ -72,6 +72,17 @@ TEST(write_commit) {
   CHECK_EQUAL(u8"foobar", read(f));
 }
 
+TEST(write_many_commit) {
+  auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
+
+  auto tx = f.begin(false);
+  tx.resize(32);
+  tx.write_at_many({ 0, 8, 16, 24 }, u8"_foobar_", 8);
+  tx.commit();
+
+  CHECK_EQUAL(u8"_foobar__foobar__foobar__foobar_", read(f));
+}
+
 TEST(multi_transaction) {
   auto f = txfile::create(__func__, TMPFILE(), 0, WAL_SIZE);
   {
