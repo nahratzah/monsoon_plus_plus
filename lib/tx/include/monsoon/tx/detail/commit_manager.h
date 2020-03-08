@@ -128,6 +128,12 @@ class monsoon_tx_export_ commit_manager {
   static auto make_write_id(std::shared_ptr<write_id_state_>&& s) noexcept -> write_id;
   ///\brief Extract state from commit_id.
   static auto get_commit_id_state(const commit_id& cid) noexcept -> const std::shared_ptr<const state_>&;
+
+  private:
+  ///\brief Suggest a commit_id as the new tx_start_, for use by the vacuum algorithm.
+  virtual auto suggest_vacuum_target_() const -> commit_id = 0;
+  ///\brief Update after a vacuum operation completed.
+  virtual void on_completed_vacuum_(txfile& f, commit_id vacuum_target) = 0;
 };
 
 
