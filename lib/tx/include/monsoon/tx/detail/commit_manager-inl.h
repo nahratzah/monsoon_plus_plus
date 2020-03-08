@@ -3,6 +3,7 @@
 
 #include <monsoon/tx/db_errc.h>
 #include <utility>
+#include <ostream>
 
 namespace monsoon::tx::detail {
 
@@ -108,6 +109,17 @@ inline auto operator<=(const commit_manager::commit_id& x, const commit_manager:
 
 inline auto operator>=(const commit_manager::commit_id& x, const commit_manager::commit_id& y) noexcept {
   return !(x < y);
+}
+
+
+template<typename CharT, typename Traits>
+auto operator<<(std::basic_ostream<CharT, Traits>& out, const commit_manager::commit_id& ci) -> std::basic_ostream<CharT, Traits>& {
+  for (const char c : "commit_id(") out.put(out.widen(c));
+  out << ci.val();
+  for (const char c : ", tx_start=") out.put(out.widen(c));
+  out << ci.tx_start();
+  out.put(out.widen(')'));
+  return out;
 }
 
 

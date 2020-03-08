@@ -4,12 +4,14 @@ namespace monsoon::tx::detail {
 
 
 tx_sequencer::tx::~tx() noexcept {
-  const auto seq = seq_.lock();
-  if (record_ != nullptr && !record_->committed && seq != nullptr) {
-    std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
+  if (record_ != nullptr && !record_->committed) {
+    const auto seq = seq_.lock();
+    if (seq != nullptr) {
+      std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
 
-    seq->c_.erase_and_dispose(seq->c_.iterator_to(*record_), &tx_sequencer::disposer_);
-    seq->do_maintenance_();
+      seq->c_.erase_and_dispose(seq->c_.iterator_to(*record_), &tx_sequencer::disposer_);
+      seq->do_maintenance_();
+    }
   }
 }
 

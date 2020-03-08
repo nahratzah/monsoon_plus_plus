@@ -90,11 +90,13 @@ void commit_manager_impl::init(txfile::transaction& tx, monsoon::io::fd::offset_
 
 auto commit_manager_impl::get_tx_commit_id() const -> commit_id {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
-  assert(s_ != nullptr);
+  assert(get_commit_id_state(completed_commit_id_) != nullptr);
   return completed_commit_id_;
 }
 
 auto commit_manager_impl::prepare_commit(txfile& f) -> write_id {
+  std::shared_ptr<state_impl_> cid_state;
+
   auto tx = f.begin(false); // WAL-transaction for the commit-id transaction.
   std::lock_guard<std::shared_mutex> lck{ mtx_ };
 
@@ -125,7 +127,7 @@ auto commit_manager_impl::prepare_commit(txfile& f) -> write_id {
 
   // Compute transaction ID.
   --last_write_commit_id_avail_;
-  auto cid_state = std::allocate_shared<state_impl_>(alloc_, tx_start_, ++last_write_commit_id_, *this);
+  cid_state = std::allocate_shared<state_impl_>(alloc_, tx_start_, ++last_write_commit_id_, *this);
   states_.push_back(*cid_state); // Never throws.
   auto cid = make_commit_id(cid_state);
 
@@ -143,9 +145,6 @@ void commit_manager_impl::null_commit_(write_id_state_impl_& s) noexcept {
   assert(std::holds_alternative<std::monostate>(s.wait_));
 
   std::unique_lock<std::shared_mutex> lck{ mtx_ };
-  // Successful transactions will unlink this.
-  assert(!s.is_linked());
-
   const auto s_iter = writes_.iterator_to(s);
   const bool first = (s_iter == writes_.begin());
   writes_.erase(s_iter);
@@ -190,7 +189,11 @@ auto commit_manager_impl::suggest_vacuum_target_() const -> commit_id {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
 
   assert(!states_.empty()); // States must contains completed_commit_id_.
-  assert(std::is_sorted(states_.begin(), states_.end()));
+  assert(std::is_sorted(
+          states_.begin(), states_.end(),
+          [](const auto& x, const auto& y) -> bool {
+            return x.val - x.tx_start < y.val - x.tx_start;
+          }));
 
   return make_commit_id(states_.front().shared_from_this());
 }
@@ -210,7 +213,11 @@ void commit_manager_impl::on_completed_vacuum_(txfile& f, commit_id vacuum_targe
   dont_release_old_cid_under_lock = completed_commit_id_;
 
   assert(!states_.empty()); // States must contains completed_commit_id_.
-  assert(std::is_sorted(states_.begin(), states_.end()));
+  assert(std::is_sorted(
+          states_.begin(), states_.end(),
+          [](const auto& x, const auto& y) -> bool {
+            return x.val - x.tx_start < y.val - x.tx_start;
+          }));
 
 #ifdef NDEBUG
   const std::shared_ptr<const state_impl_> cci_state = std::static_pointer_cast<const state_impl_>(get_commit_id_state(completed_commit_id_));
@@ -223,7 +230,11 @@ void commit_manager_impl::on_completed_vacuum_(txfile& f, commit_id vacuum_targe
   states_.insert(states_.iterator_to(*cci_state), *new_state);
   completed_commit_id_ = make_commit_id(new_state);
 
-  assert(std::is_sorted(states_.begin(), states_.end()));
+  assert(std::is_sorted(
+          states_.begin(), states_.end(),
+          [](const auto& x, const auto& y) -> bool {
+            return x.val - x.tx_start < y.val - x.tx_start;
+          }));
 
   tx.commit();
   tx_start_ = completed_commit_id_.tx_start();
@@ -231,12 +242,10 @@ void commit_manager_impl::on_completed_vacuum_(txfile& f, commit_id vacuum_targe
 
 
 commit_manager_impl::state_impl_::~state_impl_() noexcept {
-  if (is_linked()) {
-    std::shared_ptr<commit_manager_impl> cm = this->cm.lock();
-    if (cm != nullptr) {
-      std::lock_guard<std::shared_mutex>{ cm->mtx_ };
-      cm->states_.erase(cm->states_.iterator_to(*this));
-    }
+  std::shared_ptr<commit_manager_impl> cm = this->cm.lock();
+  if (cm != nullptr) {
+    std::lock_guard<std::shared_mutex>{ cm->mtx_ };
+    cm->states_.erase(cm->states_.iterator_to(*this));
   }
 }
 
@@ -246,17 +255,15 @@ auto commit_manager_impl::state_impl_::get_cm_or_null() const noexcept -> std::s
 
 
 commit_manager_impl::write_id_state_impl_::~write_id_state_impl_() noexcept {
-  if (is_linked()) {
-    const auto raw_cm = get_cm_or_null();
-    if (raw_cm != nullptr) {
+  const auto raw_cm = get_cm_or_null();
+  if (raw_cm != nullptr) {
 #ifdef NDEBUG
-      const auto cm = std::static_pointer_cast<commit_manager_impl>(raw_cm);
+    const auto cm = std::static_pointer_cast<commit_manager_impl>(raw_cm);
 #else
-      const auto cm = std::dynamic_pointer_cast<commit_manager_impl>(raw_cm);
-      assert(cm != nullptr);
+    const auto cm = std::dynamic_pointer_cast<commit_manager_impl>(raw_cm);
+    assert(cm != nullptr);
 #endif
-      cm->null_commit_(*this);
-    }
+    cm->null_commit_(*this);
   }
 }
 

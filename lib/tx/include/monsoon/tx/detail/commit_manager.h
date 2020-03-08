@@ -8,6 +8,7 @@
 #include <monsoon/cheap_fn_ref.h>
 #include <cstddef>
 #include <cstdint>
+#include <iosfwd>
 #include <memory>
 #include <system_error>
 
@@ -174,6 +175,8 @@ auto operator> (const commit_manager::commit_id& x, const commit_manager::commit
 auto operator<=(const commit_manager::commit_id& x, const commit_manager::commit_id& y) noexcept;
 auto operator>=(const commit_manager::commit_id& x, const commit_manager::commit_id& y) noexcept;
 
+template<typename CharT, typename Traits>
+auto operator<<(std::basic_ostream<CharT, Traits>& out, const commit_manager::commit_id& ci) -> std::basic_ostream<CharT, Traits>&;
 
 
 } /* namespace monsoon::tx::detail */

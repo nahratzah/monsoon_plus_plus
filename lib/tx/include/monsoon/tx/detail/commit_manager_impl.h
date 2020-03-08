@@ -45,7 +45,7 @@ class monsoon_tx_export_ commit_manager_impl
   class monsoon_tx_local_ state_impl_ final
   : public state_,
     public std::enable_shared_from_this<state_impl_>,
-    public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::safe_link>>
+    public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::normal_link>>
   {
     public:
     state_impl_(type tx_start, type val, commit_manager_impl& cm)
@@ -64,7 +64,7 @@ class monsoon_tx_export_ commit_manager_impl
   ///\brief Shared state for a write operation.
   class monsoon_tx_local_ write_id_state_impl_ final
   : public write_id_state_,
-    public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::safe_link>>
+    public boost::intrusive::list_base_hook<boost::intrusive::link_mode<boost::intrusive::normal_link>>
   {
     friend commit_manager_impl;
 

@@ -62,20 +62,37 @@ class monsoon_tx_export_ tx_sequencer
     ///\return The new transaction.
     template<typename CB>
     explicit tx(std::shared_ptr<tx_sequencer> seq, CB&& cb)
-    : seq_(seq),
-      record_(new record())
+    : seq_(seq)
     {
       std::lock_guard<std::shared_mutex> lck{ seq->mtx_ };
 
       std::invoke(std::forward<CB>(cb));
 
-      boost::intrusive_ptr<tx_sequencer::record> tmp = record_;
+      boost::intrusive_ptr<tx_sequencer::record> tmp = record_ = new record();
       seq->c_.push_back(*tmp);
       tmp.detach();
     }
 
     tx() = default;
     ~tx() noexcept;
+
+    tx(const tx&) = delete;
+    tx& operator=(const tx&) = delete;
+
+    tx(tx&& y) noexcept
+    : seq_(std::move(y.seq_)),
+      record_()
+    {
+      record_.swap(y.record_);
+    }
+
+    tx& operator=(tx&& y) noexcept {
+      if (&y != this) {
+        seq_ = std::move(y.seq_);
+        (record_ = nullptr).swap(y.record_);
+      }
+      return *this;
+    }
 
     /**
      * \brief Perform a transaction-isolated read.
