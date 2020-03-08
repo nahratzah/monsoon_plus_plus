@@ -101,7 +101,9 @@ class monsoon_tx_export_ db
  * \details
  * Interface for specific types that participate in a transaction.
  */
-class monsoon_tx_export_ db::transaction_obj {
+class monsoon_tx_export_ db::transaction_obj
+: public cycle_ptr::cycle_base
+{
   friend transaction;
 
   public:
@@ -117,11 +119,6 @@ class monsoon_tx_export_ db::transaction_obj {
   virtual void do_commit_phase2(const detail::commit_manager::commit_id& write_id) noexcept;
   virtual auto do_validate(const detail::commit_manager::commit_id& write_id) -> std::error_code;
   virtual void do_rollback() noexcept;
-
-  protected:
-  ///\brief Mutex that controls modification of layout.
-  ///\details A layout modification is anything that would affect the offset of a tx_aware_data.
-  virtual std::shared_mutex& layout_lck() const = 0;
 };
 
 
@@ -184,7 +181,7 @@ class monsoon_tx_export_ db::transaction {
   detail::commit_manager::commit_id seq_;
   bool read_only_;
   bool active_ = false;
-  std::unordered_map<cycle_ptr::cycle_gptr<const void>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
+  std::unordered_map<cycle_ptr::cycle_gptr<db_obj>, cycle_ptr::cycle_gptr<transaction_obj>> callbacks_;
   std::weak_ptr<db> self_;
 
   ///\brief Set of objects that are being deleted.
@@ -193,6 +190,15 @@ class monsoon_tx_export_ db::transaction {
   std::unordered_set<cycle_ptr::cycle_gptr<tx_aware_data>> created_set_;
   ///\brief Set of objects that must not be deleted/modified.
   std::unordered_set<cycle_ptr::cycle_gptr<tx_aware_data>> require_set_;
+};
+
+
+class monsoon_tx_export_ db::db_obj {
+  friend db::transaction;
+
+  protected:
+  ///\brief Lock held during layout modifications.
+  std::shared_mutex layout_mtx;
 };
 
 

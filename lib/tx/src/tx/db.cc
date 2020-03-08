@@ -227,7 +227,7 @@ auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<
       std::back_inserter(layout_locks),
       [](const auto& pair) -> std::shared_lock<std::shared_mutex> {
         return std::shared_lock<std::shared_mutex>(
-            pair.second->layout_lck(),
+            pair.first->layout_mtx,
             std::defer_lock);
       });
 
