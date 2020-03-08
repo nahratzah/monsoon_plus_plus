@@ -32,8 +32,8 @@ auto cm_do_noexcept_(Fn&& fn) noexcept -> decltype(auto) {
 
 
 commit_manager_impl::commit_manager_impl(monsoon::io::fd::offset_type off, allocator_type alloc)
-: off_(off),
-  alloc_(alloc)
+: commit_manager(std::move(alloc)),
+  off_(off)
 {}
 
 commit_manager_impl::~commit_manager_impl() noexcept = default;
@@ -88,13 +88,13 @@ void commit_manager_impl::init(txfile::transaction& tx, monsoon::io::fd::offset_
   monsoon::io::write_at(tx, off, &buf, sizeof(buf));
 }
 
-auto commit_manager_impl::get_tx_commit_id() const -> commit_id {
+auto commit_manager_impl::do_get_tx_commit_id_([[maybe_unused]] allocator_type tx_alloc) const -> commit_id {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
   assert(get_commit_id_state(completed_commit_id_) != nullptr);
   return completed_commit_id_;
 }
 
-auto commit_manager_impl::prepare_commit(txfile& f) -> write_id {
+auto commit_manager_impl::do_prepare_commit_(txfile& f, allocator_type tx_alloc) -> write_id {
   std::shared_ptr<state_impl_> cid_state;
 
   auto tx = f.begin(false); // WAL-transaction for the commit-id transaction.
@@ -135,7 +135,7 @@ auto commit_manager_impl::prepare_commit(txfile& f) -> write_id {
   const type big_endian_commit_id = boost::endian::native_to_big(cid.val());
   monsoon::io::write_at(tx, off_ + OFF_COMPLETED_COMMIT_ID, &big_endian_commit_id, sizeof(big_endian_commit_id));
 
-  auto s = std::allocate_shared<write_id_state_impl_>(traits_type::rebind_alloc<write_id_state_>(alloc_), std::move(cid), std::move(tx));
+  auto s = std::allocate_shared<write_id_state_impl_>(traits_type::rebind_alloc<write_id_state_>(tx_alloc), std::move(cid), std::move(tx));
   writes_.push_back(*s); // Never throws.
   return make_write_id(std::move(s)); // Never throws.
 }

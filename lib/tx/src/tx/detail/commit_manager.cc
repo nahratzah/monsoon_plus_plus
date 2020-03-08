@@ -25,5 +25,21 @@ auto commit_manager::allocate(const txfile& f, monsoon::io::fd::offset_type off,
   }
 }
 
+auto commit_manager::get_tx_commit_id() const -> commit_id {
+  return get_tx_commit_id(alloc_);
+}
+
+auto commit_manager::get_tx_commit_id(allocator_type tx_alloc) const -> commit_id {
+  return do_get_tx_commit_id_(std::move(tx_alloc));
+}
+
+auto commit_manager::prepare_commit(txfile& f) -> write_id {
+  return prepare_commit(f, alloc_);
+}
+
+auto commit_manager::prepare_commit(txfile& f, allocator_type tx_alloc) -> write_id {
+  return do_prepare_commit_(f, std::move(tx_alloc));
+}
+
 
 } /* namespace monsoon::tx::detail */

@@ -106,7 +106,7 @@ class monsoon_tx_export_ commit_manager {
 
   protected:
   ///\brief Don't use the constructor, but use the allocate method instead.
-  commit_manager() = default;
+  commit_manager(allocator_type alloc) : alloc_(std::move(alloc)) {}
   virtual ~commit_manager() noexcept = 0;
 
   public:
@@ -116,11 +116,34 @@ class monsoon_tx_export_ commit_manager {
 
   ///\brief Allocate a transaction ID.
   ///\details This is for transaction read operations only.
-  virtual auto get_tx_commit_id() const -> commit_id = 0;
+  auto get_tx_commit_id() const -> commit_id;
+  ///\brief Allocate a transaction ID.
+  ///\details This is for transaction read operations only.
+  ///\param tx_alloc Allocator to use for transaction specific information.
+  auto get_tx_commit_id(allocator_type tx_alloc) const -> commit_id;
   ///\brief Allocate a transaction ID for writing.
   ///\details This transaction ID can be used to prepare transactions.
   ///\note Transactions are executed in order of commit ID.
-  virtual auto prepare_commit(txfile& f) -> write_id = 0;
+  ///\param f The file on which this commit_manager operates.
+  auto prepare_commit(txfile& f) -> write_id;
+  ///\brief Allocate a transaction ID for writing.
+  ///\details This transaction ID can be used to prepare transactions.
+  ///\note Transactions are executed in order of commit ID.
+  ///\param f The file on which this commit_manager operates.
+  ///\param tx_alloc Allocator to use for transaction specific information.
+  auto prepare_commit(txfile& f, allocator_type tx_alloc) -> write_id;
+
+  private:
+  ///\brief Allocate a transaction ID.
+  ///\details This is for transaction read operations only.
+  ///\param tx_alloc Allocator to use for transaction specific information.
+  virtual auto do_get_tx_commit_id_(allocator_type tx_alloc) const -> commit_id = 0;
+  ///\brief Allocate a transaction ID for writing.
+  ///\details This transaction ID can be used to prepare transactions.
+  ///\note Transactions are executed in order of commit ID.
+  ///\param f The file on which this commit_manager operates.
+  ///\param tx_alloc Allocator to use for transaction specific information.
+  virtual auto do_prepare_commit_(txfile& f, allocator_type tx_alloc) -> write_id = 0;
 
   protected:
   ///\brief Helper function to expose the commit_id constructor to derived types.
@@ -135,6 +158,10 @@ class monsoon_tx_export_ commit_manager {
   virtual auto suggest_vacuum_target_() const -> commit_id = 0;
   ///\brief Update after a vacuum operation completed.
   virtual void on_completed_vacuum_(txfile& f, commit_id vacuum_target) = 0;
+
+  protected:
+  ///\brief Allocator.
+  allocator_type alloc_;
 };
 
 

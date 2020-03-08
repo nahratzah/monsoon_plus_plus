@@ -103,15 +103,10 @@ class monsoon_tx_export_ commit_manager_impl
   ///\param off Offset in \p tx at which to initialize the commit manager.
   static void init(txfile::transaction& tx, monsoon::io::fd::offset_type off);
 
-  ///\brief Allocate a transaction ID.
-  ///\details This is for transaction read operations only.
-  auto get_tx_commit_id() const -> commit_id override;
-  ///\brief Allocate a transaction ID for writing.
-  ///\details This transaction ID can be used to prepare transactions.
-  ///\note Transactions are executed in order of commit ID.
-  auto prepare_commit(txfile& f) -> write_id override;
-
   private:
+  auto do_get_tx_commit_id_(allocator_type tx_alloc) const -> commit_id override;
+  auto do_prepare_commit_(txfile& f, allocator_type tx_alloc) -> write_id override;
+
   ///\brief Accept the dropped write state.
   void null_commit_(write_id_state_impl_& s) noexcept;
   ///\brief See if we can start the front commit.
@@ -143,8 +138,6 @@ class monsoon_tx_export_ commit_manager_impl
   write_list writes_;
   ///\brief Offset in txfile of this.
   monsoon::io::fd::offset_type off_;
-  ///\brief Allocator.
-  allocator_type alloc_;
 };
 
 
