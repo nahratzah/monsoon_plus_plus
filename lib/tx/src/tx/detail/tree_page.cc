@@ -162,7 +162,8 @@ void abstract_tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_
         auto e = allocate_elem_(t->allocator);
         e->decode(boost::asio::buffer(buf.data(), bytes_per_val));
         buf += bytes_per_val;
-        return (e->is_never_visible() ? nullptr : e);
+        if (e->is_never_visible()) e.reset();
+        return e;
       });
 
   assert(buf.size() == 0); // Buffer should have been fully consumed.
