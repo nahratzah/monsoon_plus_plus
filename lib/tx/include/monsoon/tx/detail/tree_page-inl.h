@@ -2,9 +2,12 @@
 #define MONSOON_TX_DETAIL_TREE_PAGE_INL_H
 
 #include <algorithm>
-#include <iterator>
-#include <utility>
 #include <cassert>
+#include <iterator>
+#include <numeric>
+#include <utility>
+#include <boost/endian/conversion.hpp>
+#include <monsoon/tx/detail/tree_spec.h>
 
 namespace monsoon::tx::detail {
 
@@ -109,6 +112,84 @@ inline tree_page_leaf<Key, Val, Augments...>::~tree_page_leaf() noexcept = defau
 template<typename Key, typename Val, typename... Augments>
 inline auto tree_page_leaf<Key, Val, Augments...>::allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
   return cycle_ptr::allocate_cycle<tree_elem<Key, Val, Augments...>>(alloc, shared_from_this(this));
+}
+
+
+template<typename... Augments>
+inline tree_page_branch_elem<Augments...>::tree_page_branch_elem(std::uint64_t off, std::tuple<Augments...> augments)
+    noexcept(std::is_nothrow_move_constructible_v<std::tuple<Augments...>>)
+: abstract_tree_page_branch_elem(off),
+  augments(std::move(augments))
+{}
+
+template<typename... Augments>
+inline void tree_page_branch_elem<Augments...>::decode(boost::asio::const_buffer buf) {
+  assert(buf.size() >= sum_(sizeof(off), Augments::SIZE...));
+
+  boost::asio::buffer_copy(boost::asio::buffer(&off, sizeof(off)), buf);
+  boost::endian::big_to_native_inplace(off);
+
+  decode_idx_seq_(buf, std::index_sequence_for<Augments...>());
+}
+
+template<typename... Augments>
+inline void tree_page_branch_elem<Augments...>::encode(boost::asio::mutable_buffer buf) const {
+  assert(buf.size() >= sum_(sizeof(off), Augments::SIZE...));
+
+  const decltype(off) off_be = boost::endian::native_to_big(off);
+  boost::asio::buffer_copy(buf, boost::asio::buffer(&off_be, sizeof(off_be)));
+
+  encode_idx_seq_(buf, std::index_sequence_for<Augments...>());
+}
+
+template<typename... Augments>
+template<std::size_t Idx0, std::size_t... Idxs>
+inline void tree_page_branch_elem<Augments...>::decode_idx_seq_(boost::asio::const_buffer buf, [[maybe_unused]] std::index_sequence<Idx0, Idxs...> seq) {
+  this->template decode_idx_<Idx0>(buf);
+  this->decode_idx_seq_(buf, std::index_sequence<Idxs...>());
+}
+
+template<typename... Augments>
+template<std::size_t Idx0, std::size_t... Idxs>
+inline void tree_page_branch_elem<Augments...>::encode_idx_seq_(boost::asio::mutable_buffer buf, [[maybe_unused]] std::index_sequence<Idx0, Idxs...> seq) const {
+  this->template encode_idx_<Idx0>(buf);
+  this->encode_idx_seq_(buf, std::index_sequence<Idxs...>());
+}
+
+template<typename... Augments>
+inline void tree_page_branch_elem<Augments...>::decode_idx_seq_(boost::asio::const_buffer buf, [[maybe_unused]] std::index_sequence<> seq) noexcept {}
+
+template<typename... Augments>
+inline void tree_page_branch_elem<Augments...>::encode_idx_seq_(boost::asio::mutable_buffer buf, [[maybe_unused]] std::index_sequence<> seq) const noexcept {}
+
+template<typename... Augments>
+template<std::size_t Idx>
+inline void tree_page_branch_elem<Augments...>::decode_idx_(boost::asio::const_buffer buf) {
+  // Set the buffer to only the range described by this augment.
+  assert(buf.size() >= augment_offset(Idx + 1u));
+  buf += augment_offset(Idx);
+  buf = boost::asio::buffer(buf.data(), augment_offset(Idx + 1u) - augment_offset(Idx));
+  // Invoke decoder.
+  std::get<Idx>(augments).decode(buf);
+}
+
+template<typename... Augments>
+template<std::size_t Idx>
+inline void tree_page_branch_elem<Augments...>::encode_idx_(boost::asio::mutable_buffer buf) const {
+  // Set the buffer to only the range described by this augment.
+  assert(buf.size() >= augment_offset(Idx + 1u));
+  buf += augment_offset(Idx);
+  buf = boost::asio::buffer(buf.data(), augment_offset(Idx + 1u) - augment_offset(Idx));
+  // Invoke decoder.
+  std::get<Idx>(augments).encode(buf);
+}
+
+template<typename... Augments>
+inline auto tree_page_branch_elem<Augments...>::augment_offset(std::size_t idx) -> std::size_t {
+  assert(idx <= sizeof...(Augments));  // We allow idx to be the 'end' index.
+
+  const std::array<std::size_t, sizeof...(Augments)> sizes{{ Augments::SIZE... }};
+  return std::accumulate(sizes.begin(), sizes.begin() + idx, sizeof(off));
 }
 
 

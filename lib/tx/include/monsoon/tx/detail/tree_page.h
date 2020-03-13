@@ -7,9 +7,10 @@
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/cheap_fn_ref.h>
 #include <monsoon/shared_resource_allocator.h>
-#include <shared_mutex>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <shared_mutex>
 #include <tuple>
 #include <type_traits>
 #include <vector>
@@ -21,19 +22,20 @@ namespace monsoon::tx::detail {
 
 
 class abstract_tree;
-class abstract_tree_elem;
 class abstract_tree_page;
 class abstract_tree_page_leaf;
 class abstract_tree_page_branch;
-
-template<typename Key, typename Val, typename... Augments>
-class tree_elem;
+class abstract_tree_elem;
+class abstract_tree_page_branch_elem;
 
 template<typename Key, typename Val, typename... Augments>
 class tree_page_leaf;
 
 template<typename Key, typename Val, typename... Augments>
 class tree_page_branch;
+
+template<typename Key, typename Val, typename... Augments>
+class tree_elem;
 
 
 class monsoon_tx_export_ abstract_tree
@@ -139,6 +141,7 @@ class monsoon_tx_export_ abstract_tree_page_leaf
   explicit abstract_tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent);
   ~abstract_tree_page_leaf() noexcept override;
 
+  public:
   void init_empty(std::uint64_t off);
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
@@ -183,31 +186,11 @@ class monsoon_tx_export_ abstract_tree_page_branch
     virtual void encode(boost::asio::mutable_buffer buf) const = 0;
   };
 
-  ///\brief Abstract branch element.
-  class elem {
-    public:
-    static constexpr std::size_t offset_size = sizeof(std::uint64_t);
-
-    protected:
-    elem() noexcept = default;
-    elem(std::uint64_t off) noexcept : off(off) {}
-    virtual ~elem() noexcept = 0;
-
-    public:
-    virtual void decode(boost::asio::const_buffer buf) = 0;
-    virtual void encode(boost::asio::mutable_buffer buf) const = 0;
-
-    ///\brief Offset of the page this branch element points at.
-    std::uint64_t off = 0;
-  };
-
   private:
   using elems_vector = std::vector<
-      cycle_ptr::cycle_member_ptr<elem>,
-      cycle_ptr::cycle_allocator<
-          abstract_tree::traits_type::rebind_alloc<
-              cycle_ptr::cycle_member_ptr<elem>
-          >
+      std::shared_ptr<abstract_tree_page_branch_elem>,
+      abstract_tree::traits_type::rebind_alloc<
+          std::shared_ptr<abstract_tree_page_branch_elem>
       >
   >;
 
@@ -225,11 +208,12 @@ class monsoon_tx_export_ abstract_tree_page_branch
   explicit abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent);
   ~abstract_tree_page_branch() noexcept override;
 
+  public:
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
   private:
-  virtual auto allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<elem> = 0;
+  virtual auto allocate_elem_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
   virtual auto allocate_key_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<key> = 0;
 
   elems_vector elems_;
@@ -268,6 +252,40 @@ class monsoon_tx_export_ abstract_tree_elem
 };
 
 
+///\brief Abstract branch element.
+///\details Holds the child-page offset and augmentations.
+class monsoon_tx_export_ abstract_tree_page_branch_elem {
+  public:
+  static constexpr std::size_t offset_size = sizeof(std::uint64_t);
+
+  protected:
+  abstract_tree_page_branch_elem() noexcept = default;
+  explicit abstract_tree_page_branch_elem(std::uint64_t off) noexcept : off(off) {}
+  virtual ~abstract_tree_page_branch_elem() noexcept = 0;
+
+  public:
+  virtual void decode(boost::asio::const_buffer buf) = 0;
+  virtual void encode(boost::asio::mutable_buffer buf) const = 0;
+
+  ///\brief Offset of the page this branch element points at.
+  std::uint64_t off = 0;
+};
+
+
+template<typename Key, typename Val, typename... Augments>
+class tree_page_leaf final
+: public abstract_tree_page_leaf
+{
+  public:
+  explicit tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree);
+  explicit tree_page_leaf(cycle_ptr::cycle_gptr<tree_page_branch<Key, Val, Augments...>> parent);
+  ~tree_page_leaf() noexcept;
+
+  private:
+  auto allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override;
+};
+
+
 template<typename Key, typename Val, typename... Augments>
 class tree_elem
 : public abstract_tree_elem
@@ -300,18 +318,40 @@ class tree_elem
 };
 
 
-template<typename Key, typename Val, typename... Augments>
-class tree_page_leaf final
-: public abstract_tree_page_leaf
+template<typename... Augments>
+class tree_page_branch_elem
+: public abstract_tree_page_branch_elem
 {
   public:
-  explicit tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree);
-  explicit tree_page_leaf(cycle_ptr::cycle_gptr<tree_page_branch<Key, Val, Augments...>> parent);
-  ~tree_page_leaf() noexcept;
+  tree_page_branch_elem() = default;
+  explicit tree_page_branch_elem(std::uint64_t off, std::tuple<Augments...> augments)
+      noexcept(std::is_nothrow_move_constructible_v<std::tuple<Augments...>>);
+
+  void decode(boost::asio::const_buffer buf) override final;
+  void encode(boost::asio::mutable_buffer buf) const override final;
 
   private:
-  auto allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override;
+  template<std::size_t Idx0, std::size_t... Idxs>
+  void decode_idx_seq_(boost::asio::const_buffer buf, [[maybe_unused]] std::index_sequence<Idx0, Idxs...> seq);
+  template<std::size_t Idx0, std::size_t... Idxs>
+  void encode_idx_seq_(boost::asio::mutable_buffer buf, [[maybe_unused]] std::index_sequence<Idx0, Idxs...> seq) const;
+
+  void decode_idx_seq_(boost::asio::const_buffer buf, [[maybe_unused]] std::index_sequence<> seq) noexcept;
+  void encode_idx_seq_(boost::asio::mutable_buffer buf, [[maybe_unused]] std::index_sequence<> seq) const noexcept;
+
+  template<std::size_t Idx>
+  void decode_idx_(boost::asio::const_buffer buf);
+  template<std::size_t Idx>
+  void encode_idx_(boost::asio::mutable_buffer buf) const;
+
+  static auto augment_offset(std::size_t idx) -> std::size_t;
+
+  public:
+  std::tuple<Augments...> augments;
 };
+
+
+extern template class monsoon_tx_export_ tree_page_branch_elem<>;
 
 
 } /* namespace monsoon::tx::detail */

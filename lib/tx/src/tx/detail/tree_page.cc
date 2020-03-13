@@ -208,7 +208,7 @@ void abstract_tree_page_leaf::encode(txfile::transaction& tx) const {
 
 abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree)
 : abstract_tree_page(std::move(tree)),
-  elems_(elems_vector::allocator_type(*this, this->tree()->allocator)),
+  elems_(this->tree()->allocator),
   keys_(keys_vector::allocator_type(*this, this->tree()->allocator))
 {
   elems_.reserve(cfg->items_per_node_page);
@@ -216,7 +216,7 @@ abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstr
 
 abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent)
 : abstract_tree_page(std::move(parent)),
-  elems_(elems_vector::allocator_type(*this, this->tree()->allocator)),
+  elems_(this->tree()->allocator),
   keys_(keys_vector::allocator_type(*this, this->tree()->allocator))
 {
   elems_.reserve(cfg->items_per_node_page);
@@ -227,7 +227,7 @@ abstract_tree_page_branch::~abstract_tree_page_branch() noexcept = default;
 void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) {
   assert(elems_.empty());
 
-  const std::size_t bytes_per_elem = elem::offset_size + cfg->augment_bytes;
+  const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
   const std::size_t bytes_per_key = cfg->key_bytes;
   const std::size_t page_bytes = header::SIZE
       + (cfg->items_per_node_page - 1u) * bytes_per_key
@@ -249,7 +249,7 @@ void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint6
   const auto t = tree();
 
   // Decode elems_[0].
-  cycle_ptr::cycle_gptr<elem> e = allocate_elem_(t->allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> e = allocate_elem_(t->allocator);
   assert(buf.size() >= bytes_per_elem);
   e->decode(boost::asio::buffer(buf.data(), bytes_per_elem));
   buf += bytes_per_elem;
@@ -279,7 +279,7 @@ void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint6
 void abstract_tree_page_branch::encode(txfile::transaction& tx) const {
   if (elems_.size() > cfg->items_per_node_page) throw tree_error("too many items in tree branch");
 
-  const std::size_t bytes_per_elem = elem::offset_size + cfg->augment_bytes;
+  const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
   const std::size_t bytes_per_key = cfg->key_bytes;
   const std::size_t page_bytes = header::SIZE
       + (cfg->items_per_node_page - 1u) * bytes_per_key
@@ -349,6 +349,12 @@ auto abstract_tree_elem::lock_parent_for_write() const
     if (p == parent_) return std::make_tuple(std::move(p), std::move(p_lck));
   }
 }
+
+
+abstract_tree_page_branch_elem::~abstract_tree_page_branch_elem() noexcept = default;
+
+
+template class tree_page_branch_elem<>;
 
 
 } /* namespace monsoon::tx::detail */
