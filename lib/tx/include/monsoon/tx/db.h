@@ -193,10 +193,19 @@ class monsoon_tx_export_ db::transaction {
 };
 
 
-class monsoon_tx_export_ db::db_obj {
+class monsoon_tx_export_ db::db_obj
+: public cycle_ptr::cycle_base
+{
   friend db::transaction;
 
   protected:
+  db_obj() = default;
+  db_obj(const db_obj&) = delete;
+  db_obj& operator=(const db_obj&) = delete;
+  db_obj(db_obj&&) = delete;
+  db_obj& operator=(db_obj&&) = delete;
+  virtual ~db_obj() noexcept = 0;
+
   ///\brief Lock held during layout modifications.
   std::shared_mutex layout_mtx;
 };

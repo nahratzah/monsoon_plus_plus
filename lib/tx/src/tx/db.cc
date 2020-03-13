@@ -337,4 +337,7 @@ void db::transaction::rollback_() noexcept {
 }
 
 
+db::db_obj::~db_obj() noexcept = default;
+
+
 } /* namespace monsoon::tx */

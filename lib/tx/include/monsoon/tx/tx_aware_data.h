@@ -50,6 +50,7 @@ class monsoon_tx_export_ tx_aware_data {
   public:
   ///\brief Test if the datum is visible in this commit ID.
   auto visible_in_tx(const detail::commit_manager::commit_id& tx_id) const noexcept -> bool;
+  auto is_never_visible() const noexcept -> bool;
 
   private:
   ///\brief Find the offset of this datum.

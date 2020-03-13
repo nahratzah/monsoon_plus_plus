@@ -97,6 +97,12 @@ auto tx_aware_data::visible_in_tx(const detail::commit_manager::commit_id& tx_id
   return true;
 }
 
+auto tx_aware_data::is_never_visible() const noexcept -> bool {
+  if (deletion_always_) return true;
+  if (!creation_always_ && !creation_present_) return true;
+  return false;
+}
+
 auto tx_aware_data::make_creation_buffer(detail::commit_manager::type id) noexcept -> std::array<std::uint8_t, presence_size> {
   std::array<std::uint8_t, presence_size> result;
 
