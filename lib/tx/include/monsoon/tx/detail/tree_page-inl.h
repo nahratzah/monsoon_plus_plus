@@ -26,7 +26,9 @@ inline abstract_tree_page::abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tre
 
 
 inline abstract_tree_elem::abstract_tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent)
-: parent_(*this, std::move(parent))
+: parent_(*this, std::move(parent)),
+  pred_(*this),
+  succ_(*this)
 {}
 
 

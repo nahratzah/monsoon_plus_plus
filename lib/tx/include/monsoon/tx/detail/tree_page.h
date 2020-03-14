@@ -417,6 +417,9 @@ class monsoon_tx_export_ abstract_tree_elem
 
   protected:
   cycle_ptr::cycle_member_ptr<tree_page_leaf> parent_;
+
+  private:
+  cycle_ptr::cycle_member_ptr<abstract_tree_elem> pred_, succ_;
 };
 
 

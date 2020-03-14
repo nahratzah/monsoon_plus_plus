@@ -186,6 +186,22 @@ void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
       });
 
   assert(buf.size() == 0); // Buffer should have been fully consumed.
+
+  // Fix up the predecessor and successor pointers of the elements.
+  const auto find_not_null = [this](elems_vector::iterator iter) -> elems_vector::iterator {
+    return std::find_if(
+        iter, elems_.end(),
+        [](const auto& ptr) noexcept -> bool { return ptr != nullptr; });
+  };
+  auto pred = find_not_null(elems_.begin());
+  if (pred != elems_.end()) {
+    for (auto succ = find_not_null(std::next(pred));
+        succ != elems_.end();
+        pred = std::exchange(succ, find_not_null(std::next(succ)))) {
+      (*succ)->pred_ = *pred;
+      (*pred)->succ_ = *succ;
+    }
+  }
 }
 
 void tree_page_leaf::encode(txfile::transaction& tx) const {
@@ -291,6 +307,16 @@ auto tree_page_leaf::local_split_(
   auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment));
 
   auto after_commit = [&]() noexcept {
+    // Break the pred/succ link in the elements.
+    {
+      std::lock_guard<std::shared_mutex> elem_lck{ (*sibling_begin)->mtx_ref_() };
+      (*sibling_begin)->pred_.reset();
+    }
+    {
+      std::lock_guard<std::shared_mutex> elem_lck{ (*std::prev(sibling_begin))->mtx_ref_() };
+      (*std::prev(sibling_begin))->succ_.reset();
+    }
+
     // Update predecessor offset if (old) successor is loaded in memory.
     const auto old_successor = boost::polymorphic_pointer_downcast<tree_page_leaf>(t->get_if_present(next_sibling_off_));
     if (old_successor != nullptr) {
