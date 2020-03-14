@@ -131,11 +131,7 @@ class monsoon_tx_export_ abstract_tree_page
   auto is_my_mutex(const std::shared_mutex* m) const noexcept -> bool { return m == &mtx_; }
   ///\brief Update parent offset, after reparenting.
   ///\note On-disk representation should already be updated.
-  void reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept {
-    std::lock_guard<std::shared_mutex> lck{ mtx_ };
-    assert(parent_off_ == old_parent_off || parent_off_ == new_parent_off); // We may have been loaded before the write, or after the write.
-    parent_off_ = new_parent_off;
-  }
+  void reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept;
 
   private:
   /**

@@ -113,6 +113,12 @@ auto abstract_tree_page::decode(
   return page;
 }
 
+void abstract_tree_page::reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept {
+  std::lock_guard<std::shared_mutex> lck{ mtx_ };
+  assert(parent_off_ == old_parent_off || parent_off_ == new_parent_off); // We may have been loaded before or after the reparenting process started.
+  parent_off_ = new_parent_off;
+}
+
 auto abstract_tree_page::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
