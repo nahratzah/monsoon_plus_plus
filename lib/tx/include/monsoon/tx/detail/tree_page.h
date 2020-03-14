@@ -324,13 +324,13 @@ class tree_elem
   ///\details May only be called without a lock on this element.
   ///\note While the parent is locked, this element can't change parent.
   auto lock_parent_for_read() const
-  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>>, std::shared_lock<std::shared_mutex>>;
+  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::shared_lock<std::shared_mutex>>;
 
   ///\brief Acquire the parent and lock it for write.
   ///\details May only be called without a lock on this element.
   ///\note While the parent is locked, this element can't change parent.
   auto lock_parent_for_write() const
-  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>>, std::unique_lock<std::shared_mutex>>;
+  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::unique_lock<std::shared_mutex>>;
 
   private:
   Key key_;

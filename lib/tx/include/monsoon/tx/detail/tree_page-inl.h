@@ -64,17 +64,17 @@ inline void tree_elem<Key, Val, Augments...>::encode(boost::asio::mutable_buffer
 
 template<typename Key, typename Val, typename... Augments>
 inline auto tree_elem<Key, Val, Augments...>::lock_parent_for_read() const
--> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>>, std::shared_lock<std::shared_mutex>> {
+-> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::shared_lock<std::shared_mutex>> {
   cycle_ptr::cycle_gptr<abstract_tree_page_leaf> p;
   std::shared_lock<std::shared_mutex> lck;
   std::tie(p, lck) = this->abstract_tree_elem::lock_parent_for_read();
 
 #ifdef NDEBUG
-  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> casted_p =
-      std::static_pointer_cast<tree_page_leaf<Key, Val>>(p);
+  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
+      std::static_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
 #else
-  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> casted_p =
-      std::dynamic_pointer_cast<tree_page_leaf<Key, Val>>(p);
+  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
+      std::dynamic_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
   assert(casted_p != nullptr); // Means the dynamic type wasn't found.
 #endif
 
@@ -83,17 +83,17 @@ inline auto tree_elem<Key, Val, Augments...>::lock_parent_for_read() const
 
 template<typename Key, typename Val, typename... Augments>
 inline auto tree_elem<Key, Val, Augments...>::lock_parent_for_write() const
--> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>>, std::unique_lock<std::shared_mutex>> {
+-> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::unique_lock<std::shared_mutex>> {
   cycle_ptr::cycle_gptr<abstract_tree_page_leaf> p;
   std::unique_lock<std::shared_mutex> lck;
   std::tie(p, lck) = this->abstract_tree_elem::lock_parent_for_write();
 
 #ifdef NDEBUG
-  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> casted_p =
-      std::static_pointer_cast<tree_page_leaf<Key, Val>>(p);
+  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
+      std::static_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
 #else
-  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> casted_p =
-      std::dynamic_pointer_cast<tree_page_leaf<Key, Val>>(p);
+  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
+      std::dynamic_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
   assert(casted_p != nullptr); // Means the dynamic type wasn't found.
 #endif
 
