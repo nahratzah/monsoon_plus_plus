@@ -12,7 +12,10 @@ inline db::transaction::transaction(transaction&& other) noexcept
   read_only_(std::move(other.read_only_)),
   active_(std::exchange(other.active_, false)),
   callbacks_(std::move(other.callbacks_)),
-  self_(std::move(other.self_))
+  self_(std::move(other.self_)),
+  deleted_set_(std::move(other.deleted_set_)),
+  created_set_(std::move(other.created_set_)),
+  require_set_(std::move(other.require_set_))
 {}
 
 inline auto db::transaction::operator=(transaction&& other) noexcept -> transaction& {
