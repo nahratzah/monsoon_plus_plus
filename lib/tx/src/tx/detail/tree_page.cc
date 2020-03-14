@@ -256,6 +256,14 @@ auto tree_page_leaf::local_split_(
       sibling->elems_.begin());
   sibling->encode(tx);
 
+  // Change predecessor pointer of current successor to point at sibling.
+  if (next_sibling_off_ != 0) {
+    header h;
+    h.prev_sibling_off = new_page_off;
+    h.native_to_big_endian();
+    monsoon::io::write_at(tx, next_sibling_off_ + offsetof(header, prev_sibling_off), &h.prev_sibling_off, sizeof(h.prev_sibling_off));
+  }
+
   // Invalidate our moved elements on disk (but not yet in memory).
   const std::uint64_t zero_begin = offset_for_idx_(sibling_begin - elems_.begin());
   const std::uint64_t zero_end = offset_for_idx_(elems_.size());
@@ -271,6 +279,14 @@ auto tree_page_leaf::local_split_(
   auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment));
 
   auto after_commit = [&]() noexcept {
+    // Update predecessor offset if (old) successor is loaded in memory.
+    const auto old_successor = boost::polymorphic_pointer_downcast<tree_page_leaf>(t->get_if_present(next_sibling_off_));
+    if (old_successor != nullptr) {
+      std::lock_guard<std::shared_mutex> old_successor_lck{ old_successor->mtx_ };
+      assert(old_successor->next_sibling_off_ == off_ || old_successor->next_sibling_off_ == new_page_off);
+      old_successor->next_sibling_off_ = new_page_off;
+    }
+
     next_sibling_off_ = new_page_off;
 
     // Update parent-pointer of elements given to sibling.
