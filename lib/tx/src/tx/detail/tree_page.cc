@@ -2,6 +2,7 @@
 #include <monsoon/tx/tree_error.h>
 #include <monsoon/io/rw.h>
 #include <algorithm>
+#include <iterator>
 #include <boost/endian/conversion.hpp>
 
 namespace monsoon::tx::detail {
@@ -205,21 +206,144 @@ void abstract_tree_page_leaf::encode(txfile::transaction& tx) const {
   monsoon::io::write_at(tx, off_, buf_storage.data(), buf_storage.size());
 }
 
+auto abstract_tree_page_leaf::local_split_(
+    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+-> std::tuple<
+    std::shared_ptr<abstract_tree_page_branch_key>,
+    cycle_ptr::cycle_gptr<abstract_tree_page_leaf>,
+    std::unique_lock<std::shared_mutex>
+> {
+  assert(parent != nullptr);
+  assert(parent->offset() == parent_off_);
+  assert(lck.owns_lock() && is_my_mutex(lck.mutex()));
+  assert(parent_lck.owns_lock() && parent->is_my_mutex(parent_lck.mutex()));
+
+  // Allocate all objects and figure out parameters.
+  const elems_vector::iterator sibling_begin = split_select_(lck);
+  txfile::transaction tx = f.begin(false);
+  cycle_ptr::cycle_gptr<abstract_tree_page_leaf> sibling = nullptr; // XXX allocate something
+  std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
+  std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(tree()->allocator);
+
+  // Initialize sibling.
+  sibling->init_empty(new_page_off);
+  sibling->prev_sibling_off_ = off_;
+  sibling->next_sibling_off_ = next_sibling_off_;
+  sibling->parent_off_ = parent_off_;
+  std::copy(
+      sibling_begin, elems_.end(),
+      sibling->elems_.begin());
+  sibling->encode(tx);
+
+  // Invalidate our moved elements on disk (but not yet in memory).
+  const std::uint64_t zero_begin = offset_for_idx_(sibling_begin - elems_.begin());
+  const std::uint64_t zero_end = offset_for_idx_(elems_.size());
+  std::vector<std::uint8_t> tmp(zero_end - zero_begin);
+  std::memset(tmp.data(), 0, tmp.size());
+  monsoon::io::write_at(tx, zero_begin, tmp.data(), tmp.size());
+
+  // Compute augments for this and sibling page.
+  const auto t = tree();
+  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin });
+  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() });
+
+  // Update parent page to have the sibling present.
+  auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment));
+
+  auto after_commit = [&]() noexcept {
+    next_sibling_off_ = new_page_off;
+
+    // Update parent-pointer of elements given to sibling.
+    std::for_each(
+        sibling_begin, elems_.end(),
+        [new_page_off, &sibling](elems_vector::const_reference elem_ptr) {
+          std::lock_guard<std::shared_mutex> elem_lck{ elem_ptr->mtx_ref_() };
+          elem_ptr->parent_ = sibling;
+        });
+
+    // Release elements we gave to sibling.
+    std::fill(
+        std::make_move_iterator(sibling_begin), std::make_move_iterator(elems_.end()),
+        nullptr);
+
+    // Complete insert operation of the parent.
+    parent_insert_op.commit();
+
+    return std::forward_as_tuple(
+        std::move(sibling_key),
+        std::move(sibling),
+        std::move(sibling_lck));
+  };
+  tx.commit();
+  return after_commit();
+}
+
+auto abstract_tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+
+  struct pred_non_null_elem {
+    auto operator()(elems_vector::const_reference elem_ptr) const noexcept -> bool {
+      return elem_ptr != nullptr;
+    }
+  };
+
+  // Pick sibling_begin such that it is approximately halfway the page and is not null.
+  elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
+
+  // If there are no non-null elements preceding sibling_begin, search forward.
+  if (std::none_of(elems_.begin(), sibling_begin, pred_non_null_elem())) {
+    sibling_begin = std::find_if(sibling_begin, elems_.end(), pred_non_null_elem());
+    if (sibling_begin == elems_.end()) throw std::logic_error("cannot split empty page");
+    ++sibling_begin;
+  }
+
+  // Ensure sibling_begin points at a non-null element.
+  sibling_begin = std::find_if(sibling_begin, elems_.end(), pred_non_null_elem());
+  if (sibling_begin == elems_.end()) throw std::logic_error("cannot split page with only 1 element");
+
+  // Validate post-conditions.
+  assert(sibling_begin != elems_.end()); // sibling_begin is dereferencable
+  assert(*sibling_begin != nullptr); // sibling_begin is not a nullptr
+  assert(std::any_of(elems_.begin(), sibling_begin, pred_non_null_elem())); // Retained range contains at least 1 element.
+  assert(std::any_of(sibling_begin, elems_.end(), pred_non_null_elem())); // Suffix range contains at least 1 element.
+  return sibling_begin;
+}
+
+auto abstract_tree_page_leaf::offset_for_idx_(elems_vector::size_type idx) const noexcept -> std::uint64_t {
+  assert(idx <= cfg->items_per_leaf_page); // We allow the "end" index.
+
+  const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
+  return header::SIZE + idx * bytes_per_val;
+}
+
+auto abstract_tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const noexcept -> std::uint64_t {
+  const auto pos = std::find_if(
+      elems_.begin(), elems_.end(),
+      [&elem](elems_vector::const_reference ptr) -> bool {
+        return ptr.get() == &elem;
+      });
+  assert(pos != elems_.end());
+  return offset_for_idx_(pos - elems_.begin());
+}
+
 
 abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree)
-: abstract_tree_page(std::move(tree)),
-  elems_(this->tree()->allocator),
-  keys_(keys_vector::allocator_type(*this, this->tree()->allocator))
+: abstract_tree_page(tree),
+  elems_(tree->allocator),
+  keys_(tree->allocator)
 {
   elems_.reserve(cfg->items_per_node_page);
+  keys_.reserve(cfg->items_per_node_page - 1u);
 }
 
 abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent)
 : abstract_tree_page(std::move(parent)),
   elems_(this->tree()->allocator),
-  keys_(keys_vector::allocator_type(*this, this->tree()->allocator))
+  keys_(this->tree()->allocator)
 {
   elems_.reserve(cfg->items_per_node_page);
+  keys_.reserve(cfg->items_per_node_page - 1u);
 }
 
 abstract_tree_page_branch::~abstract_tree_page_branch() noexcept = default;
@@ -255,7 +379,7 @@ void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint6
   buf += bytes_per_elem;
   elems_.emplace_back(std::move(e));
 
-  cycle_ptr::cycle_gptr<key> k;
+  std::shared_ptr<abstract_tree_page_branch_key> k;
   for (std::uint32_t i = 1; i < h.size; ++i) {
     // Decode key separating elems_[i-1] and elems_[i].
     k = allocate_key_(t->allocator);
@@ -317,6 +441,105 @@ void abstract_tree_page_branch::encode(txfile::transaction& tx) const {
   monsoon::io::write_at(tx, off_, buf_storage.data(), buf_storage.size());
 }
 
+auto abstract_tree_page_branch::insert_sibling(
+    const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
+    const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
+    [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
+-> insert_sibling_tx {
+  const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
+  const std::size_t bytes_per_key = cfg->key_bytes;
+
+  insert_sibling_tx r;
+
+  r.elems_pos = std::find_if(
+      elems_.begin(), elems_.end(),
+      [&precede_page](const auto& ptr) -> bool { return ptr->off == precede_page.offset(); });
+  if (r.elems_pos == elems_.end())
+    throw std::logic_error("can't insert sibling: preceding page not found");
+  const elems_vector::size_type idx = r.elems_pos - elems_.begin();
+  r.keys_insert_pos = keys_.begin() + idx;
+
+  // Verify we are not going to exceed size constraints.
+  if (elems_.size() >= cfg->items_per_node_page)
+    throw std::logic_error("can't insert sibling into full parent page");
+
+  // Validate offsets in elem.
+  assert(precede_page.offset() == precede_augment->off);
+  assert(new_sibling.offset() == sibling_augment->off);
+
+  // Update size.
+  {
+    header h;
+    h.size = elems_.size() + 1u;
+    h.native_to_big_endian();
+    monsoon::io::write_at(tx, offset() + offsetof(header, size), &h.size, sizeof(h.size));
+  }
+
+  // Update on-disk state.
+  const auto write_offset = offset() + header::SIZE + idx * (bytes_per_elem + bytes_per_key);
+  const auto write_len = (elems_.size() - idx + 1u) * (bytes_per_elem + bytes_per_key);
+  auto buf_storage = std::vector<std::uint8_t, abstract_tree::traits_type::rebind_alloc<std::uint8_t>>(write_len, tree()->allocator);
+  auto buf = boost::asio::buffer(buf_storage);
+
+  // At elems_[idx], write the updated augmentation.
+  assert(buf.size() >= bytes_per_elem);
+  precede_augment->encode(boost::asio::buffer(buf.data(), bytes_per_elem));
+  buf += bytes_per_elem;
+  // At key separating elems_[idx] and elems_[idx+1] write the separator key.
+  assert(buf.size() >= bytes_per_key);
+  sibling_key->encode(boost::asio::buffer(buf.data(), bytes_per_key));
+  buf += bytes_per_key;
+  // At elems_[idx+1], write the new sibling reference.
+  assert(buf.size() >= bytes_per_elem);
+  sibling_augment->encode(boost::asio::buffer(buf.data(), bytes_per_elem));
+  buf += bytes_per_elem;
+
+  // Write each (unmodified) element into its new position.
+  auto key_write_iter = keys_.begin() + idx;
+  auto elem_write_iter = elems_.begin() + idx + 1u;
+  while (key_write_iter != keys_.end()) {
+    assert(elem_write_iter != elems_.end());
+
+    // Write key separating elements.
+    assert(buf.size() >= bytes_per_key);
+    (*key_write_iter)->encode(boost::asio::buffer(buf.data(), bytes_per_key));
+    buf += bytes_per_key;
+    ++key_write_iter;
+    // Write element.
+    assert(buf.size() >= bytes_per_elem);
+    (*elem_write_iter)->encode(boost::asio::buffer(buf.data(), bytes_per_elem));
+    buf += bytes_per_elem;
+    ++elem_write_iter;
+  }
+  assert(elem_write_iter == elems_.end());
+  assert(buf.size() == 0); // Completely filled the buffer with data.
+  monsoon::io::write_at(tx, write_offset, buf_storage.data(), buf_storage.size());
+
+  // Complete initialization of r.
+  r.self = this;
+  r.elem0 = std::move(precede_augment);
+  r.elem1 = std::move(sibling_augment);
+  r.key = std::move(sibling_key);
+  return r;
+}
+
+
+void abstract_tree_page_branch::insert_sibling_tx::commit() noexcept {
+  assert(self != nullptr);
+  assert(elem0 != nullptr);
+  assert(elem1 != nullptr);
+  assert(key != nullptr);
+  assert(self->elems_.capacity() > self->elems_.size());
+  assert(self->keys_.capacity() > self->keys_.size());
+  assert(elems_pos - self->elems_.begin() == keys_insert_pos - self->keys_.begin());
+
+  *elems_pos = std::move(elem0);
+  self->elems_.insert(std::next(elems_pos), std::move(elem1));
+  self->keys_.insert(keys_insert_pos, std::move(key));
+
+  self = nullptr;
+}
+
 
 abstract_tree_elem::~abstract_tree_elem() noexcept = default;
 
@@ -361,8 +584,16 @@ auto abstract_tx_aware_tree_elem::mtx_ref_() const noexcept -> std::shared_mutex
   return mtx_;
 }
 
+auto abstract_tx_aware_tree_elem::offset() const -> std::uint64_t {
+  // Parent should be locked, so this is safe.
+  return parent_->offset_for_(*this);
+}
+
 
 abstract_tree_page_branch_elem::~abstract_tree_page_branch_elem() noexcept = default;
+
+
+abstract_tree_page_branch_key::~abstract_tree_page_branch_key() noexcept = default;
 
 
 template class tree_page_branch_elem<>;

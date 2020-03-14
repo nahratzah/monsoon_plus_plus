@@ -26,7 +26,12 @@ class abstract_tree_page;
 class abstract_tree_page_leaf;
 class abstract_tree_page_branch;
 class abstract_tree_elem;
+class abstract_tx_aware_tree_elem;
 class abstract_tree_page_branch_elem;
+class abstract_tree_page_branch_key;
+
+template<typename Key, typename Val, typename... Augments>
+class tree_impl;
 
 template<typename Key, typename Val, typename... Augments>
 class tree_page_leaf;
@@ -49,11 +54,20 @@ class monsoon_tx_export_ abstract_tree
 
   protected:
   explicit abstract_tree(allocator_type alloc = allocator_type());
-  ~abstract_tree() noexcept override;
+  ~abstract_tree() noexcept override = 0;
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
   allocator_type allocator;
+
+  ///\brief Compute augmentation of a sequence of elements.
+  ///\param off The offset to populate the augment with.
+  ///\param elems The elements from which to compute an augmentation.
+  virtual auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
+  ///\brief Compute augmentation using reduction of augmentations.
+  ///\param off The offset to populate the augment with.
+  ///\param elems The augmentations from which to compute an augmentation.
+  virtual auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
 
   protected:
   std::uint64_t root_off_ = 0;
@@ -92,6 +106,11 @@ class monsoon_tx_export_ abstract_tree_page
   ///\brief Encode this page to a file.
   virtual void encode(txfile::transaction& tx) const = 0;
 
+  ///\brief Retrieve the offset of this page.
+  auto offset() const noexcept -> std::uint64_t { return off_; }
+  ///\brief Test if the given mutex belongs to this page.
+  auto is_my_mutex(const std::shared_mutex* m) const noexcept -> bool { return m == &mtx_; }
+
   protected:
   std::uint64_t off_ = 0, parent_off_ = 0;
   mutable std::shared_mutex mtx_;
@@ -108,6 +127,7 @@ class monsoon_tx_export_ abstract_tree_page_leaf
 : public abstract_tree_page
 {
   friend abstract_tree_elem;
+  friend abstract_tx_aware_tree_elem;
 
   public:
   static constexpr std::uint32_t magic = 0x2901'c28fU;
@@ -149,7 +169,37 @@ class monsoon_tx_export_ abstract_tree_page_leaf
   void encode(txfile::transaction& tx) const override final;
 
   private:
+  ///\brief Allocate a new element.
   virtual auto allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> = 0;
+
+  /**
+   * \brief Split this page in two halves.
+   * \param[in] lck The lock on this page.
+   * \param[in,out] f The file used to read and write the pages.
+   * \param new_page_off Offset in the file at which to write the new page.
+   * \param parent Parent page.
+   * \param parent_lck Lock on the parent page.
+   * \return A tuple consisting of:
+   * - the first page of the new pair
+   * - the lock on the first page
+   * - the lowest key in the second page
+   * - the second page of the new pair
+   * - the lock on the second page
+   */
+  auto local_split_(
+      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+  -> std::tuple<
+      std::shared_ptr<abstract_tree_page_branch_key>,
+      cycle_ptr::cycle_gptr<abstract_tree_page_leaf>,
+      std::unique_lock<std::shared_mutex>>;
+  ///\brief Select element for split.
+  ///\throws std::logic_error if the page doesn't contain at least 2 elements.
+  auto split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator;
+  ///\brief Compute offset of abstract_tree_elem at the given index.
+  auto offset_for_idx_(elems_vector::size_type idx) const noexcept -> std::uint64_t;
+  ///\brief Compute offset of given abstract_tree_elem.
+  auto offset_for_(const abstract_tree_elem& elem) const noexcept -> std::uint64_t;
 
   std::uint64_t next_sibling_off_ = 0, prev_sibling_off_ = 0;
   elems_vector elems_;
@@ -176,17 +226,8 @@ class monsoon_tx_export_ abstract_tree_page_branch
   };
   static_assert(sizeof(header) == header::SIZE);
 
-  protected:
-  ///\brief Abstract key interface.
-  class key {
-    protected:
-    key() noexcept = default;
-    virtual ~key() noexcept = 0;
-
-    public:
-    virtual void decode(boost::asio::const_buffer buf) = 0;
-    virtual void encode(boost::asio::mutable_buffer buf) const = 0;
-  };
+  ///\brief Transactional operation for inserting a sibling.
+  class insert_sibling_tx;
 
   private:
   using elems_vector = std::vector<
@@ -197,11 +238,9 @@ class monsoon_tx_export_ abstract_tree_page_branch
   >;
 
   using keys_vector = std::vector<
-      cycle_ptr::cycle_member_ptr<key>,
-      cycle_ptr::cycle_allocator<
-          abstract_tree::traits_type::rebind_alloc<
-              cycle_ptr::cycle_member_ptr<key>
-          >
+      std::shared_ptr<abstract_tree_page_branch_key>,
+      abstract_tree::traits_type::rebind_alloc<
+          std::shared_ptr<abstract_tree_page_branch_key>
       >
   >;
 
@@ -214,12 +253,43 @@ class monsoon_tx_export_ abstract_tree_page_branch
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
+  ///\brief Insert a sibling page.
+  auto insert_sibling(
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
+      const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
+      [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
+  -> insert_sibling_tx;
+
   private:
   virtual auto allocate_elem_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
-  virtual auto allocate_key_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<key> = 0;
+  virtual auto allocate_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
 
   elems_vector elems_;
   keys_vector keys_;
+};
+
+
+///\brief Internal type used to perform two-phase commit on sibling insertion.
+class monsoon_tx_local_ abstract_tree_page_branch::insert_sibling_tx {
+  friend abstract_tree_page_branch;
+
+  public:
+  insert_sibling_tx(const insert_sibling_tx&) = delete;
+  insert_sibling_tx& operator=(const insert_sibling_tx&) = delete;
+
+  insert_sibling_tx() = default;
+  insert_sibling_tx(insert_sibling_tx&&) noexcept = default;
+  insert_sibling_tx& operator=(insert_sibling_tx&&) = default;
+
+  void commit() noexcept;
+
+  private:
+  abstract_tree_page_branch* self = nullptr;
+  elems_vector::iterator elems_pos; ///<\brief Points at the precede_page.
+  keys_vector::iterator keys_insert_pos; ///<\brief Points at the insert position for the key.
+  std::shared_ptr<abstract_tree_page_branch_elem> elem0;
+  std::shared_ptr<abstract_tree_page_branch_elem> elem1;
+  std::shared_ptr<abstract_tree_page_branch_key> key;
 };
 
 
@@ -254,7 +324,10 @@ class monsoon_tx_export_ abstract_tree_elem
   private:
   ///\brief Helper function, retrieves the mtx.
   virtual auto mtx_ref_() const noexcept -> std::shared_mutex& = 0;
+  ///\brief Extract the key.
+  virtual auto branch_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
 
+  protected:
   cycle_ptr::cycle_member_ptr<abstract_tree_page_leaf> parent_;
 };
 
@@ -271,6 +344,7 @@ class monsoon_tx_export_ abstract_tx_aware_tree_elem
 
   private:
   auto mtx_ref_() const noexcept -> std::shared_mutex& override final;
+  auto offset() const -> std::uint64_t override final;
 };
 
 
@@ -294,6 +368,38 @@ class monsoon_tx_export_ abstract_tree_page_branch_elem {
 };
 
 
+///\brief Abstract key interface.
+class monsoon_tx_export_ abstract_tree_page_branch_key {
+  protected:
+  abstract_tree_page_branch_key() noexcept = default;
+  virtual ~abstract_tree_page_branch_key() noexcept = 0;
+
+  public:
+  virtual void decode(boost::asio::const_buffer buf) = 0;
+  virtual void encode(boost::asio::mutable_buffer buf) const = 0;
+};
+
+
+template<typename Key, typename Val, typename... Augments>
+class monsoon_tx_export_ tree_impl
+: public abstract_tree
+{
+  public:
+  using abstract_tree::abstract_tree;
+  ~tree_impl() noexcept override = 0;
+
+  auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
+  auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
+
+  private:
+  ///\brief Augment reducer implementation.
+  static auto augment_combine_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y) -> std::tuple<Augments...>;
+  ///\brief Augment reducer implementation, the one that does the actual reducing.
+  template<std::size_t... Idxs>
+  static auto augment_combine_seq_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y, [[maybe_unused]] std::index_sequence<Idxs...> seq) -> std::tuple<Augments...>;
+};
+
+
 template<typename Key, typename Val, typename... Augments>
 class tree_page_leaf final
 : public abstract_tree_page_leaf
@@ -309,7 +415,7 @@ class tree_page_leaf final
 
 
 template<typename Key, typename Val, typename... Augments>
-class tree_elem
+class tree_elem final
 : public abstract_tree_elem
 {
   public:
@@ -335,6 +441,8 @@ class tree_elem
   -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::unique_lock<std::shared_mutex>>;
 
   private:
+  auto branch_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> override;
+
   Key key_;
   Val val_;
 };
@@ -345,7 +453,8 @@ class tree_page_branch_elem
 : public abstract_tree_page_branch_elem
 {
   public:
-  tree_page_branch_elem() = default;
+  tree_page_branch_elem()
+      noexcept(std::is_nothrow_default_constructible_v<std::tuple<Augments...>>) = default;
   explicit tree_page_branch_elem(std::uint64_t off, std::tuple<Augments...> augments)
       noexcept(std::is_nothrow_move_constructible_v<std::tuple<Augments...>>);
 
@@ -370,6 +479,25 @@ class tree_page_branch_elem
 
   public:
   std::tuple<Augments...> augments;
+};
+
+
+template<typename Key>
+class tree_page_branch_key
+: public abstract_tree_page_branch_key
+{
+  public:
+  tree_page_branch_key()
+      noexcept(std::is_nothrow_default_constructible_v<Key>) = default;
+  explicit tree_page_branch_key(Key&& key)
+      noexcept(std::is_nothrow_move_constructible_v<Key>);
+  explicit tree_page_branch_key(const Key& key)
+      noexcept(std::is_nothrow_copy_constructible_v<Key>);
+
+  void decode(boost::asio::const_buffer buf) override final;
+  void encode(boost::asio::mutable_buffer buf) const override final;
+
+  Key key;
 };
 
 

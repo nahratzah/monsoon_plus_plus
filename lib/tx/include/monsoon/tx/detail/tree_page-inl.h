@@ -9,6 +9,7 @@
 #include <utility>
 #include <boost/endian/conversion.hpp>
 #include <boost/polymorphic_pointer_cast.hpp>
+#include <objpipe/of.h>
 
 namespace monsoon::tx::detail {
 
@@ -35,6 +36,78 @@ inline abstract_tree_elem::abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_tre
 
 inline auto abstract_tx_aware_tree_elem::is_never_visible() const noexcept -> bool {
   return this->tx_aware_data::is_never_visible();
+}
+
+
+template<typename Key, typename Val, typename... Augments>
+inline tree_impl<Key, Val, Augments...>::~tree_impl() noexcept = default;
+
+template<typename Key, typename Val, typename... Augments>
+inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+  std::tuple<Augments...> augments = objpipe::of(std::cref(elems))
+      .iterate()
+      .filter([](const auto& elem_ptr) -> bool { return elem_ptr != nullptr; })
+      .transform(
+          [](const auto& elem_ptr) -> cycle_ptr::cycle_gptr<const tree_elem<Key, Val, Augments...>> {
+            return boost::polymorphic_pointer_downcast<const tree_elem<Key, Val, Augments...>>(elem_ptr);
+          })
+      .transform(
+          [](const auto& elem_ptr) -> std::tuple<Augments...> {
+            return std::make_tuple(Augments(elem_ptr->key_, elem_ptr->val_)...);
+          })
+      .reduce(&tree_impl::augment_combine_)
+      .value_or(std::tuple<Augments...>());
+
+  return std::allocate_shared<abstract_tree_page_branch_elem>(off, std::move(augments));
+}
+
+template<typename Key, typename Val, typename... Augments>
+inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+  std::tuple<Augments...> augments = objpipe::of(std::cref(elems))
+      .iterate()
+      .filter([](const auto& elem_ptr) -> bool { return elem_ptr != nullptr; })
+      .transform(
+          [](const auto& elem_ptr) -> cycle_ptr::cycle_gptr<const tree_page_branch_elem<Key, Val, Augments...>> {
+            return boost::polymorphic_pointer_downcast<const tree_elem<Key, Val, Augments...>>(elem_ptr);
+          })
+      .transform(
+          [](const auto& elem_ptr) -> const std::tuple<Augments...>& {
+            return elem_ptr->augments;
+          })
+      .reduce(&tree_impl::augment_combine_)
+      .value_or(std::tuple<Augments...>());
+
+  return std::allocate_shared<abstract_tree_page_branch_elem>(off, std::move(augments));
+}
+
+template<typename Key, typename Val, typename... Augments>
+inline auto tree_impl<Key, Val, Augments...>::augment_combine_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y) -> std::tuple<Augments...> {
+  return augment_combine_seq_(x, y, std::index_sequence_for<Augments...>());
+}
+
+template<typename Key, typename Val, typename... Augments>
+template<std::size_t... Idxs>
+inline auto tree_impl<Key, Val, Augments...>::augment_combine_seq_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y, [[maybe_unused]] std::index_sequence<Idxs...> seq) -> std::tuple<Augments...> {
+  return std::make_tuple(Augments::merge(std::get<Idxs>(x), std::get<Idxs>(y))...);
+}
+
+
+template<typename Key, typename Val, typename... Augments>
+inline tree_page_leaf<Key, Val, Augments...>::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)
+: abstract_tree_page_leaf(std::move(tree))
+{}
+
+template<typename Key, typename Val, typename... Augments>
+inline tree_page_leaf<Key, Val, Augments...>::tree_page_leaf(cycle_ptr::cycle_gptr<tree_page_branch<Key, Val, Augments...>> parent)
+: abstract_tree_page_leaf(std::move(parent))
+{}
+
+template<typename Key, typename Val, typename... Augments>
+inline tree_page_leaf<Key, Val, Augments...>::~tree_page_leaf() noexcept = default;
+
+template<typename Key, typename Val, typename... Augments>
+inline auto tree_page_leaf<Key, Val, Augments...>::allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+  return cycle_ptr::allocate_cycle<tree_elem<Key, Val, Augments...>>(alloc, shared_from_this(this));
 }
 
 
@@ -87,23 +160,9 @@ inline auto tree_elem<Key, Val, Augments...>::lock_parent_for_write() const
   return std::make_tuple(std::move(casted_p), std::move(lck));
 }
 
-
 template<typename Key, typename Val, typename... Augments>
-inline tree_page_leaf<Key, Val, Augments...>::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)
-: abstract_tree_page_leaf(std::move(tree))
-{}
-
-template<typename Key, typename Val, typename... Augments>
-inline tree_page_leaf<Key, Val, Augments...>::tree_page_leaf(cycle_ptr::cycle_gptr<tree_page_branch<Key, Val, Augments...>> parent)
-: abstract_tree_page_leaf(std::move(parent))
-{}
-
-template<typename Key, typename Val, typename... Augments>
-inline tree_page_leaf<Key, Val, Augments...>::~tree_page_leaf() noexcept = default;
-
-template<typename Key, typename Val, typename... Augments>
-inline auto tree_page_leaf<Key, Val, Augments...>::allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
-  return cycle_ptr::allocate_cycle<tree_elem<Key, Val, Augments...>>(alloc, shared_from_this(this));
+inline auto tree_elem<Key, Val, Augments...>::branch_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> {
+  return std::allocate_shared<tree_page_branch_key<Key>>(alloc, key_);
 }
 
 
@@ -190,6 +249,31 @@ inline auto tree_page_branch_elem<Augments...>::augment_offset([[maybe_unused]] 
     const std::array<std::size_t, sizeof...(Augments)> sizes{{ Augments::SIZE... }};
     return std::accumulate(sizes.begin(), sizes.begin() + idx, sizeof(off));
   }
+}
+
+
+template<typename Key>
+inline tree_page_branch_key<Key>::tree_page_branch_key(Key&& key)
+    noexcept(std::is_nothrow_move_constructible_v<Key>)
+: key(std::move(key))
+{}
+
+template<typename Key>
+inline tree_page_branch_key<Key>::tree_page_branch_key(const Key& key)
+    noexcept(std::is_nothrow_copy_constructible_v<Key>)
+: key(key)
+{}
+
+template<typename Key>
+inline void tree_page_branch_key<Key>::decode(boost::asio::const_buffer buf) {
+  assert(buf.size() >= Key::SIZE);
+  key.decode(buf);
+}
+
+template<typename Key>
+inline void tree_page_branch_key<Key>::encode(boost::asio::mutable_buffer buf) const {
+  assert(buf.size() >= Key::SIZE);
+  key.encode(buf);
 }
 
 
