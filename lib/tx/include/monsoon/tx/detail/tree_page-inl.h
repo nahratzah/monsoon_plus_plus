@@ -91,6 +91,16 @@ inline auto tree_impl<Key, Val, Augments...>::augment_combine_seq_(const std::tu
   return std::make_tuple(Augments::merge(std::get<Idxs>(x), std::get<Idxs>(y))...);
 }
 
+template<typename Key, typename Val, typename... Augments>
+auto tree_impl<Key, Val, Augments...>::allocate_leaf_() const -> cycle_ptr::cycle_gptr<abstract_tree_page_leaf> {
+  return cycle_ptr::allocate_cycle<tree_page_leaf<Key, Val, Augments...>>(allocator);
+}
+
+template<typename Key, typename Val, typename... Augments>
+auto tree_impl<Key, Val, Augments...>::allocate_branch_() const -> cycle_ptr::cycle_gptr<abstract_tree_page_branch> {
+  return cycle_ptr::allocate_cycle<tree_page_branch<Key, Val, Augments...>>(allocator);
+}
+
 
 template<typename Key, typename Val, typename... Augments>
 inline tree_page_leaf<Key, Val, Augments...>::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)

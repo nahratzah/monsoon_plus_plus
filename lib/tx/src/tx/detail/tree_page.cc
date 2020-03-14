@@ -219,10 +219,12 @@ auto abstract_tree_page_leaf::local_split_(
   assert(lck.owns_lock() && is_my_mutex(lck.mutex()));
   assert(parent_lck.owns_lock() && parent->is_my_mutex(parent_lck.mutex()));
 
+  const auto t = tree();
+
   // Allocate all objects and figure out parameters.
   const elems_vector::iterator sibling_begin = split_select_(lck);
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<abstract_tree_page_leaf> sibling = nullptr; // XXX allocate something
+  cycle_ptr::cycle_gptr<abstract_tree_page_leaf> sibling = t->allocate_leaf_();
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
   std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(tree()->allocator);
 
@@ -244,7 +246,6 @@ auto abstract_tree_page_leaf::local_split_(
   monsoon::io::write_at(tx, zero_begin, tmp.data(), tmp.size());
 
   // Compute augments for this and sibling page.
-  const auto t = tree();
   std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin });
   std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() });
 
@@ -277,6 +278,17 @@ auto abstract_tree_page_leaf::local_split_(
   };
   tx.commit();
   return after_commit();
+}
+
+auto abstract_tree_page_leaf::local_split_atp_(
+    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+-> std::tuple<
+    std::shared_ptr<abstract_tree_page_branch_key>,
+    cycle_ptr::cycle_gptr<abstract_tree_page>,
+    std::unique_lock<std::shared_mutex>
+> {
+  return local_split_(lck, f, new_page_off, parent, parent_lck);
 }
 
 auto abstract_tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
@@ -521,6 +533,113 @@ auto abstract_tree_page_branch::insert_sibling(
   r.elem1 = std::move(sibling_augment);
   r.key = std::move(sibling_key);
   return r;
+}
+
+auto abstract_tree_page_branch::local_split_(
+    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+-> std::tuple<
+    std::shared_ptr<abstract_tree_page_branch_key>,
+    cycle_ptr::cycle_gptr<abstract_tree_page_branch>,
+    std::unique_lock<std::shared_mutex>
+> {
+  assert(parent != nullptr);
+  assert(parent->offset() == parent_off_);
+  assert(lck.owns_lock() && is_my_mutex(lck.mutex()));
+  assert(parent_lck.owns_lock() && parent->is_my_mutex(parent_lck.mutex()));
+
+  const auto t = tree();
+  const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
+  const std::size_t bytes_per_key = cfg->key_bytes;
+  const std::size_t page_bytes = header::SIZE
+      + (cfg->items_per_node_page - 1u) * bytes_per_key
+      + cfg->items_per_node_page * bytes_per_elem;
+
+  // Allocate all objects and figure out parameters.
+  if (elems_.size() <= 2u) throw std::logic_error("not enough entries to split branch page");
+  const elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
+  txfile::transaction tx = f.begin(false);
+  cycle_ptr::cycle_gptr<abstract_tree_page_branch> sibling = t->allocate_branch_();
+  std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
+  const keys_vector::iterator split_key = keys_.begin() + (sibling_begin - elems_.begin() - 1u);
+  assert(split_key - keys_.begin() + 1u == sibling_begin - elems_.begin());
+
+  // Initialize sibling.
+  sibling->parent_off_ = parent_off_;
+  std::copy(
+      sibling_begin, elems_.end(),
+      std::back_inserter(sibling->elems_));
+  std::copy(
+      std::next(split_key), keys_.end(),
+      std::back_inserter(sibling->keys_));
+  assert(sibling->keys_.size() + 1u == sibling->elems_.size());
+  sibling->encode(tx);
+
+  // Update size.
+  {
+    header h;
+    h.size = sibling_begin - elems_.begin();
+    h.native_to_big_endian();
+    monsoon::io::write_at(tx, offset() + offsetof(header, size), &h.size, sizeof(h.size));
+  }
+
+  // Compute augments for this and sibling page.
+  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin });
+  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() });
+
+  // Update parent page to have the sibling present.
+  auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, *split_key, std::move(sibling_augment));
+
+  // Update parent pointer on child pages.
+  {
+    header h;
+    h.parent_off = offset();
+    h.native_to_big_endian();
+    std::vector<txfile::transaction::offset_type> offsets_of_children;
+    std::transform(
+        sibling_begin, elems_.end(),
+        std::back_inserter(offsets_of_children),
+        [](elems_vector::reference elem_ptr) {
+          return elem_ptr->off + offsetof(header, parent_off);
+        });
+    tx.write_at_many(std::move(offsets_of_children), &h.parent_off, sizeof(h.parent_off));
+  }
+
+  auto after_commit = [&]() noexcept {
+    // All loaded child pages get their parent offset updated.
+    std::for_each(
+        sibling_begin, elems_.end(),
+        [new_page_off, &t, this](elems_vector::const_reference elem_ptr) {
+          const cycle_ptr::cycle_gptr<abstract_tree_page> page = t->get_if_present(elem_ptr->off);
+          if (page != nullptr) page->reparent_(this->off_, new_page_off);
+        });
+
+    // Release elements we gave to sibling.
+    std::fill(
+        std::make_move_iterator(sibling_begin), std::make_move_iterator(elems_.end()),
+        nullptr);
+
+    // Complete insert operation of the parent.
+    parent_insert_op.commit();
+
+    return std::forward_as_tuple(
+        std::exchange(*split_key, nullptr),
+        std::move(sibling),
+        std::move(sibling_lck));
+  };
+  tx.commit();
+  return after_commit();
+}
+
+auto abstract_tree_page_branch::local_split_atp_(
+    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+-> std::tuple<
+    std::shared_ptr<abstract_tree_page_branch_key>,
+    cycle_ptr::cycle_gptr<abstract_tree_page>,
+    std::unique_lock<std::shared_mutex>
+> {
+  return local_split_(lck, f, new_page_off, parent, parent_lck);
 }
 
 
