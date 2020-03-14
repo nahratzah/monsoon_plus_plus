@@ -170,10 +170,12 @@ inline void tree_page_branch_elem<Augments...>::encode_idx_seq_(boost::asio::mut
 template<typename... Augments>
 template<std::size_t Idx>
 inline void tree_page_branch_elem<Augments...>::decode_idx_(boost::asio::const_buffer buf) {
+  using augment_type = std::tuple_element_t<Idx, std::tuple<Augments...>>;
+
   // Set the buffer to only the range described by this augment.
   assert(buf.size() >= augment_offset(Idx + 1u));
   buf += augment_offset(Idx);
-  buf = boost::asio::buffer(buf.data(), augment_offset(Idx + 1u) - augment_offset(Idx));
+  buf = boost::asio::buffer(buf.data(), augment_type::SIZE);
   // Invoke decoder.
   std::get<Idx>(augments).decode(buf);
 }
@@ -181,10 +183,12 @@ inline void tree_page_branch_elem<Augments...>::decode_idx_(boost::asio::const_b
 template<typename... Augments>
 template<std::size_t Idx>
 inline void tree_page_branch_elem<Augments...>::encode_idx_(boost::asio::mutable_buffer buf) const {
+  using augment_type = std::tuple_element_t<Idx, std::tuple<Augments...>>;
+
   // Set the buffer to only the range described by this augment.
   assert(buf.size() >= augment_offset(Idx + 1u));
   buf += augment_offset(Idx);
-  buf = boost::asio::buffer(buf.data(), augment_offset(Idx + 1u) - augment_offset(Idx));
+  buf = boost::asio::buffer(buf.data(), augment_type::SIZE);
   // Invoke decoder.
   std::get<Idx>(augments).encode(buf);
 }
