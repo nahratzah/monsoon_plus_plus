@@ -8,7 +8,7 @@
 namespace monsoon::tx::detail {
 
 
-void abstract_tree_page_leaf::header::native_to_big_endian() noexcept {
+void tree_page_leaf::header::native_to_big_endian() noexcept {
   static_assert(sizeof(header) == header::SIZE);
 
   boost::endian::native_to_big_inplace(magic);
@@ -18,7 +18,7 @@ void abstract_tree_page_leaf::header::native_to_big_endian() noexcept {
   boost::endian::native_to_big_inplace(prev_sibling_off);
 }
 
-void abstract_tree_page_leaf::header::big_to_native_endian() noexcept {
+void tree_page_leaf::header::big_to_native_endian() noexcept {
   static_assert(sizeof(header) == header::SIZE);
 
   boost::endian::big_to_native_inplace(magic);
@@ -28,25 +28,25 @@ void abstract_tree_page_leaf::header::big_to_native_endian() noexcept {
   boost::endian::big_to_native_inplace(prev_sibling_off);
 }
 
-void abstract_tree_page_leaf::header::encode(boost::asio::mutable_buffer buf) const {
+void tree_page_leaf::header::encode(boost::asio::mutable_buffer buf) const {
   assert(buf.size() >= SIZE);
-  assert(magic == abstract_tree_page_leaf::magic);
+  assert(magic == tree_page_leaf::magic);
 
   header tmp = *this;
   tmp.native_to_big_endian();
   boost::asio::buffer_copy(buf, boost::asio::const_buffer(&tmp, sizeof(tmp)));
 }
 
-void abstract_tree_page_leaf::header::decode(boost::asio::const_buffer buf) {
+void tree_page_leaf::header::decode(boost::asio::const_buffer buf) {
   assert(buf.size() >= SIZE);
 
   boost::asio::buffer_copy(boost::asio::buffer(this, sizeof(*this)), buf);
   big_to_native_endian();
-  if (magic != abstract_tree_page_leaf::magic) throw tree_error("bad tree page magic");
+  if (magic != tree_page_leaf::magic) throw tree_error("bad tree page magic");
 }
 
 
-void abstract_tree_page_branch::header::native_to_big_endian() noexcept {
+void tree_page_branch::header::native_to_big_endian() noexcept {
   static_assert(sizeof(header) == header::SIZE);
 
   boost::endian::native_to_big_inplace(magic);
@@ -54,7 +54,7 @@ void abstract_tree_page_branch::header::native_to_big_endian() noexcept {
   boost::endian::native_to_big_inplace(parent_off);
 }
 
-void abstract_tree_page_branch::header::big_to_native_endian() noexcept {
+void tree_page_branch::header::big_to_native_endian() noexcept {
   static_assert(sizeof(header) == header::SIZE);
 
   boost::endian::big_to_native_inplace(magic);
@@ -62,25 +62,33 @@ void abstract_tree_page_branch::header::big_to_native_endian() noexcept {
   boost::endian::big_to_native_inplace(parent_off);
 }
 
-void abstract_tree_page_branch::header::encode(boost::asio::mutable_buffer buf) const {
+void tree_page_branch::header::encode(boost::asio::mutable_buffer buf) const {
   assert(buf.size() >= SIZE);
-  assert(magic == abstract_tree_page_branch::magic);
+  assert(magic == tree_page_branch::magic);
 
   header tmp = *this;
   tmp.native_to_big_endian();
   boost::asio::buffer_copy(buf, boost::asio::const_buffer(&tmp, sizeof(tmp)));
 }
 
-void abstract_tree_page_branch::header::decode(boost::asio::const_buffer buf) {
+void tree_page_branch::header::decode(boost::asio::const_buffer buf) {
   assert(buf.size() >= SIZE);
 
   boost::asio::buffer_copy(boost::asio::buffer(this, sizeof(*this)), buf);
   big_to_native_endian();
-  if (magic != abstract_tree_page_branch::magic) throw tree_error("bad tree page magic");
+  if (magic != tree_page_branch::magic) throw tree_error("bad tree page magic");
 }
 
 
 abstract_tree::~abstract_tree() noexcept = default;
+
+auto abstract_tree::allocate_leaf_() -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  return cycle_ptr::allocate_cycle<tree_page_leaf>(allocator, this->shared_from_this(this));
+}
+
+auto abstract_tree::allocate_branch_() -> cycle_ptr::cycle_gptr<tree_page_branch> {
+  return cycle_ptr::allocate_cycle<tree_page_branch>(allocator, this->shared_from_this(this));
+}
 
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
@@ -91,8 +99,8 @@ auto abstract_tree_page::tree() const -> cycle_ptr::cycle_gptr<abstract_tree> {
 
 auto abstract_tree_page::decode(
     const txfile::transaction& tx, std::uint64_t off,
-    cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>> leaf_constructor,
-    cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_page_branch>> branch_constructor)
+    cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_leaf>> leaf_constructor,
+    cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_branch>> branch_constructor)
 -> cycle_ptr::cycle_gptr<abstract_tree_page> {
   std::uint32_t magic;
   monsoon::io::read_at(tx, off, &magic, sizeof(magic));
@@ -102,10 +110,10 @@ auto abstract_tree_page::decode(
   switch (magic) {
     default:
       throw tree_error("bad tree page magic");
-    case abstract_tree_page_leaf::magic:
+    case tree_page_leaf::magic:
       page = leaf_constructor();
       break;
-    case abstract_tree_page_branch::magic:
+    case tree_page_branch::magic:
       page = branch_constructor();
       break;
   }
@@ -121,7 +129,7 @@ void abstract_tree_page::reparent_([[maybe_unused]] std::uint64_t old_parent_off
 
 auto abstract_tree_page::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -131,30 +139,23 @@ auto abstract_tree_page::local_split_(
 }
 
 
-abstract_tree_page_leaf::abstract_tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)
+tree_page_leaf::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)
 : abstract_tree_page(std::move(tree)),
   elems_(elems_vector::allocator_type(*this, this->tree()->allocator))
 {
   elems_.reserve(cfg->items_per_leaf_page);
 }
 
-abstract_tree_page_leaf::abstract_tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent)
-: abstract_tree_page(std::move(parent)),
-  elems_(elems_vector::allocator_type(*this, this->tree()->allocator))
-{
-  elems_.reserve(cfg->items_per_leaf_page);
-}
+tree_page_leaf::~tree_page_leaf() noexcept = default;
 
-abstract_tree_page_leaf::~abstract_tree_page_leaf() noexcept = default;
-
-void abstract_tree_page_leaf::init_empty(std::uint64_t off) {
+void tree_page_leaf::init_empty(std::uint64_t off) {
   assert(elems_.empty());
 
   off_ = off;
   elems_.resize(cfg->items_per_leaf_page);
 }
 
-void abstract_tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
+void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
   assert(elems_.empty());
 
   const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
@@ -177,7 +178,7 @@ void abstract_tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_
       [&buf, bytes_per_val, this, t = tree()]() -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
         assert(buf.size() >= bytes_per_val);
 
-        auto e = allocate_elem_(t->allocator);
+        auto e = t->allocate_elem_(this->shared_from_this(this));
         e->decode(boost::asio::buffer(buf.data(), bytes_per_val));
         buf += bytes_per_val;
         if (e->is_never_visible()) e.reset();
@@ -187,7 +188,7 @@ void abstract_tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_
   assert(buf.size() == 0); // Buffer should have been fully consumed.
 }
 
-void abstract_tree_page_leaf::encode(txfile::transaction& tx) const {
+void tree_page_leaf::encode(txfile::transaction& tx) const {
   assert(!elems_.empty());
   assert(elems_.size() == cfg->items_per_leaf_page);
 
@@ -223,12 +224,12 @@ void abstract_tree_page_leaf::encode(txfile::transaction& tx) const {
   monsoon::io::write_at(tx, off_, buf_storage.data(), buf_storage.size());
 }
 
-auto abstract_tree_page_leaf::local_split_(
+auto tree_page_leaf::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
-    cycle_ptr::cycle_gptr<abstract_tree_page_leaf>,
+    cycle_ptr::cycle_gptr<tree_page_leaf>,
     std::unique_lock<std::shared_mutex>
 > {
   assert(parent != nullptr);
@@ -241,7 +242,7 @@ auto abstract_tree_page_leaf::local_split_(
   // Allocate all objects and figure out parameters.
   const elems_vector::iterator sibling_begin = split_select_(lck);
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<abstract_tree_page_leaf> sibling = t->allocate_leaf_();
+  cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_();
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
   std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(tree()->allocator);
 
@@ -297,9 +298,9 @@ auto abstract_tree_page_leaf::local_split_(
   return after_commit();
 }
 
-auto abstract_tree_page_leaf::local_split_atp_(
+auto tree_page_leaf::local_split_atp_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -308,7 +309,7 @@ auto abstract_tree_page_leaf::local_split_atp_(
   return local_split_(lck, f, new_page_off, parent, parent_lck);
 }
 
-auto abstract_tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
+auto tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
   assert(lck.owns_lock() && lck.mutex() == &mtx_);
 
   struct pred_non_null_elem {
@@ -339,14 +340,14 @@ auto abstract_tree_page_leaf::split_select_(const std::unique_lock<std::shared_m
   return sibling_begin;
 }
 
-auto abstract_tree_page_leaf::offset_for_idx_(elems_vector::size_type idx) const noexcept -> std::uint64_t {
+auto tree_page_leaf::offset_for_idx_(elems_vector::size_type idx) const noexcept -> std::uint64_t {
   assert(idx <= cfg->items_per_leaf_page); // We allow the "end" index.
 
   const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
   return header::SIZE + idx * bytes_per_val;
 }
 
-auto abstract_tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const noexcept -> std::uint64_t {
+auto tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const noexcept -> std::uint64_t {
   const auto pos = std::find_if(
       elems_.begin(), elems_.end(),
       [&elem](elems_vector::const_reference ptr) -> bool {
@@ -357,7 +358,7 @@ auto abstract_tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const 
 }
 
 
-abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree)
+tree_page_branch::tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree)
 : abstract_tree_page(tree),
   elems_(tree->allocator),
   keys_(tree->allocator)
@@ -366,18 +367,9 @@ abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstr
   keys_.reserve(cfg->items_per_node_page - 1u);
 }
 
-abstract_tree_page_branch::abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent)
-: abstract_tree_page(std::move(parent)),
-  elems_(this->tree()->allocator),
-  keys_(this->tree()->allocator)
-{
-  elems_.reserve(cfg->items_per_node_page);
-  keys_.reserve(cfg->items_per_node_page - 1u);
-}
+tree_page_branch::~tree_page_branch() noexcept = default;
 
-abstract_tree_page_branch::~abstract_tree_page_branch() noexcept = default;
-
-void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) {
+void tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) {
   assert(elems_.empty());
 
   const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
@@ -402,7 +394,7 @@ void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint6
   const auto t = tree();
 
   // Decode elems_[0].
-  std::shared_ptr<abstract_tree_page_branch_elem> e = allocate_elem_(t->allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> e = t->allocate_branch_elem_();
   assert(buf.size() >= bytes_per_elem);
   e->decode(boost::asio::buffer(buf.data(), bytes_per_elem));
   buf += bytes_per_elem;
@@ -411,14 +403,14 @@ void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint6
   std::shared_ptr<abstract_tree_page_branch_key> k;
   for (std::uint32_t i = 1; i < h.size; ++i) {
     // Decode key separating elems_[i-1] and elems_[i].
-    k = allocate_key_(t->allocator);
+    k = t->allocate_branch_key_();
     assert(buf.size() >= bytes_per_key);
     k->decode(boost::asio::buffer(buf.data(), bytes_per_key));
     buf += bytes_per_key;
     keys_.emplace_back(std::move(k));
 
     // Decode elems_[i].
-    e = allocate_elem_(t->allocator);
+    e = t->allocate_branch_elem_();
     assert(buf.size() >= bytes_per_elem);
     e->decode(boost::asio::buffer(buf.data(), bytes_per_elem));
     buf += bytes_per_elem;
@@ -429,7 +421,7 @@ void abstract_tree_page_branch::decode(const txfile::transaction& tx, std::uint6
   assert(buf.size() == (cfg->items_per_node_page - h.size) * (bytes_per_key + bytes_per_elem));
 }
 
-void abstract_tree_page_branch::encode(txfile::transaction& tx) const {
+void tree_page_branch::encode(txfile::transaction& tx) const {
   if (elems_.size() > cfg->items_per_node_page) throw tree_error("too many items in tree branch");
 
   const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
@@ -470,7 +462,7 @@ void abstract_tree_page_branch::encode(txfile::transaction& tx) const {
   monsoon::io::write_at(tx, off_, buf_storage.data(), buf_storage.size());
 }
 
-auto abstract_tree_page_branch::insert_sibling(
+auto tree_page_branch::insert_sibling(
     const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
     const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
     [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
@@ -552,12 +544,12 @@ auto abstract_tree_page_branch::insert_sibling(
   return r;
 }
 
-auto abstract_tree_page_branch::local_split_(
+auto tree_page_branch::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
-    cycle_ptr::cycle_gptr<abstract_tree_page_branch>,
+    cycle_ptr::cycle_gptr<tree_page_branch>,
     std::unique_lock<std::shared_mutex>
 > {
   assert(parent != nullptr);
@@ -576,7 +568,7 @@ auto abstract_tree_page_branch::local_split_(
   if (elems_.size() <= 2u) throw std::logic_error("not enough entries to split branch page");
   const elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<abstract_tree_page_branch> sibling = t->allocate_branch_();
+  cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_();
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
   const keys_vector::iterator split_key = keys_.begin() + (sibling_begin - elems_.begin() - 1u);
   assert(split_key - keys_.begin() + 1u == sibling_begin - elems_.begin());
@@ -648,9 +640,9 @@ auto abstract_tree_page_branch::local_split_(
   return after_commit();
 }
 
-auto abstract_tree_page_branch::local_split_atp_(
+auto tree_page_branch::local_split_atp_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -660,7 +652,7 @@ auto abstract_tree_page_branch::local_split_atp_(
 }
 
 
-void abstract_tree_page_branch::insert_sibling_tx::commit() noexcept {
+void tree_page_branch::insert_sibling_tx::commit() noexcept {
   assert(self != nullptr);
   assert(elem0 != nullptr);
   assert(elem1 != nullptr);
@@ -680,10 +672,10 @@ void abstract_tree_page_branch::insert_sibling_tx::commit() noexcept {
 abstract_tree_elem::~abstract_tree_elem() noexcept = default;
 
 auto abstract_tree_elem::lock_parent_for_read() const
--> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::shared_lock<std::shared_mutex>> {
+-> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>> {
   for (;;) {
     std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
-    cycle_ptr::cycle_gptr<abstract_tree_page_leaf> p = parent_;
+    cycle_ptr::cycle_gptr<tree_page_leaf> p = parent_;
     std::shared_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
 
@@ -695,10 +687,10 @@ auto abstract_tree_elem::lock_parent_for_read() const
 }
 
 auto abstract_tree_elem::lock_parent_for_write() const
--> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
+-> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
   for (;;) {
     std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
-    cycle_ptr::cycle_gptr<abstract_tree_page_leaf> p = parent_;
+    cycle_ptr::cycle_gptr<tree_page_leaf> p = parent_;
     std::unique_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
 

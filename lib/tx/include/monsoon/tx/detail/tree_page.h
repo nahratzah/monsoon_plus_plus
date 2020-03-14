@@ -23,8 +23,8 @@ namespace monsoon::tx::detail {
 
 class abstract_tree;
 class abstract_tree_page;
-class abstract_tree_page_leaf;
-class abstract_tree_page_branch;
+class tree_page_leaf;
+class tree_page_branch;
 class abstract_tree_elem;
 class abstract_tx_aware_tree_elem;
 class abstract_tree_page_branch_elem;
@@ -34,21 +34,16 @@ template<typename Key, typename Val, typename... Augments>
 class tree_impl;
 
 template<typename Key, typename Val, typename... Augments>
-class tree_page_leaf;
-
-template<typename Key, typename Val, typename... Augments>
-class tree_page_branch;
-
-template<typename Key, typename Val, typename... Augments>
 class tree_elem;
 
 
+///\brief Interface and shared logic for a B+ tree.
 class monsoon_tx_export_ abstract_tree
 : public db::db_obj
 {
   friend abstract_tree_page;
-  friend abstract_tree_page_leaf;
-  friend abstract_tree_page_branch;
+  friend tree_page_leaf;
+  friend tree_page_branch;
 
   public:
   ///\brief Allocator used by commit_manager.
@@ -79,10 +74,17 @@ class monsoon_tx_export_ abstract_tree
   ///\returns Decoded page.
   virtual auto get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> = 0;
 
-  ///\brief Default-allocate an abstract_tree_page_leaf.
-  virtual auto allocate_leaf_() const -> cycle_ptr::cycle_gptr<abstract_tree_page_leaf> = 0;
-  ///\brief Default-allocate an abstract_tree_page_branch.
-  virtual auto allocate_branch_() const -> cycle_ptr::cycle_gptr<abstract_tree_page_branch> = 0;
+  ///\brief Default-allocate an tree_page_leaf.
+  auto allocate_leaf_() -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  ///\brief Default-allocate an tree_page_branch.
+  auto allocate_branch_() -> cycle_ptr::cycle_gptr<tree_page_branch>;
+  ///\brief Allocate an element.
+  virtual auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> = 0;
+
+  ///\brief Allocate a branch element.
+  virtual auto allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
+  ///\brief Allocate a branch key.
+  virtual auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
@@ -93,12 +95,12 @@ class monsoon_tx_export_ abstract_tree
 };
 
 
+///\brief Shared base for B+ tree pages.
 class monsoon_tx_export_ abstract_tree_page
 : protected cycle_ptr::cycle_base
 {
   protected:
   explicit abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree);
-  explicit abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent);
   virtual ~abstract_tree_page() noexcept = 0;
 
   public:
@@ -111,13 +113,13 @@ class monsoon_tx_export_ abstract_tree_page
   ///\details Uses the magic encoded in \p tx to determine what type of page is stored at the offset.
   ///\param[in] tx Source of bytes on which the decode operation operates.
   ///\param off Offset in \p tx where the page is located.
-  ///\param leaf_constructor Functor that return a newly allocated abstract_tree_page_leaf.
-  ///\param branch_constructor Functor that return a newly allocated abstract_tree_page_branch.
+  ///\param leaf_constructor Functor that return a newly allocated tree_page_leaf.
+  ///\param branch_constructor Functor that return a newly allocated tree_page_branch.
   ///\return A newly allocated page, that was read from bytes in \p tx at offset \p off and is of the appropriate type.
   static auto decode(
       const txfile::transaction& tx, std::uint64_t off,
-      cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>> leaf_constructor,
-      cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_page_branch>> branch_constructor)
+      cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_leaf>> leaf_constructor,
+      cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_branch>> branch_constructor)
   -> cycle_ptr::cycle_gptr<abstract_tree_page>;
 
   ///\brief Decode this page from a file.
@@ -150,7 +152,7 @@ class monsoon_tx_export_ abstract_tree_page
    */
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -159,7 +161,7 @@ class monsoon_tx_export_ abstract_tree_page
   ///\note This is a virtual function so that we can "fake" covariant return using the local_split_ functions.
   virtual auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -177,7 +179,8 @@ class monsoon_tx_export_ abstract_tree_page
 };
 
 
-class monsoon_tx_export_ abstract_tree_page_leaf
+///\brief Leaf page of a B+ tree.
+class monsoon_tx_export_ tree_page_leaf final
 : public abstract_tree_page
 {
   friend abstract_tree_elem;
@@ -212,20 +215,15 @@ class monsoon_tx_export_ abstract_tree_page_leaf
       >
   >;
 
-  protected:
-  explicit abstract_tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree);
-  explicit abstract_tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent);
-  ~abstract_tree_page_leaf() noexcept override;
-
   public:
+  explicit tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree);
+  ~tree_page_leaf() noexcept override;
+
   void init_empty(std::uint64_t off);
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
   private:
-  ///\brief Allocate a new element.
-  virtual auto allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> = 0;
-
   /**
    * \brief Split this page in two halves.
    * \param[in] lck The lock on this page.
@@ -242,14 +240,14 @@ class monsoon_tx_export_ abstract_tree_page_leaf
    */
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
-      cycle_ptr::cycle_gptr<abstract_tree_page_leaf>,
+      cycle_ptr::cycle_gptr<tree_page_leaf>,
       std::unique_lock<std::shared_mutex>>;
   auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -267,7 +265,8 @@ class monsoon_tx_export_ abstract_tree_page_leaf
 };
 
 
-class monsoon_tx_export_ abstract_tree_page_branch
+///\brief Branch page of a B+ tree.
+class monsoon_tx_export_ tree_page_branch final
 : public abstract_tree_page
 {
   public:
@@ -305,12 +304,10 @@ class monsoon_tx_export_ abstract_tree_page_branch
       >
   >;
 
-  protected:
-  explicit abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree);
-  explicit abstract_tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent);
-  ~abstract_tree_page_branch() noexcept override;
-
   public:
+  explicit tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree);
+  ~tree_page_branch() noexcept override;
+
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
@@ -322,9 +319,6 @@ class monsoon_tx_export_ abstract_tree_page_branch
   -> insert_sibling_tx;
 
   private:
-  virtual auto allocate_elem_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
-  virtual auto allocate_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
-
   /**
    * \brief Split this page in two halves.
    * \param[in] lck The lock on this page.
@@ -341,14 +335,14 @@ class monsoon_tx_export_ abstract_tree_page_branch
    */
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch>,
+      cycle_ptr::cycle_gptr<tree_page_branch>,
       std::unique_lock<std::shared_mutex>>;
   auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -360,8 +354,8 @@ class monsoon_tx_export_ abstract_tree_page_branch
 
 
 ///\brief Internal type used to perform two-phase commit on sibling insertion.
-class monsoon_tx_local_ abstract_tree_page_branch::insert_sibling_tx {
-  friend abstract_tree_page_branch;
+class monsoon_tx_local_ tree_page_branch::insert_sibling_tx {
+  friend tree_page_branch;
 
   public:
   insert_sibling_tx(const insert_sibling_tx&) = delete;
@@ -374,7 +368,7 @@ class monsoon_tx_local_ abstract_tree_page_branch::insert_sibling_tx {
   void commit() noexcept;
 
   private:
-  abstract_tree_page_branch* self = nullptr;
+  tree_page_branch* self = nullptr;
   elems_vector::iterator elems_pos; ///<\brief Points at the precede_page.
   keys_vector::iterator keys_insert_pos; ///<\brief Points at the insert position for the key.
   std::shared_ptr<abstract_tree_page_branch_elem> elem0;
@@ -383,13 +377,14 @@ class monsoon_tx_local_ abstract_tree_page_branch::insert_sibling_tx {
 };
 
 
+///\brief Base implementation of an element in a B+ tree.
 class monsoon_tx_export_ abstract_tree_elem
 : protected cycle_ptr::cycle_base
 {
-  friend abstract_tree_page_leaf;
+  friend tree_page_leaf;
 
   protected:
-  abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_tree_page_leaf> parent);
+  abstract_tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent);
   virtual ~abstract_tree_elem() noexcept = 0;
 
   public:
@@ -400,13 +395,13 @@ class monsoon_tx_export_ abstract_tree_elem
   ///\details May only be called without a lock on this element.
   ///\note While the parent is locked, this element can't change parent.
   auto lock_parent_for_read() const
-  -> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::shared_lock<std::shared_mutex>>;
+  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>>;
 
   ///\brief Acquire the parent and lock it for write.
   ///\details May only be called without a lock on this element.
   ///\note While the parent is locked, this element can't change parent.
   auto lock_parent_for_write() const
-  -> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
+  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
 
   ///\brief Test if this value is never visible in any transactions.
   virtual auto is_never_visible() const noexcept -> bool;
@@ -418,10 +413,11 @@ class monsoon_tx_export_ abstract_tree_elem
   virtual auto branch_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
 
   protected:
-  cycle_ptr::cycle_member_ptr<abstract_tree_page_leaf> parent_;
+  cycle_ptr::cycle_member_ptr<tree_page_leaf> parent_;
 };
 
 
+///\brief Base implementation of an element in a B+ tree, that is transaction aware.
 class monsoon_tx_export_ abstract_tx_aware_tree_elem
 : public tx_aware_data,
   public abstract_tree_elem
@@ -470,6 +466,8 @@ class monsoon_tx_export_ abstract_tree_page_branch_key {
 };
 
 
+///\brief Tree implementation.
+///\note This does not handle the comparison logic, which is delegated instead.
 template<typename Key, typename Val, typename... Augments>
 class monsoon_tx_export_ tree_impl
 : public abstract_tree
@@ -488,25 +486,13 @@ class monsoon_tx_export_ tree_impl
   template<std::size_t... Idxs>
   static auto augment_combine_seq_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y, [[maybe_unused]] std::index_sequence<Idxs...> seq) -> std::tuple<Augments...>;
 
-  auto allocate_leaf_() const -> cycle_ptr::cycle_gptr<abstract_tree_page_leaf> override final;
-  auto allocate_branch_() const -> cycle_ptr::cycle_gptr<abstract_tree_page_branch> override final;
+  auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override final;
+  auto allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
+  auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> override final;
 };
 
 
-template<typename Key, typename Val, typename... Augments>
-class tree_page_leaf final
-: public abstract_tree_page_leaf
-{
-  public:
-  explicit tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree);
-  explicit tree_page_leaf(cycle_ptr::cycle_gptr<tree_page_branch<Key, Val, Augments...>> parent);
-  ~tree_page_leaf() noexcept;
-
-  private:
-  auto allocate_elem_(abstract_tree::allocator_type alloc) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override;
-};
-
-
+///\brief Transaction aware key-value element in a B+ tree.
 template<typename Key, typename Val, typename... Augments>
 class tree_elem final
 : public abstract_tree_elem
@@ -514,24 +500,12 @@ class tree_elem final
   public:
   static constexpr std::size_t SIZE = tx_aware_data::TX_AWARE_SIZE + Key::SIZE + Val::SIZE;
 
-  tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> parent, const Key& key, const Val& val);
-  tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> parent, Key&& key, Val&& val);
-  explicit tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> parent);
+  tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent, const Key& key, const Val& val);
+  tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent, Key&& key, Val&& val);
+  explicit tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent);
 
   void decode(boost::asio::const_buffer buf) override;
   void encode(boost::asio::mutable_buffer buf) const override;
-
-  ///\brief Acquire the parent and lock it for read.
-  ///\details May only be called without a lock on this element.
-  ///\note While the parent is locked, this element can't change parent.
-  auto lock_parent_for_read() const
-  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::shared_lock<std::shared_mutex>>;
-
-  ///\brief Acquire the parent and lock it for write.
-  ///\details May only be called without a lock on this element.
-  ///\note While the parent is locked, this element can't change parent.
-  auto lock_parent_for_write() const
-  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>>, std::unique_lock<std::shared_mutex>>;
 
   private:
   auto branch_key_(abstract_tree::allocator_type alloc) const -> std::shared_ptr<abstract_tree_page_branch_key> override;
@@ -541,8 +515,9 @@ class tree_elem final
 };
 
 
+///\brief Implementation of abstract_tree_page_branch_elem.
 template<typename... Augments>
-class tree_page_branch_elem
+class tree_page_branch_elem final
 : public abstract_tree_page_branch_elem
 {
   public:
@@ -575,8 +550,9 @@ class tree_page_branch_elem
 };
 
 
+///\brief Implementation of abstract_tree_page_branch_key.
 template<typename Key>
-class tree_page_branch_key
+class tree_page_branch_key final
 : public abstract_tree_page_branch_key
 {
   public:
