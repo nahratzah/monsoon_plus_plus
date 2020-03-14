@@ -87,7 +87,9 @@ class monsoon_tx_export_ abstract_tree_page
       cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_page_branch>> branch_constructor)
   -> cycle_ptr::cycle_gptr<abstract_tree_page>;
 
+  ///\brief Decode this page from a file.
   virtual void decode(const txfile::transaction& tx, std::uint64_t off) = 0;
+  ///\brief Encode this page to a file.
   virtual void encode(txfile::transaction& tx) const = 0;
 
   protected:
