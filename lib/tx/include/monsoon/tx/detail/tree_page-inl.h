@@ -194,11 +194,15 @@ inline void tree_page_branch_elem<Augments...>::encode_idx_(boost::asio::mutable
 }
 
 template<typename... Augments>
-inline auto tree_page_branch_elem<Augments...>::augment_offset(std::size_t idx) -> std::size_t {
+inline auto tree_page_branch_elem<Augments...>::augment_offset([[maybe_unused]] std::size_t idx) -> std::size_t {
   assert(idx <= sizeof...(Augments));  // We allow idx to be the 'end' index.
 
-  const std::array<std::size_t, sizeof...(Augments)> sizes{{ Augments::SIZE... }};
-  return std::accumulate(sizes.begin(), sizes.begin() + idx, sizeof(off));
+  if constexpr(sizeof...(Augments) == 0) {
+    return sizeof(off);
+  } else {
+    const std::array<std::size_t, sizeof...(Augments)> sizes{{ Augments::SIZE... }};
+    return std::accumulate(sizes.begin(), sizes.begin() + idx, sizeof(off));
+  }
 }
 
 
