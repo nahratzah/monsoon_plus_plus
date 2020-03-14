@@ -1,13 +1,14 @@
 #ifndef MONSOON_TX_DETAIL_TREE_PAGE_INL_H
 #define MONSOON_TX_DETAIL_TREE_PAGE_INL_H
 
+#include <monsoon/tx/detail/tree_spec.h>
 #include <algorithm>
 #include <cassert>
 #include <iterator>
 #include <numeric>
 #include <utility>
 #include <boost/endian/conversion.hpp>
-#include <monsoon/tx/detail/tree_spec.h>
+#include <boost/polymorphic_pointer_cast.hpp>
 
 namespace monsoon::tx::detail {
 
@@ -69,15 +70,8 @@ inline auto tree_elem<Key, Val, Augments...>::lock_parent_for_read() const
   std::shared_lock<std::shared_mutex> lck;
   std::tie(p, lck) = this->abstract_tree_elem::lock_parent_for_read();
 
-#ifdef NDEBUG
   cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
-      std::static_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
-#else
-  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
-      std::dynamic_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
-  assert(casted_p != nullptr); // Means the dynamic type wasn't found.
-#endif
-
+      boost::polymorphic_pointer_downcast<tree_page_leaf<Key, Val, Augments...>>(p);
   return std::make_tuple(std::move(casted_p), std::move(lck));
 }
 
@@ -88,15 +82,8 @@ inline auto tree_elem<Key, Val, Augments...>::lock_parent_for_write() const
   std::unique_lock<std::shared_mutex> lck;
   std::tie(p, lck) = this->abstract_tree_elem::lock_parent_for_write();
 
-#ifdef NDEBUG
   cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
-      std::static_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
-#else
-  cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val, Augments...>> casted_p =
-      std::dynamic_pointer_cast<tree_page_leaf<Key, Val, Augments...>>(p);
-  assert(casted_p != nullptr); // Means the dynamic type wasn't found.
-#endif
-
+      boost::polymorphic_pointer_downcast<tree_page_leaf<Key, Val, Augments...>>(p);
   return std::make_tuple(std::move(casted_p), std::move(lck));
 }
 

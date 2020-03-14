@@ -2,6 +2,7 @@
 #define MONSOON_TX_DB_INL_H
 
 #include <utility>
+#include <boost/polymorphic_pointer_cast.hpp>
 
 namespace monsoon::tx {
 
@@ -22,6 +23,9 @@ inline auto db::transaction::operator=(transaction&& other) noexcept -> transact
   active_ = std::exchange(other.active_, false);
   callbacks_ = std::move(other.callbacks_);
   self_ = std::move(other.self_);
+  deleted_set_ = std::move(other.deleted_set_);
+  created_set_ = std::move(other.created_set_);
+  require_set_ = std::move(other.require_set_);
   return *this;
 }
 
@@ -33,14 +37,7 @@ template<typename T>
 inline auto db::transaction::on(cycle_ptr::cycle_gptr<T> v) -> cycle_ptr::cycle_gptr<typename T::tx_object> {
   auto& txo = callbacks_[v];
   if (txo == nullptr) txo = cycle_ptr::make_cycle<typename T::tx_object>(*this, std::move(v));
-
-#ifdef NDEBUG
-  return std::static_pointer_cast<typename T::tx_object>(txo);
-#else
-  auto result_ptr = std::dynamic_pointer_cast<typename T::tx_object>(txo);
-  assert(result_ptr != nullptr); // Means the types are incorrect.
-  return result_ptr;
-#endif
+  return boost::polymorphic_pointer_downcast<typename T::tx_object>(txo);
 }
 
 inline db::transaction::transaction(detail::commit_manager::commit_id seq, bool read_only, db& self) noexcept

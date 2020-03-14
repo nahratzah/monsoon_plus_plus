@@ -5,6 +5,7 @@
 #include <cassert>
 #include <stdexcept>
 #include <type_traits>
+#include <boost/polymorphic_pointer_cast.hpp>
 #include <boost/endian/conversion.hpp>
 
 namespace monsoon::tx::detail {
@@ -219,12 +220,7 @@ void commit_manager_impl::on_completed_vacuum_(txfile& f, commit_id vacuum_targe
             return x.val - x.tx_start < y.val - x.tx_start;
           }));
 
-#ifdef NDEBUG
-  const std::shared_ptr<const state_impl_> cci_state = std::static_pointer_cast<const state_impl_>(get_commit_id_state(completed_commit_id_));
-#else
-  const std::shared_ptr<const state_impl_> cci_state = std::dynamic_pointer_cast<const state_impl_>(get_commit_id_state(completed_commit_id_));
-  assert(cci_state != nullptr);
-#endif
+  const std::shared_ptr<const state_impl_> cci_state = boost::polymorphic_pointer_downcast<const state_impl_>(get_commit_id_state(completed_commit_id_));
 
   new_state = std::allocate_shared<state_impl_>(alloc_, vacuum_target.val(), completed_commit_id_.val(), *this);
   states_.insert(states_.iterator_to(*cci_state), *new_state);
@@ -257,12 +253,7 @@ auto commit_manager_impl::state_impl_::get_cm_or_null() const noexcept -> std::s
 commit_manager_impl::write_id_state_impl_::~write_id_state_impl_() noexcept {
   const auto raw_cm = get_cm_or_null();
   if (raw_cm != nullptr) {
-#ifdef NDEBUG
-    const auto cm = std::static_pointer_cast<commit_manager_impl>(raw_cm);
-#else
-    const auto cm = std::dynamic_pointer_cast<commit_manager_impl>(raw_cm);
-    assert(cm != nullptr);
-#endif
+    const auto cm = boost::polymorphic_pointer_downcast<commit_manager_impl>(raw_cm);
     cm->null_commit_(*this);
   }
 }
@@ -286,12 +277,7 @@ auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error
   commit_id delay_release_of_old_cid;
   const auto raw_cm = get_cm_or_null();
   if (raw_cm == nullptr) return db_errc::gone_away;
-#ifdef NDEBUG
-  const auto cm = std::static_pointer_cast<commit_manager_impl>(raw_cm);
-#else
-  const auto cm = std::dynamic_pointer_cast<commit_manager_impl>(raw_cm);
-  assert(cm != nullptr);
-#endif
+  const auto cm = boost::polymorphic_pointer_downcast<commit_manager_impl>(raw_cm);
   wait_until_front_transaction_(*cm);
 
   std::unique_lock<std::shared_mutex> commit_lck{ cm->commit_mtx_ };
