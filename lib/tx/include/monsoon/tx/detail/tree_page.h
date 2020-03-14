@@ -222,8 +222,7 @@ class monsoon_tx_export_ abstract_tree_page_branch
 
 
 class monsoon_tx_export_ abstract_tree_elem
-: public tx_aware_data,
-  protected cycle_ptr::cycle_base
+: protected cycle_ptr::cycle_base
 {
   friend abstract_tree_page_leaf;
 
@@ -247,8 +246,29 @@ class monsoon_tx_export_ abstract_tree_elem
   auto lock_parent_for_write() const
   -> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
 
+  ///\brief Test if this value is never visible in any transactions.
+  virtual auto is_never_visible() const noexcept -> bool;
+
   private:
+  ///\brief Helper function, retrieves the mtx.
+  virtual auto mtx_ref_() const noexcept -> std::shared_mutex& = 0;
+
   cycle_ptr::cycle_member_ptr<abstract_tree_page_leaf> parent_;
+};
+
+
+class monsoon_tx_export_ abstract_tx_aware_tree_elem
+: public tx_aware_data,
+  public abstract_tree_elem
+{
+  protected:
+  using abstract_tree_elem::abstract_tree_elem;
+  virtual ~abstract_tx_aware_tree_elem() noexcept = 0;
+
+  auto is_never_visible() const noexcept -> bool override final;
+
+  private:
+  auto mtx_ref_() const noexcept -> std::shared_mutex& override final;
 };
 
 

@@ -323,7 +323,7 @@ abstract_tree_elem::~abstract_tree_elem() noexcept = default;
 auto abstract_tree_elem::lock_parent_for_read() const
 -> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::shared_lock<std::shared_mutex>> {
   for (;;) {
-    std::shared_lock<std::shared_mutex> self_lck{ mtx_ };
+    std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
     cycle_ptr::cycle_gptr<abstract_tree_page_leaf> p = parent_;
     std::shared_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
@@ -338,7 +338,7 @@ auto abstract_tree_elem::lock_parent_for_read() const
 auto abstract_tree_elem::lock_parent_for_write() const
 -> std::tuple<cycle_ptr::cycle_gptr<abstract_tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
   for (;;) {
-    std::shared_lock<std::shared_mutex> self_lck{ mtx_ };
+    std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
     cycle_ptr::cycle_gptr<abstract_tree_page_leaf> p = parent_;
     std::unique_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
@@ -348,6 +348,17 @@ auto abstract_tree_elem::lock_parent_for_write() const
     self_lck.lock();
     if (p == parent_) return std::make_tuple(std::move(p), std::move(p_lck));
   }
+}
+
+auto abstract_tree_elem::is_never_visible() const noexcept -> bool {
+  return false;
+}
+
+
+abstract_tx_aware_tree_elem::~abstract_tx_aware_tree_elem() noexcept = default;
+
+auto abstract_tx_aware_tree_elem::mtx_ref_() const noexcept -> std::shared_mutex& {
+  return mtx_;
 }
 
 

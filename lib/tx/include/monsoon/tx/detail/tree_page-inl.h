@@ -32,6 +32,11 @@ inline abstract_tree_elem::abstract_tree_elem(cycle_ptr::cycle_gptr<abstract_tre
 {}
 
 
+inline auto abstract_tx_aware_tree_elem::is_never_visible() const noexcept -> bool {
+  return this->tx_aware_data::is_never_visible();
+}
+
+
 template<typename Key, typename Val, typename... Augments>
 inline tree_elem<Key, Val, Augments...>::tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf<Key, Val>> parent, const Key& key, const Val& val)
 : abstract_tree_elem(std::move(parent)),
