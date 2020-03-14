@@ -223,6 +223,9 @@ class monsoon_tx_export_ tree_page_leaf final
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
+  auto next() const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  auto prev() const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+
   private:
   /**
    * \brief Split this page in two halves.

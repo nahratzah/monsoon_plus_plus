@@ -224,6 +224,18 @@ void tree_page_leaf::encode(txfile::transaction& tx) const {
   monsoon::io::write_at(tx, off_, buf_storage.data(), buf_storage.size());
 }
 
+auto tree_page_leaf::next() const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  if (next_sibling_off_ == 0) return nullptr;
+  return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(next_sibling_off_));
+}
+
+auto tree_page_leaf::prev() const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  if (prev_sibling_off_ == 0) return nullptr;
+  return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(prev_sibling_off_));
+}
+
 auto tree_page_leaf::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
