@@ -478,7 +478,7 @@ auto abstract_tree_page_branch::insert_sibling(
   // Update on-disk state.
   const auto write_offset = offset() + header::SIZE + idx * (bytes_per_elem + bytes_per_key);
   const auto write_len = (elems_.size() - idx + 1u) * (bytes_per_elem + bytes_per_key);
-  auto buf_storage = std::vector<std::uint8_t, abstract_tree::traits_type::rebind_alloc<std::uint8_t>>(write_len, tree()->allocator);
+  auto buf_storage = std::vector<std::uint8_t>(write_len);
   auto buf = boost::asio::buffer(buf_storage);
 
   // At elems_[idx], write the updated augmentation.
