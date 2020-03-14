@@ -113,6 +113,17 @@ auto abstract_tree_page::decode(
   return page;
 }
 
+auto abstract_tree_page::local_split_(
+    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+-> std::tuple<
+    std::shared_ptr<abstract_tree_page_branch_key>,
+    cycle_ptr::cycle_gptr<abstract_tree_page>,
+    std::unique_lock<std::shared_mutex>
+> {
+  return local_split_atp_(lck, f, new_page_off, parent, parent_lck);
+}
+
 
 abstract_tree_page_leaf::abstract_tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)
 : abstract_tree_page(std::move(tree)),

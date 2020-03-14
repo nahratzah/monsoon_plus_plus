@@ -159,6 +159,8 @@ class monsoon_tx_export_ abstract_tree_page
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
       std::unique_lock<std::shared_mutex>>;
+  ///\brief local_split_ virtual function.
+  ///\note This is a virtual function so that we can "fake" covariant return using the local_split_ functions.
   virtual auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<abstract_tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
