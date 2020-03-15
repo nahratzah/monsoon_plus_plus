@@ -75,7 +75,7 @@ class monsoon_tx_export_ commit_manager_impl
     private:
     ///\brief Waits until this transaction is at the front of the transaction queue.
     void wait_until_front_transaction_(const commit_manager_impl& cm);
-    auto do_apply(cheap_fn_ref<std::error_code> validation, cheap_fn_ref<> phase2) -> std::error_code override;
+    auto do_apply(cheap_fn_ref<std::error_code()> validation, cheap_fn_ref<> phase2) -> std::error_code override;
 
     std::variant<std::monostate, std::condition_variable_any> wait_;
   };

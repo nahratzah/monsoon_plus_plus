@@ -273,7 +273,7 @@ void commit_manager_impl::write_id_state_impl_::wait_until_front_transaction_(co
       });
 }
 
-auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error_code> validation, cheap_fn_ref<> phase2) -> std::error_code {
+auto commit_manager_impl::write_id_state_impl_::do_apply(cheap_fn_ref<std::error_code()> validation, cheap_fn_ref<> phase2) -> std::error_code {
   commit_id delay_release_of_old_cid;
   const auto raw_cm = get_cm_or_null();
   if (raw_cm == nullptr) return db_errc::gone_away;

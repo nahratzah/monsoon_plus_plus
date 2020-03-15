@@ -97,7 +97,7 @@ class monsoon_tx_export_ commit_manager {
 
     private:
     ///\brief Transaction apply implementation.
-    virtual auto do_apply(cheap_fn_ref<std::error_code> validation, cheap_fn_ref<> phase2) -> std::error_code = 0;
+    virtual auto do_apply(cheap_fn_ref<std::error_code()> validation, cheap_fn_ref<> phase2) -> std::error_code = 0;
 
     protected:
     const commit_id seq_;

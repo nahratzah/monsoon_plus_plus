@@ -8,6 +8,9 @@
 namespace monsoon {
 
 
+template<typename = void()> class cheap_fn_ref;
+
+
 /**
  * \brief Reference to a functor.
  * \details
@@ -19,8 +22,8 @@ namespace monsoon {
  *
  * \tparam R Return type of the functor.
  */
-template<typename R = void>
-class cheap_fn_ref {
+template<typename R, typename... Args>
+class cheap_fn_ref<R(Args...)> {
   public:
   using result_type = R;
 
@@ -59,9 +62,9 @@ class cheap_fn_ref {
    */
   template<typename Functor>
   cheap_fn_ref(Functor&& functor) noexcept {
-    fn_ = [](void* ptr) -> R {
+    fn_ = [](void* ptr, Args... args) -> R {
       assert(ptr != nullptr);
-      return std::invoke(*static_cast<std::remove_reference_t<Functor>*>(ptr));
+      return std::invoke(*static_cast<std::remove_reference_t<Functor>*>(ptr), std::forward<Args>(args)...);
     };
 
     if constexpr(std::is_const_v<std::remove_reference_t<Functor>>) {
@@ -73,9 +76,9 @@ class cheap_fn_ref {
 
   ///\brief Invoke the functor.
   ///\return The return value of the functor.
-  auto operator()() const -> R {
+  auto operator()(Args... args) const -> R {
     assert(fn_ != nullptr);
-    return std::invoke(fn_, datum_);
+    return std::invoke(fn_, datum_, std::forward<Args>(args)...);
   }
 
   ///\brief Test if the reference is invocable.
@@ -93,7 +96,7 @@ class cheap_fn_ref {
 
   private:
   ///\brief Functor that does the unwrapping and invoking of the functor.
-  R (*fn_)(void*) = nullptr;
+  R (*fn_)(void*, Args...) = nullptr;
   ///\brief Type-erased value of the functor.
   void *datum_ = nullptr;
 };
