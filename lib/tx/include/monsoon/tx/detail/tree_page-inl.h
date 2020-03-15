@@ -112,24 +112,25 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
   typename leaf_locks_type::iterator page_iter = leaf_locks.begin();
   tree_page_leaf::elems_vector::iterator elem_iter;
   cycle_ptr::cycle_gptr<abstract_tree_elem> b;
-  for (elem_iter = page_iter->first->elems_.begin();
-      elem_iter != page_iter->first->elems_.end() && b == nullptr;
-      ++elem_iter) {
-    // On the first page, we need to use the less-than test.
-    if (*elem_iter != nullptr && !less_cb(**elem_iter, key))
-      b = *elem_iter;
-  }
+  // Find the lower bound element on the first leaf.
+  elem_iter = std::find_if(
+      page_iter->first->elems_.begin(), page_iter->first->elems_.end(),
+      [this, &key](const auto& ptr) -> bool {
+        return ptr != nullptr && !less_cb(*ptr, key);
+      });
+  if (elem_iter != page_iter->first->elems_.end()) b = *elem_iter;
   if (b == nullptr) {
     // For subsequent page, we know the less-than test would always pass, so we elide it.
     for (++page_iter;
-        page_iter != leaf_locks.end() && b == nullptr;
+        page_iter != leaf_locks.end();
         ++page_iter) {
-      for (elem_iter = page_iter->first->elems_.begin();
-          elem_iter != page_iter->first->elems_.end() && b == nullptr;
-          ++elem_iter) {
-        if (*elem_iter != nullptr)
-          b = *elem_iter;
-      }
+      elem_iter = std::find_if(
+          page_iter->first->elems_.begin(), page_iter->first->elems_.end(),
+          [](const auto& ptr) -> bool { return ptr != nullptr; });
+      if (elem_iter != page_iter->first->elems_.end()) b = *elem_iter;
+      // We must break manually: if we would use the for loop,
+      // the page_iter would advance before the invariant check was evaluated.
+      if (b != nullptr) break;
     }
   }
 
@@ -138,7 +139,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
     // We know it is going to be an empty range.
     // We'll just have to find the next element to use as both lower and upper bounds.
     while (auto next_leaf = leaf_locks.back().first->next()) {
-      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_);
+      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_); // Invalidates page_iter.
       for (const auto& elem_ptr : next_leaf->elems_) {
         if (elem_ptr != nullptr) {
           cb(
@@ -162,18 +163,18 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
   }
   // Find the upper bound.
   cycle_ptr::cycle_gptr<abstract_tree_elem> e;
-  for (;
-      elem_iter != page_iter->first->elems_.end() && e == nullptr;
-      ++elem_iter) {
-    if (*elem_iter != nullptr && less_cb(key, **elem_iter))
-      e = *elem_iter;
-  }
+  elem_iter = std::find_if(
+      page_iter->first->elems_.begin(), page_iter->first->elems_.end(),
+      [this, &key](const auto& ptr) -> bool {
+        return ptr != nullptr && less_cb(key, *ptr);
+      });
+  if (elem_iter != page_iter->first->elems_.end()) e = *elem_iter;
 
   if (e == nullptr) {
     // No upper bound found in the entire range.
     // We'll just have to find the next element to use as upper bound.
     while (auto next_leaf = leaf_locks.back().first->next()) {
-      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_);
+      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_); // Invalidates page_iter.
       for (const auto& elem_ptr : next_leaf->elems_) {
         if (elem_ptr != nullptr) {
           cb(
