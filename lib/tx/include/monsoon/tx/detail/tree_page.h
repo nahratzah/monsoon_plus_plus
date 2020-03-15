@@ -114,18 +114,54 @@ class monsoon_tx_export_ abstract_tree
   auto begin() -> abstract_tree_iterator;
   auto end() -> abstract_tree_iterator;
 
-  ///\brief Find the iterators describing a range where all elements use the value "key".
-  auto equal_range(const abstract_tree_page_branch_key& key) -> std::pair<abstract_tree_iterator, abstract_tree_iterator>;
-  ///\brief Find the lower-bound iterator where elements use the value "key".
-  auto lower_bound(const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
-  ///\brief Find the upper-bound iterator where elements use the value "key".
-  auto upper_bound(const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
+  /**
+   * \brief Find the iterators describing a range where all elements use the value "key", and then invoke a callback.
+   * \details
+   * Find the lower and upper bounds for \p key and then invoke \p cb on those.
+   * While \p cb is executed, pages used in the equal range will be locked for read.
+   *
+   * \note
+   * The reason for having a callback-based approach, is because the tree can be accessed and modified concurrently.
+   * This callback approach ensures that the appropriate locks are held to prevent this.
+   *
+   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   * \param key The key to find the equal range for.
+   */
+  void with_equal_range_for_read(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key);
+  /**
+   * \brief Find the iterators describing a range where all elements use the value "key", and then invoke a callback.
+   * \details
+   * Find the lower and upper bounds for \p key and then invoke \p cb on those.
+   * While \p cb is executed, pages used in the equal range will be locked for write.
+   *
+   * \note
+   * The reason for having a callback-based approach, is because the tree can be accessed and modified concurrently.
+   * This callback approach ensures that the appropriate locks are held to prevent this.
+   *
+   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   * \param key The key to find the equal range for.
+   */
+  void with_equal_range_for_write(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key);
 
   private:
-  ///\brief Find the lower-bound iterator where elements use the value "key".
-  auto lower_bound(page_with_lock pwl, const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
-  ///\brief Find the upper-bound iterator where elements use the value "key".
-  auto upper_bound(page_with_lock pwl, const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
+  /**
+   * \brief Find the iterators describing a range where all elements use the value "key", and then invoke a callback.
+   * \details
+   * Find the lower and upper bounds for \p key and then invoke \p cb on those.
+   * While \p cb is executed, pages used in the equal range will be locked.
+   *
+   * This template powers both the with_equal_range_read and with_equal_range_for_write methods.
+   *
+   * \note
+   * The reason for having a callback-based approach, is because the tree can be accessed and modified concurrently.
+   * This callback approach ensures that the appropriate locks are held to prevent this.
+   *
+   * \tparam LockType A std::shared_lock<std::shared_mutex> or std::unique_lock<std::mutex>, used to maintain the lock.
+   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   * \param key The key to find the equal range for.
+   */
+  template<typename LockType>
+  void with_equal_range_(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key);
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;

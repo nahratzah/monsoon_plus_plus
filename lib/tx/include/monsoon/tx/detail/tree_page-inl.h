@@ -26,6 +26,175 @@ inline auto abstract_tree::end() -> abstract_tree_iterator {
   return abstract_tree_iterator(shared_from_this(this), nullptr);
 }
 
+template<typename LockType>
+inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key) {
+  using leaf_locks_type = std::vector<std::pair<cycle_ptr::cycle_gptr<tree_page_leaf>, LockType>>;
+  leaf_locks_type leaf_locks;
+
+  // Local scope to populate leaf_locks.
+  {
+    cycle_ptr::cycle_gptr<tree_page_branch> parent_page;
+    cycle_ptr::cycle_gptr<abstract_tree_page> child_page;
+    std::shared_lock<std::shared_mutex> parent_lock{ mtx_ };
+
+    if (root_off_ == 0) {
+      cb(end(), end());
+      return;
+    }
+    auto next_off = root_off_;
+
+    assert(next_off != 0);
+    child_page = get(next_off);
+    // Descend down branches.
+    while (auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
+      std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
+
+      const auto key_range = std::equal_range(branch_page->keys_.begin(), branch_page->keys_.end(), &key,
+          [this](const auto& x, const auto& y) -> bool {
+            return less_cb(*x, *y);
+          });
+      if (key_range.first == key_range.second) [[likely]] { // Single page descent.
+        child_page = get(branch_page->elems_[key_range.first - branch_page->keys_.begin()]->off);
+      } else {
+        // We need multiple child pages to describe the range.
+        // Use local scoped variables to find the page of the lower bound.
+        {
+          cycle_ptr::cycle_gptr<tree_page_branch> m_parent_page = branch_page;
+          std::shared_lock<std::shared_mutex> m_parent_lock;
+          child_page = get(branch_page->elems_[key_range.first - branch_page->keys_.begin()]->off);
+          while (auto m_branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
+            std::tie(m_parent_page, m_parent_lock) = std::forward_as_tuple(m_branch_page, std::shared_lock<std::shared_mutex>(m_branch_page->mtx_));
+            const auto i = std::lower_bound(m_branch_page->keys_.begin(), m_branch_page->keys_.end(), &key,
+                [this](const auto& x, const auto& y) -> bool {
+                  return less_cb(*x, *y);
+                });
+            child_page = get(m_branch_page->elems_[i - m_branch_page->keys_.begin()]->off);
+          }
+
+          // Lock and remember the first leaf page.
+          leaf_locks.emplace_back(
+              boost::polymorphic_pointer_downcast<tree_page_leaf>(child_page),
+              child_page->mtx_);
+        }
+
+        child_page = get(branch_page->elems_[key_range.first - branch_page->keys_.begin()]->off);
+        while ((branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) != nullptr) {
+          std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
+
+          const auto i = std::upper_bound(branch_page->keys_.begin(), branch_page->keys_.end(), &key,
+              [this](const auto& x, const auto& y) -> bool {
+                return less_cb(*x, *y);
+              });
+          child_page = get(branch_page->elems_[i - branch_page->keys_.begin()]->off);
+        }
+
+        // Insert all page up to the child page.
+        // Note: we're not inserting child page, as that is handled at the end of the loop.
+        for (cycle_ptr::cycle_gptr<tree_page_leaf> successor = leaf_locks.back().first->next();
+            successor != child_page;
+            successor = successor->next())
+          leaf_locks.emplace_back(successor, successor->mtx_);
+        break; // Break out of the loop as we've completed the decent.
+      }
+    }
+    // At this point:
+    // - child_page is not in leaf_locks
+    // - child_page is a leaf
+    // - child_page holds the upper bound of the range
+    // - parent_page and parent_lock prevent any modifications
+    // - leaf_locks holds all pages up to, but excluding child_page
+    assert(child_page != nullptr);
+    leaf_locks.emplace_back(boost::polymorphic_pointer_cast<tree_page_leaf>(child_page), child_page->mtx_);
+  }
+
+  // We made it all the way to a single leaf page.
+  // Find the lower bound element.
+  typename leaf_locks_type::iterator page_iter = leaf_locks.begin();
+  tree_page_leaf::elems_vector::iterator elem_iter;
+  cycle_ptr::cycle_gptr<abstract_tree_elem> b;
+  for (elem_iter = page_iter->first->elems_.begin();
+      elem_iter != page_iter->first->elems_.end() && b == nullptr;
+      ++elem_iter) {
+    // On the first page, we need to use the less-than test.
+    if (*elem_iter != nullptr && !less_cb(**elem_iter, key))
+      b = *elem_iter;
+  }
+  if (b == nullptr) {
+    // For subsequent page, we know the less-than test would always pass, so we elide it.
+    for (++page_iter;
+        page_iter != leaf_locks.end() && b == nullptr;
+        ++page_iter) {
+      for (elem_iter = page_iter->first->elems_.begin();
+          elem_iter != page_iter->first->elems_.end() && b == nullptr;
+          ++elem_iter) {
+        if (*elem_iter != nullptr)
+          b = *elem_iter;
+      }
+    }
+  }
+
+  if (b == nullptr) {
+    // No lower bound found in the entire range.
+    // We know it is going to be an empty range.
+    // We'll just have to find the next element to use as both lower and upper bounds.
+    while (auto next_leaf = leaf_locks.back().first->next()) {
+      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_);
+      for (const auto& elem_ptr : next_leaf->elems_) {
+        if (elem_ptr != nullptr) {
+          cb(
+              abstract_tree_iterator(shared_from_this(this), elem_ptr),
+              abstract_tree_iterator(shared_from_this(this), elem_ptr));
+          return;
+        }
+      }
+    }
+    // There were no successors at all.
+    cb(end(), end());
+    return;
+  }
+
+  // We know the lower bound will be on the last page,
+  // and that it is at or after b.
+  // Which means that if we are on the last page, we can use b as a starting point.
+  if (std::next(page_iter) != leaf_locks.end()) {
+    page_iter = std::prev(leaf_locks.end());
+    elem_iter = page_iter->first->elems_.begin();
+  }
+  // Find the upper bound.
+  cycle_ptr::cycle_gptr<abstract_tree_elem> e;
+  for (;
+      elem_iter != page_iter->first->elems_.end() && e == nullptr;
+      ++elem_iter) {
+    if (*elem_iter != nullptr && less_cb(key, **elem_iter))
+      e = *elem_iter;
+  }
+
+  if (e == nullptr) {
+    // No upper bound found in the entire range.
+    // We'll just have to find the next element to use as upper bound.
+    while (auto next_leaf = leaf_locks.back().first->next()) {
+      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_);
+      for (const auto& elem_ptr : next_leaf->elems_) {
+        if (elem_ptr != nullptr) {
+          cb(
+              abstract_tree_iterator(shared_from_this(this), std::move(b)),
+              abstract_tree_iterator(shared_from_this(this), elem_ptr));
+          return;
+        }
+      }
+    }
+    // There were no successors at all.
+    cb(
+        abstract_tree_iterator(shared_from_this(this), std::move(b)),
+        end());
+    return;
+  }
+
+  cb(
+      abstract_tree_iterator(shared_from_this(this), std::move(b)),
+      abstract_tree_iterator(shared_from_this(this), std::move(e)));
+}
+
 
 inline abstract_tree_page::abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree)
 : tree_(tree),
