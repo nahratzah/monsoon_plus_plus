@@ -9,6 +9,7 @@
 #include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <shared_mutex>
 #include <tuple>
@@ -29,6 +30,7 @@ class abstract_tree_elem;
 class abstract_tx_aware_tree_elem;
 class abstract_tree_page_branch_elem;
 class abstract_tree_page_branch_key;
+class abstract_tree_iterator;
 
 template<typename Key, typename Val, typename... Augments>
 class tree_impl;
@@ -45,6 +47,7 @@ class monsoon_tx_export_ abstract_tree
   friend tree_page_leaf;
   friend tree_page_branch;
   friend abstract_tree_elem;
+  friend abstract_tree_iterator;
 
   public:
   ///\brief Allocator used by commit_manager.
@@ -98,6 +101,10 @@ class monsoon_tx_export_ abstract_tree
   public:
   const std::shared_ptr<const tree_cfg> cfg;
   allocator_type allocator;
+
+  protected:
+  auto begin() -> abstract_tree_iterator;
+  auto end() -> abstract_tree_iterator;
 
   protected:
   std::uint64_t root_off_ = 0;
@@ -509,6 +516,45 @@ class monsoon_tx_export_ abstract_tree_page_branch_key {
   public:
   virtual void decode(boost::asio::const_buffer buf) = 0;
   virtual void encode(boost::asio::mutable_buffer buf) const = 0;
+};
+
+
+///\brief Bidirectional iterator over the element of the tree.
+class abstract_tree_iterator {
+  friend abstract_tree;
+
+  public:
+  using iterator_category = std::bidirectional_iterator_tag;
+  using value_type = abstract_tree_elem;
+  using reference = value_type&;
+  using pointer = cycle_ptr::cycle_gptr<value_type>;
+  using difference_type = std::int64_t;
+
+  constexpr abstract_tree_iterator() noexcept = default;
+  abstract_tree_iterator(const abstract_tree_iterator&) noexcept = default;
+  abstract_tree_iterator(abstract_tree_iterator&&) noexcept = default;
+  abstract_tree_iterator& operator=(const abstract_tree_iterator&) noexcept = default;
+  abstract_tree_iterator& operator=(abstract_tree_iterator&&) noexcept = default;
+
+  private:
+  abstract_tree_iterator(cycle_ptr::cycle_gptr<abstract_tree> tree, cycle_ptr::cycle_gptr<abstract_tree_elem> elem) noexcept;
+
+  public:
+  auto get() const noexcept -> pointer;
+  auto operator*() const noexcept -> reference;
+  auto operator->() const noexcept -> const pointer&;
+
+  auto operator++() -> abstract_tree_iterator&;
+  auto operator--() -> abstract_tree_iterator&;
+  auto operator++(int) -> abstract_tree_iterator;
+  auto operator--(int) -> abstract_tree_iterator;
+
+  auto operator==(const abstract_tree_iterator& y) const noexcept -> bool;
+  auto operator!=(const abstract_tree_iterator& y) const noexcept -> bool;
+
+  private:
+  cycle_ptr::cycle_gptr<abstract_tree> tree_;
+  cycle_ptr::cycle_gptr<abstract_tree_elem> elem_;
 };
 
 

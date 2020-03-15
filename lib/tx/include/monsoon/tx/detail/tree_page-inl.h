@@ -18,6 +18,14 @@ inline abstract_tree::abstract_tree(allocator_type alloc)
 : allocator(std::move(alloc))
 {}
 
+inline auto abstract_tree::begin() -> abstract_tree_iterator {
+  return abstract_tree_iterator(shared_from_this(this), first_element_());
+}
+
+inline auto abstract_tree::end() -> abstract_tree_iterator {
+  return abstract_tree_iterator(shared_from_this(this), nullptr);
+}
+
 
 inline abstract_tree_page::abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree)
 : tree_(tree),
@@ -34,6 +42,60 @@ inline abstract_tree_elem::abstract_tree_elem(cycle_ptr::cycle_gptr<tree_page_le
 
 inline auto abstract_tx_aware_tree_elem::is_never_visible() const noexcept -> bool {
   return this->tx_aware_data::is_never_visible();
+}
+
+
+inline abstract_tree_iterator::abstract_tree_iterator(cycle_ptr::cycle_gptr<abstract_tree> tree, cycle_ptr::cycle_gptr<abstract_tree_elem> elem) noexcept
+: tree_(std::move(tree)),
+  elem_(std::move(elem))
+{}
+
+inline auto abstract_tree_iterator::get() const noexcept -> pointer {
+  return elem_;
+}
+
+inline auto abstract_tree_iterator::operator*() const noexcept -> reference {
+  assert(elem_ != nullptr);
+  return *elem_;
+}
+
+inline auto abstract_tree_iterator::operator->() const noexcept -> const pointer& {
+  assert(elem_ != nullptr);
+  return elem_;
+}
+
+inline auto abstract_tree_iterator::operator++() -> abstract_tree_iterator& {
+  assert(tree_ != nullptr && elem_ != nullptr);
+  elem_ = elem_->next();
+  return *this;
+}
+
+inline auto abstract_tree_iterator::operator--() -> abstract_tree_iterator& {
+  assert(tree_ != nullptr && elem_ != nullptr);
+  elem_ = (elem_ == nullptr
+      ? tree_->last_element_()
+      : elem_->prev());
+  return *this;
+}
+
+inline auto abstract_tree_iterator::operator++(int) -> abstract_tree_iterator {
+  abstract_tree_iterator copy = *this;
+  ++*this;
+  return copy;
+}
+
+inline auto abstract_tree_iterator::operator--(int) -> abstract_tree_iterator {
+  abstract_tree_iterator copy = *this;
+  --*this;
+  return copy;
+}
+
+inline auto abstract_tree_iterator::operator==(const abstract_tree_iterator& y) const noexcept -> bool {
+  return tree_ == y.tree_ && elem_ == y.elem_;
+}
+
+inline auto abstract_tree_iterator::operator!=(const abstract_tree_iterator& y) const noexcept -> bool {
+  return !(*this == y);
 }
 
 
