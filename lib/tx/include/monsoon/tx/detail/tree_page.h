@@ -114,6 +114,19 @@ class monsoon_tx_export_ abstract_tree
   auto begin() -> abstract_tree_iterator;
   auto end() -> abstract_tree_iterator;
 
+  ///\brief Find the iterators describing a range where all elements use the value "key".
+  auto equal_range(const abstract_tree_page_branch_key& key) -> std::pair<abstract_tree_iterator, abstract_tree_iterator>;
+  ///\brief Find the lower-bound iterator where elements use the value "key".
+  auto lower_bound(const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
+  ///\brief Find the upper-bound iterator where elements use the value "key".
+  auto upper_bound(const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
+
+  private:
+  ///\brief Find the lower-bound iterator where elements use the value "key".
+  auto lower_bound(page_with_lock pwl, const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
+  ///\brief Find the upper-bound iterator where elements use the value "key".
+  auto upper_bound(page_with_lock pwl, const abstract_tree_page_branch_key& key) -> abstract_tree_iterator;
+
   public:
   const std::shared_ptr<const tree_cfg> cfg;
   allocator_type allocator;
