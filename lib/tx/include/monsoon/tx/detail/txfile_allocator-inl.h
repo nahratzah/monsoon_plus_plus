@@ -12,6 +12,22 @@ inline auto txfile_allocator::key::operator!=(const key& y) const noexcept -> bo
   return !(*this == y);
 }
 
+inline auto txfile_allocator::key::operator<(const key& y) const noexcept -> bool {
+  return addr < y.addr;
+}
+
+inline auto txfile_allocator::key::operator>(const key& y) const noexcept -> bool {
+  return y < *this;
+}
+
+inline auto txfile_allocator::key::operator<=(const key& y) const noexcept -> bool {
+  return !(*this > y);
+}
+
+inline auto txfile_allocator::key::operator>=(const key& y) const noexcept -> bool {
+  return !(*this < y);
+}
+
 
 inline auto txfile_allocator::max_free_space_augment::merge(
     const max_free_space_augment& x, const max_free_space_augment& y) noexcept

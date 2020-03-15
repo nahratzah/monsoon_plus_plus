@@ -101,6 +101,15 @@ class monsoon_tx_export_ abstract_tree
   ///\brief Get the last element in the tree.
   auto last_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
 
+  ///\brief Invoke less-than comparison between two keys.
+  virtual auto less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_page_branch_key&  y) const -> bool = 0;
+  ///\brief Invoke less-than comparison between two elements.
+  virtual auto less_cb(const abstract_tree_elem&             x, const abstract_tree_elem&             y) const -> bool;
+  ///\brief Invoke less-than comparison between a key and an element.
+  virtual auto less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_elem&             y) const -> bool;
+  ///\brief Invoke less-than comparison between an element and a key.
+  virtual auto less_cb(const abstract_tree_elem&             x, const abstract_tree_page_branch_key&  y) const -> bool;
+
   protected:
   auto begin() -> abstract_tree_iterator;
   auto end() -> abstract_tree_iterator;
@@ -414,6 +423,7 @@ class monsoon_tx_local_ tree_page_branch::insert_sibling_tx {
 class monsoon_tx_export_ abstract_tree_elem
 : protected cycle_ptr::cycle_base
 {
+  friend abstract_tree;
   friend tree_page_leaf;
 
   public:

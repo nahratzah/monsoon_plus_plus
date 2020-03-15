@@ -33,6 +33,10 @@ class monsoon_tx_export_ txfile_allocator final
 
     auto operator==(const key& y) const noexcept -> bool;
     auto operator!=(const key& y) const noexcept -> bool;
+    auto operator< (const key& y) const noexcept -> bool;
+    auto operator> (const key& y) const noexcept -> bool;
+    auto operator<=(const key& y) const noexcept -> bool;
+    auto operator>=(const key& y) const noexcept -> bool;
 
     std::uint64_t addr;
   };
@@ -97,6 +101,11 @@ class monsoon_tx_export_ txfile_allocator final
   auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override;
   auto allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
   auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> override;
+
+  auto less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_page_branch_key&  y) const -> bool override;
+  auto less_cb(const abstract_tree_elem&             x, const abstract_tree_elem&             y) const -> bool override;
+  auto less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_elem&             y) const -> bool override;
+  auto less_cb(const abstract_tree_elem&             x, const abstract_tree_page_branch_key&  y) const -> bool override;
 
   ///\brief Implementation of the merge logic.
   static auto augment_merge_(const std::tuple<max_free_space_augment>& x, const std::tuple<max_free_space_augment>& y) -> std::tuple<max_free_space_augment>;

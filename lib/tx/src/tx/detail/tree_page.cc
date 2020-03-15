@@ -198,6 +198,18 @@ auto abstract_tree::last_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>
   }
 }
 
+auto abstract_tree::less_cb(const abstract_tree_elem& x, const abstract_tree_elem& y) const -> bool {
+  return less_cb(*x.branch_key_(allocator), *y.branch_key_(allocator));
+}
+
+auto abstract_tree::less_cb(const abstract_tree_page_branch_key& x, const abstract_tree_elem& y) const -> bool {
+  return less_cb(x, *y.branch_key_(allocator));
+}
+
+auto abstract_tree::less_cb(const abstract_tree_elem& x, const abstract_tree_page_branch_key& y) const -> bool {
+  return less_cb(*x.branch_key_(allocator), y);
+}
+
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
 

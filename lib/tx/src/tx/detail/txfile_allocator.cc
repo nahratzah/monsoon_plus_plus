@@ -3,6 +3,7 @@
 #include <mutex>
 #include <boost/endian/conversion.hpp>
 #include <boost/polymorphic_pointer_cast.hpp>
+#include <boost/polymorphic_cast.hpp>
 #include <objpipe/of.h>
 
 namespace monsoon::tx::detail {
@@ -160,6 +161,30 @@ auto txfile_allocator::allocate_branch_elem_() const -> std::shared_ptr<abstract
 
 auto txfile_allocator::allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> {
   return std::allocate_shared<tree_page_branch_key<class key>>(allocator);
+}
+
+auto txfile_allocator::less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_page_branch_key&  y) const -> bool {
+  auto* cx = boost::polymorphic_cast<const tree_page_branch_key<class key>*>(&x);
+  auto* cy = boost::polymorphic_cast<const tree_page_branch_key<class key>*>(&y);
+  return cx->key < cy->key;
+}
+
+auto txfile_allocator::less_cb(const abstract_tree_elem&             x, const abstract_tree_elem&             y) const -> bool {
+  auto* cx = boost::polymorphic_cast<const element*>(&x);
+  auto* cy = boost::polymorphic_cast<const element*>(&y);
+  return cx->key < cy->key;
+}
+
+auto txfile_allocator::less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_elem&             y) const -> bool {
+  auto* cx = boost::polymorphic_cast<const tree_page_branch_key<class key>*>(&y);
+  auto* cy = boost::polymorphic_cast<const element*>(&x);
+  return cx->key < cy->key;
+}
+
+auto txfile_allocator::less_cb(const abstract_tree_elem&             x, const abstract_tree_page_branch_key&  y) const -> bool {
+  auto* cx = boost::polymorphic_cast<const element*>(&x);
+  auto* cy = boost::polymorphic_cast<const tree_page_branch_key<class key>*>(&y);
+  return cx->key < cy->key;
 }
 
 auto txfile_allocator::augment_merge_(const std::tuple<max_free_space_augment>& x, const std::tuple<max_free_space_augment>& y) -> std::tuple<max_free_space_augment> {
