@@ -90,6 +90,114 @@ auto abstract_tree::allocate_branch_() -> cycle_ptr::cycle_gptr<tree_page_branch
   return cycle_ptr::allocate_cycle<tree_page_branch>(allocator, this->shared_from_this(this));
 }
 
+struct monsoon_tx_local_ abstract_tree::page_with_lock {
+  page_with_lock() noexcept = default;
+  page_with_lock(page_with_lock&&) noexcept = default;
+  page_with_lock& operator=(page_with_lock&&) noexcept = default;
+  page_with_lock([[maybe_unused]] std::nullptr_t np) noexcept {}
+
+  page_with_lock(cycle_ptr::cycle_gptr<abstract_tree_page> page)
+  : page(std::move(page))
+  {
+    if (this->page != nullptr)
+      lck = std::shared_lock<std::shared_mutex>(this->page->mtx_);
+  }
+
+  page_with_lock(cycle_ptr::cycle_gptr<abstract_tree_page> page, std::try_to_lock_t t)
+  : page(std::move(page))
+  {
+    if (this->page != nullptr)
+      lck = std::shared_lock<std::shared_mutex>(this->page->mtx_, t);
+  }
+
+  auto operator=(cycle_ptr::cycle_gptr<abstract_tree_page> page) -> page_with_lock& {
+    return *this = page_with_lock(std::move(page));
+  }
+
+  auto reset() {
+    if (lck.owns_lock()) lck.unlock();
+    page.reset();
+  }
+
+  cycle_ptr::cycle_gptr<abstract_tree_page> page;
+  std::shared_lock<std::shared_mutex> lck;
+};
+
+auto abstract_tree::first_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  if (root_off_ == 0) return nullptr;
+  page_with_lock pwl = get(root_off_);
+  lck.unlock();
+
+  // Descend down the tree of pages.
+  while (const auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(pwl.page))
+    pwl = get(branch_page->elems_.front()->off);
+
+  // If it isn't a branch, then it is a leaf.
+  for (auto leaf_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(pwl.page);
+       leaf_page != nullptr;
+       pwl = leaf_page = leaf_page->next(pwl.lck)) {
+    // Find the first non-nul element in the leaf.
+    auto elem_iter = std::find_if(
+        leaf_page->elems_.begin(), leaf_page->elems_.end(),
+        [](const auto& ptr) { return ptr != nullptr; });
+    if (elem_iter != leaf_page->elems_.end()) return *elem_iter;
+  }
+  // None of the leaves had any non-null elements.
+  return nullptr;
+}
+
+auto abstract_tree::last_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+  for (;;) {
+    std::shared_lock<std::shared_mutex> lck{ mtx_ };
+    if (root_off_ == 0) return nullptr;
+    page_with_lock pwl = get(root_off_);
+    lck.unlock();
+
+    // Descend down the tree of pages.
+    while (const auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(pwl.page))
+      pwl = get(branch_page->elems_.back()->off);
+
+    // If it isn't a branch, then it is a leaf.
+    bool validation_needed = false;
+    cycle_ptr::cycle_gptr<abstract_tree_elem> result;
+    while (auto leaf_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(pwl.page)) {
+      // Find the last non-null element in the leaf.
+      auto elem_iter = std::find_if(
+          leaf_page->elems_.rbegin(), leaf_page->elems_.rend(),
+          [](const auto& ptr) { return ptr != nullptr; });
+      if (elem_iter != leaf_page->elems_.rend()) {
+        result = *elem_iter;
+        break;
+      }
+
+      // If we fail to find any elements in this leaf, switch to the predecessor leaf.
+      page_with_lock pwl_prev(leaf_page->prev(pwl.lck), std::try_to_lock);
+      if (pwl_prev.page != nullptr && !pwl_prev.lck.owns_lock()) {
+        pwl.lck.unlock();
+        pwl_prev.lck.lock();
+        if (!validation_needed) { // Maybe this caused invalidation.
+          pwl.lck.lock();
+          if (leaf_page->prev(pwl.lck) != pwl_prev.page) validation_needed = true;
+        }
+      }
+      pwl = std::move(pwl_prev);
+    }
+
+    if (!validation_needed) return result;
+    pwl.reset(); // Release locks so that calls won't harm us.
+    if (result == nullptr) {
+      if (first_element_() == nullptr) return result;
+    } else {
+      // We can fix this up by searching forward.
+      for (auto result_succ = result->next();
+          result_succ != nullptr;
+          result = result_succ);
+      return result;
+    }
+  }
+}
+
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
 
@@ -242,12 +350,24 @@ void tree_page_leaf::encode(txfile::transaction& tx) const {
 
 auto tree_page_leaf::next() const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
-  if (next_sibling_off_ == 0) return nullptr;
-  return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(next_sibling_off_));
+  return next(lck);
 }
 
 auto tree_page_leaf::prev() const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
   std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  return prev(lck);
+}
+
+auto tree_page_leaf::next(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+
+  if (next_sibling_off_ == 0) return nullptr;
+  return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(next_sibling_off_));
+}
+
+auto tree_page_leaf::prev(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+
   if (prev_sibling_off_ == 0) return nullptr;
   return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(prev_sibling_off_));
 }
@@ -727,8 +847,17 @@ abstract_tree_elem::~abstract_tree_elem() noexcept = default;
 
 auto abstract_tree_elem::lock_parent_for_read() const
 -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>> {
+  std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
+  return lock_parent_for_read(self_lck);
+}
+
+auto abstract_tree_elem::lock_parent_for_read(std::shared_lock<std::shared_mutex>& self_lck) const
+-> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>> {
+  assert(self_lck.owns_lock() && self_lck.mutex() == &mtx_ref_());
+
   for (;;) {
-    std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
+    assert(self_lck.owns_lock());
+
     cycle_ptr::cycle_gptr<tree_page_leaf> p = parent_;
     std::shared_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
@@ -742,8 +871,17 @@ auto abstract_tree_elem::lock_parent_for_read() const
 
 auto abstract_tree_elem::lock_parent_for_write() const
 -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
+  std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
+  return lock_parent_for_write(self_lck);
+}
+
+auto abstract_tree_elem::lock_parent_for_write(std::shared_lock<std::shared_mutex>& self_lck) const
+-> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
+  assert(self_lck.owns_lock() && self_lck.mutex() == &mtx_ref_());
+
   for (;;) {
-    std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
+    assert(self_lck.owns_lock());
+
     cycle_ptr::cycle_gptr<tree_page_leaf> p = parent_;
     std::unique_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
@@ -757,6 +895,83 @@ auto abstract_tree_elem::lock_parent_for_write() const
 
 auto abstract_tree_elem::is_never_visible() const noexcept -> bool {
   return false;
+}
+
+auto abstract_tree_elem::next() const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+  std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
+  if (succ_ != nullptr) return succ_;
+
+  auto locked_page = lock_parent_for_read(self_lck);
+  assert(std::get<0>(locked_page) != nullptr);
+  if (succ_ != nullptr) return succ_; // Recheck, because parent lock may have released our lock.
+  self_lck.unlock(); // No longer needed.
+
+  for (;;) {
+    auto succ_page = std::get<0>(locked_page)->next(std::get<1>(locked_page));
+    if (succ_page == nullptr) return nullptr;
+    std::shared_lock<std::shared_mutex> succ_page_lck{ succ_page->mtx_ };
+    locked_page = std::forward_as_tuple(std::move(succ_page), std::move(succ_page_lck));
+
+    const auto& elems = std::get<0>(locked_page)->elems_;
+    const auto first_elem = std::find_if(
+        elems.begin(), elems.end(),
+        [](const auto& ptr) -> bool { return ptr != nullptr; });
+    if (first_elem != elems.end()) return *first_elem;
+  }
+}
+
+auto abstract_tree_elem::prev() const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+  for (;;) {
+    std::shared_lock<std::shared_mutex> self_lck{ mtx_ref_() };
+    if (pred_ != nullptr) return pred_;
+
+    auto locked_page = lock_parent_for_read(self_lck);
+    assert(std::get<0>(locked_page) != nullptr);
+    if (pred_ != nullptr) return pred_;
+    self_lck.unlock(); // No longer needed and would be an issue with lock ordering.
+
+    bool validation_needed = false;
+    cycle_ptr::cycle_gptr<abstract_tree_elem> result = nullptr;
+    for (;;) {
+      auto pred_page = std::get<0>(locked_page)->prev(std::get<1>(locked_page));
+      if (pred_page == nullptr) break;
+      std::shared_lock<std::shared_mutex> pred_page_lck{ pred_page->mtx_, std::try_to_lock };
+      if (!pred_page_lck.owns_lock()) {
+        std::get<1>(locked_page).unlock();
+        pred_page_lck.lock();
+        if (!validation_needed) {
+          std::get<1>(locked_page).lock();
+          if (std::get<0>(locked_page)->prev(std::get<1>(locked_page)) != pred_page) validation_needed = true;
+        }
+      }
+      locked_page = std::forward_as_tuple(std::move(pred_page), std::move(pred_page_lck));
+
+      const auto& elems = std::get<0>(locked_page)->elems_;
+      const auto last_elem = std::find_if(
+          elems.rbegin(), elems.rend(),
+          [](const auto& ptr) -> bool { return ptr != nullptr; });
+      if (last_elem != elems.rend()) {
+        result = *last_elem;
+        break;
+      }
+    }
+    // Release locks and references.
+    std::get<1>(locked_page).unlock();
+
+    if (!validation_needed) return result;
+    if (result == nullptr) {
+      // Figure out how to test if result is the first element.
+      if (std::get<0>(locked_page)->tree()->first_element_().get() == this) return result;
+    } else {
+      // Use forward iteration to fix up result, if needed.
+      for (auto result_succ = result->next();
+          result_succ != nullptr;
+          result_succ = (result = std::move(result_succ))->next()) {
+        // If we are the successor of the found element, we have found our predecessor.
+        if (result_succ.get() == this) return result;
+      }
+    }
+  }
 }
 
 

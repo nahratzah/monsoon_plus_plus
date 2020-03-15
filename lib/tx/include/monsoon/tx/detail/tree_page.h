@@ -39,11 +39,12 @@ class tree_elem;
 
 ///\brief Interface and shared logic for a B+ tree.
 class monsoon_tx_export_ abstract_tree
-: public db::db_obj
+: public cycle_ptr::cycle_base
 {
   friend abstract_tree_page;
   friend tree_page_leaf;
   friend tree_page_branch;
+  friend abstract_tree_elem;
 
   public:
   ///\brief Allocator used by commit_manager.
@@ -51,9 +52,12 @@ class monsoon_tx_export_ abstract_tree
   ///\brief Allocator traits.
   using traits_type = std::allocator_traits<allocator_type>;
 
+  private:
+  struct page_with_lock;
+
   protected:
   explicit abstract_tree(allocator_type alloc = allocator_type());
-  ~abstract_tree() noexcept override = 0;
+  virtual ~abstract_tree() noexcept = 0;
 
   private:
   ///\brief Compute augmentation of a sequence of elements.
@@ -86,12 +90,18 @@ class monsoon_tx_export_ abstract_tree
   ///\brief Allocate a branch key.
   virtual auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
 
+  ///\brief Get the first element in the tree.
+  auto first_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
+  ///\brief Get the last element in the tree.
+  auto last_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
+
   public:
   const std::shared_ptr<const tree_cfg> cfg;
   allocator_type allocator;
 
   protected:
   std::uint64_t root_off_ = 0;
+  mutable std::shared_mutex mtx_;
 };
 
 
@@ -99,6 +109,8 @@ class monsoon_tx_export_ abstract_tree
 class monsoon_tx_export_ abstract_tree_page
 : protected cycle_ptr::cycle_base
 {
+  friend abstract_tree;
+
   protected:
   explicit abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree);
   virtual ~abstract_tree_page() noexcept = 0;
@@ -183,6 +195,7 @@ class monsoon_tx_export_ abstract_tree_page
 class monsoon_tx_export_ tree_page_leaf final
 : public abstract_tree_page
 {
+  friend abstract_tree;
   friend abstract_tree_elem;
   friend abstract_tx_aware_tree_elem;
 
@@ -223,8 +236,16 @@ class monsoon_tx_export_ tree_page_leaf final
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
+  ///\brief Retrieve the next leaf page.
   auto next() const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  ///\brief Retrieve the previous leaf page.
   auto prev() const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  ///\brief Retrieve the next leaf page.
+  ///\param lck A lock on this page.
+  auto next(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  ///\brief Retrieve the previous leaf page.
+  ///\param lck A lock on this page.
+  auto prev(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
 
   private:
   /**
@@ -272,6 +293,8 @@ class monsoon_tx_export_ tree_page_leaf final
 class monsoon_tx_export_ tree_page_branch final
 : public abstract_tree_page
 {
+  friend abstract_tree;
+
   public:
   static constexpr std::uint32_t magic = 0x5825'b1f0U;
 
@@ -400,14 +423,31 @@ class monsoon_tx_export_ abstract_tree_elem
   auto lock_parent_for_read() const
   -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>>;
 
+  ///\brief Acquire the parent and lock it for read.
+  ///\details May only be called without a lock on this element.
+  ///\note While the parent is locked, this element can't change parent.
+  auto lock_parent_for_read(std::shared_lock<std::shared_mutex>& self_lck) const
+  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>>;
+
   ///\brief Acquire the parent and lock it for write.
   ///\details May only be called without a lock on this element.
   ///\note While the parent is locked, this element can't change parent.
   auto lock_parent_for_write() const
   -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
 
+  ///\brief Acquire the parent and lock it for write.
+  ///\details May only be called without a lock on this element.
+  ///\note While the parent is locked, this element can't change parent.
+  auto lock_parent_for_write(std::shared_lock<std::shared_mutex>& self_lck) const
+  -> std::tuple<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
+
   ///\brief Test if this value is never visible in any transactions.
   virtual auto is_never_visible() const noexcept -> bool;
+
+  ///\brief Retrieve the successor.
+  auto next() const -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
+  ///\brief Retrieve the predecessor.
+  auto prev() const -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
 
   private:
   ///\brief Helper function, retrieves the mtx.
