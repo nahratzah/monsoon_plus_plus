@@ -5,7 +5,6 @@
 #include <monsoon/tx/tx_aware_data.h>
 #include <monsoon/tx/detail/tree_cfg.h>
 #include <monsoon/tx/detail/export_.h>
-#include <monsoon/cheap_fn_ref.h>
 #include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
@@ -58,7 +57,7 @@ class monsoon_tx_export_ abstract_tree
   private:
   struct page_with_lock;
 
-  protected:
+  public:
   explicit abstract_tree(allocator_type alloc = allocator_type());
   virtual ~abstract_tree() noexcept = 0;
 
@@ -80,6 +79,10 @@ class monsoon_tx_export_ abstract_tree
   ///\param off Offset of the page.
   ///\returns Decoded page.
   virtual auto get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> = 0;
+  ///\brief Invalidate the page.
+  ///\details Future invocations of get and get_if_present won't return the page anymore.
+  ///\param off Offset of the page to invalidate.
+  virtual void invalidate(std::uint64_t off) const noexcept = 0;
 
   ///\brief Default-allocate an tree_page_leaf.
   auto allocate_leaf_() -> cycle_ptr::cycle_gptr<tree_page_leaf>;
@@ -98,13 +101,13 @@ class monsoon_tx_export_ abstract_tree
   ///\brief Get the last element in the tree.
   auto last_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
 
-  public:
-  const std::shared_ptr<const tree_cfg> cfg;
-  allocator_type allocator;
-
   protected:
   auto begin() -> abstract_tree_iterator;
   auto end() -> abstract_tree_iterator;
+
+  public:
+  const std::shared_ptr<const tree_cfg> cfg;
+  allocator_type allocator;
 
   protected:
   std::uint64_t root_off_ = 0;
@@ -118,11 +121,10 @@ class monsoon_tx_export_ abstract_tree_page
 {
   friend abstract_tree;
 
-  protected:
+  public:
   explicit abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree);
   virtual ~abstract_tree_page() noexcept = 0;
 
-  public:
   ///\brief Get the tree owning this page.
   ///\returns Pointer to the tree.
   ///\throws std::bad_weak_ptr If the tree has gone away.
@@ -130,15 +132,13 @@ class monsoon_tx_export_ abstract_tree_page
 
   ///\brief Decode a page.
   ///\details Uses the magic encoded in \p tx to determine what type of page is stored at the offset.
+  ///\param tree Tree that this page belongs to.
   ///\param[in] tx Source of bytes on which the decode operation operates.
   ///\param off Offset in \p tx where the page is located.
-  ///\param leaf_constructor Functor that return a newly allocated tree_page_leaf.
-  ///\param branch_constructor Functor that return a newly allocated tree_page_branch.
   ///\return A newly allocated page, that was read from bytes in \p tx at offset \p off and is of the appropriate type.
   static auto decode(
-      const txfile::transaction& tx, std::uint64_t off,
-      cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_leaf>> leaf_constructor,
-      cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_branch>> branch_constructor)
+      abstract_tree& tree,
+      const txfile::transaction& tx, std::uint64_t off)
   -> cycle_ptr::cycle_gptr<abstract_tree_page>;
 
   ///\brief Decode this page from a file.
@@ -416,11 +416,10 @@ class monsoon_tx_export_ abstract_tree_elem
 {
   friend tree_page_leaf;
 
-  protected:
-  abstract_tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent);
+  public:
+  explicit abstract_tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent);
   virtual ~abstract_tree_elem() noexcept = 0;
 
-  public:
   virtual void decode(boost::asio::const_buffer buf) = 0;
   virtual void encode(boost::asio::mutable_buffer buf) const = 0;
 
@@ -475,10 +474,11 @@ class monsoon_tx_export_ abstract_tx_aware_tree_elem
 : public tx_aware_data,
   public abstract_tree_elem
 {
-  protected:
+  public:
   using abstract_tree_elem::abstract_tree_elem;
   virtual ~abstract_tx_aware_tree_elem() noexcept = 0;
 
+  protected:
   auto is_never_visible() const noexcept -> bool override final;
 
   private:
@@ -493,12 +493,10 @@ class monsoon_tx_export_ abstract_tree_page_branch_elem {
   public:
   static constexpr std::size_t offset_size = sizeof(std::uint64_t);
 
-  protected:
   abstract_tree_page_branch_elem() noexcept = default;
   explicit abstract_tree_page_branch_elem(std::uint64_t off) noexcept : off(off) {}
   virtual ~abstract_tree_page_branch_elem() noexcept = 0;
 
-  public:
   virtual void decode(boost::asio::const_buffer buf) = 0;
   virtual void encode(boost::asio::mutable_buffer buf) const = 0;
 
@@ -509,11 +507,10 @@ class monsoon_tx_export_ abstract_tree_page_branch_elem {
 
 ///\brief Abstract key interface.
 class monsoon_tx_export_ abstract_tree_page_branch_key {
-  protected:
+  public:
   abstract_tree_page_branch_key() noexcept = default;
   virtual ~abstract_tree_page_branch_key() noexcept = 0;
 
-  public:
   virtual void decode(boost::asio::const_buffer buf) = 0;
   virtual void encode(boost::asio::mutable_buffer buf) const = 0;
 };

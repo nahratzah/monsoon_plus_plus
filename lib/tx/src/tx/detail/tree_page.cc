@@ -206,9 +206,8 @@ auto abstract_tree_page::tree() const -> cycle_ptr::cycle_gptr<abstract_tree> {
 }
 
 auto abstract_tree_page::decode(
-    const txfile::transaction& tx, std::uint64_t off,
-    cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_leaf>> leaf_constructor,
-    cheap_fn_ref<cycle_ptr::cycle_gptr<tree_page_branch>> branch_constructor)
+    abstract_tree& tree,
+    const txfile::transaction& tx, std::uint64_t off)
 -> cycle_ptr::cycle_gptr<abstract_tree_page> {
   std::uint32_t magic;
   monsoon::io::read_at(tx, off, &magic, sizeof(magic));
@@ -219,10 +218,10 @@ auto abstract_tree_page::decode(
     default:
       throw tree_error("bad tree page magic");
     case tree_page_leaf::magic:
-      page = leaf_constructor();
+      page = tree.allocate_leaf_();
       break;
     case tree_page_branch::magic:
-      page = branch_constructor();
+      page = tree.allocate_branch_();
       break;
   }
   page->decode(tx, off);

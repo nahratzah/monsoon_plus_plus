@@ -193,9 +193,7 @@ class monsoon_tx_export_ db::transaction {
 };
 
 
-class monsoon_tx_export_ db::db_obj
-: public cycle_ptr::cycle_base
-{
+class monsoon_tx_export_ db::db_obj {
   friend db::transaction;
 
   protected:

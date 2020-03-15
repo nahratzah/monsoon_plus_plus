@@ -21,8 +21,8 @@ struct tree_spec
       "must have encode method: void T::encode(boost::asio::mutable_buffer&) const");
   static_assert((std::declval<T&>().decode(std::declval<boost::asio::const_buffer>()), true),
       "must have decode method: void T::decode(boost::asio::const_buffer) const");
-  static_assert(std::is_constructible_v<T, boost::asio::const_buffer>,
-      "must be constructible from a buffer");
+  static_assert(std::is_default_constructible_v<T>,
+      "must be default constructible");
 };
 
 ///\brief Requirements that must be met by tree keys.
@@ -50,8 +50,6 @@ struct tree_augment_spec
 {
   static_assert(std::is_constructible_v<T, const Key&, const Val&>,
       "augmentation must be constructible from a key-value pair");
-  static_assert(std::is_default_constructible_v<T>,
-      "augmentation must be default constructible");
   static_assert(std::is_convertible_v<T, decltype(T::merge(std::declval<const T&>(), std::declval<const T&>()))>,
       "augmentation must implement a reducer function: static T T::merge(const T&, const T&)");
 };
