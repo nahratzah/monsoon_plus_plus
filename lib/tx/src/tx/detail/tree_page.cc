@@ -218,6 +218,14 @@ void abstract_tree::with_equal_range_for_write(cheap_fn_ref<void(abstract_tree_i
   return with_equal_range_<std::unique_lock<std::shared_mutex>>(std::move(cb), key);
 }
 
+void abstract_tree::with_for_each_for_read(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+  return with_for_each_<std::shared_lock<std::shared_mutex>>(std::move(cb));
+}
+
+void abstract_tree::with_for_each_for_write(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+  return with_for_each_<std::unique_lock<std::shared_mutex>>(std::move(cb));
+}
+
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
 

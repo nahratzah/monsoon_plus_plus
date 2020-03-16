@@ -142,6 +142,24 @@ class monsoon_tx_export_ abstract_tree
    * \param key The key to find the equal range for.
    */
   void with_equal_range_for_write(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key);
+  /**
+   * \brief Iterate over the entire tree.
+   * \details
+   * Invokes the given callback for each element.
+   * Elements are read locked during invocation of \p cb on the element.
+   *
+   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   */
+  void with_for_each_for_read(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  /**
+   * \brief Iterate over the entire tree.
+   * \details
+   * Invokes the given callback for each element.
+   * Elements are write locked during invocation of \p cb on the element.
+   *
+   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   */
+  void with_for_each_for_write(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
 
   private:
   /**
@@ -162,6 +180,17 @@ class monsoon_tx_export_ abstract_tree
    */
   template<typename LockType>
   void with_equal_range_(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key);
+  /**
+   * \brief Iterate over the entire tree.
+   * \details
+   * Invokes the given callback for each element.
+   * Elements are locked during invocation of \p cb on the element.
+   *
+   * \tparam LockType A std::shared_lock<std::shared_mutex> or std::unique_lock<std::mutex>, used to maintain the lock.
+   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   */
+  template<typename LockType>
+  void with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;

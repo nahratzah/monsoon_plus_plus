@@ -41,10 +41,8 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
       cb(end(), end());
       return;
     }
-    auto next_off = root_off_;
 
-    assert(next_off != 0);
-    child_page = get(next_off);
+    child_page = get(root_off_);
     // Descend down branches.
     while (auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
       std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
@@ -194,6 +192,41 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
   cb(
       abstract_tree_iterator(shared_from_this(this), std::move(b)),
       abstract_tree_iterator(shared_from_this(this), std::move(e)));
+}
+
+template<typename LockType>
+inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+  cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page;
+  LockType leaf_lock;
+
+  {
+    cycle_ptr::cycle_gptr<tree_page_branch> parent_page;
+    cycle_ptr::cycle_gptr<abstract_tree_page> child_page;
+    std::shared_lock<std::shared_mutex> parent_lock{ mtx_ };
+
+    if (root_off_ == 0) return; // Empty tree.
+
+    child_page = get(root_off_);
+    // Descend down branches.
+    while (auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
+      std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
+      child_page = get(branch_page->elems_[0]->off);
+    }
+    leaf_lock = LockType(child_page->mtx_);
+    leaf_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(child_page);
+  }
+
+  do {
+    std::for_each(
+        leaf_page->elems_.begin(), leaf_page->elems_.end(),
+        [&cb](const auto& ptr) {
+          if (ptr != nullptr) cb(ptr);
+        });
+
+    // Advance to the next page.
+    auto next_leaf_page = leaf_page->next();
+    std::tie(leaf_page, leaf_lock) = std::forward_as_tuple(next_leaf_page, LockType(next_leaf_page->mtx_));
+  } while (leaf_page != nullptr);
 }
 
 
