@@ -20,6 +20,7 @@ add_library (monsoon_tx
   src/tx/detail/commit_manager.cc
   src/tx/detail/commit_manager_impl.cc
   src/tx/detail/txfile_allocator.cc
+  src/tx/detail/db_cache.cc
 )
 target_include_directories (monsoon_tx PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -29,6 +30,7 @@ target_link_libraries (monsoon_tx PUBLIC
   monsoon_lib
   monsoon_misc
   instrumentation
+  monsoon_cache
   cycle_ptr
   ${Boost_SYSTEM_LIBRARY}
 )
@@ -65,6 +67,7 @@ install (FILES
   include/monsoon/tx/detail/commit_manager_impl-inl.h
   include/monsoon/tx/detail/txfile_allocator.h
   include/monsoon/tx/detail/txfile_allocator-inl.h
+  include/monsoon/tx/detail/db_cache.h
   DESTINATION include/monsoon/tx/detail)
 
 add_subdirectory (tests)

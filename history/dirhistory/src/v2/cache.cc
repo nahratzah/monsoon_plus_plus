@@ -7,7 +7,7 @@ namespace monsoon::history::v2 {
 auto get_dynamics_cache_() -> cache_type& {
   static cache_type impl = cache_type::builder()
       .access_expire(std::chrono::minutes(15))
-      .async(true)
+      .enable_async()
       .max_memory(256 * 1024 * 1024)
       .stats("cache")
       .build(dynamics_cache_create());
