@@ -11,6 +11,13 @@ db_cache_impl::db_cache_impl(std::string name, std::uintptr_t max_memory)
     .enable_async()
     .max_memory(max_memory)
     .stats(std::move(name))
+    .template storage_override<cycle_ptr::cycle_member_ptr<cache_obj>>(
+        [this](const cycle_ptr::cycle_gptr<cache_obj>& ptr) -> std::tuple<cycle_ptr::cycle_base&, const cycle_ptr::cycle_gptr<cache_obj>&> {
+          return std::forward_as_tuple(*this, ptr);
+        },
+        [](const cycle_ptr::cycle_member_ptr<cache_obj>& ptr) -> cycle_ptr::cycle_gptr<cache_obj> {
+          return ptr;
+        })
     .build(create()))
 {}
 
@@ -34,9 +41,7 @@ auto db_cache_impl::get(
 void db_cache_impl::invalidate(
     txfile::transaction::offset_type off,
     cycle_ptr::cycle_gptr<const domain> dom) noexcept {
-#if 0
-  impl_.invalidate(key(off, std::move(dom)));
-#endif
+  impl_.expire(key(off, std::move(dom)));
 }
 
 

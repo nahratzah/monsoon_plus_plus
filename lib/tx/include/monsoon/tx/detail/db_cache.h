@@ -6,12 +6,15 @@
 #include <monsoon/tx/txfile.h>
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/allocator.h>
+#include <cycle_ptr/cycle_ptr.h>
 #include <functional>
 
 namespace monsoon::tx::detail {
 
 
-class monsoon_tx_export_ db_cache_impl {
+class monsoon_tx_export_ db_cache_impl
+: public cycle_ptr::cycle_base
+{
   public:
   class domain;
   class cache_obj;

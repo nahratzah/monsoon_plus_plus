@@ -88,7 +88,7 @@ if(NOT cycle_ptr_DIR)
   add_subdirectory(contrib/cycle_ptr)
 endif()
 
-find_package(monsoon_cache 0.3)
+find_package(monsoon_cache 0.4)
 if(NOT monsoon_cache_DIR)
   add_subdirectory(contrib/monsoon_cache)
 endif()
