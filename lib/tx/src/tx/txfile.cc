@@ -42,6 +42,12 @@ void txfile::transaction::resize(size_type new_size) {
   wal_.resize(new_size);
 }
 
+auto txfile::transaction::size() const -> size_type {
+  if (!*this) throw txfile_bad_transaction("txfile::transaction::resize");
+
+  return wal_.size();
+}
+
 auto txfile::transaction::write_at(offset_type off, const void* buf, std::size_t nbytes) -> std::size_t {
   if (!*this) throw txfile_bad_transaction("txfile::transaction::write_at");
   if (read_only_) throw txfile_read_only_transaction("txfile::transaction::write_at");
