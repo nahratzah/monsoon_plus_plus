@@ -307,9 +307,10 @@ class monsoon_tx_export_ tree_page_leaf final
 
   struct header {
     static constexpr std::size_t SIZE = 32;
+    static constexpr std::uint32_t flag_has_key = 0x0000'0001;
 
     std::uint32_t magic;
-    std::uint32_t reserved;
+    std::uint32_t flags;
     std::uint64_t parent_off;
     std::uint64_t next_sibling_off;
     std::uint64_t prev_sibling_off;
@@ -397,6 +398,7 @@ class monsoon_tx_export_ tree_page_leaf final
 
   std::uint64_t next_sibling_off_ = 0, prev_sibling_off_ = 0;
   elems_vector elems_;
+  std::shared_ptr<abstract_tree_page_branch_key> page_key_;
 };
 
 

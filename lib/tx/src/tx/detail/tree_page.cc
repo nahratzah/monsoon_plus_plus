@@ -13,7 +13,7 @@ void tree_page_leaf::header::native_to_big_endian() noexcept {
   static_assert(sizeof(header) == header::SIZE);
 
   boost::endian::native_to_big_inplace(magic);
-  boost::endian::native_to_big_inplace(reserved);
+  boost::endian::native_to_big_inplace(flags);
   boost::endian::native_to_big_inplace(parent_off);
   boost::endian::native_to_big_inplace(next_sibling_off);
   boost::endian::native_to_big_inplace(prev_sibling_off);
@@ -23,7 +23,7 @@ void tree_page_leaf::header::big_to_native_endian() noexcept {
   static_assert(sizeof(header) == header::SIZE);
 
   boost::endian::big_to_native_inplace(magic);
-  boost::endian::big_to_native_inplace(reserved);
+  boost::endian::big_to_native_inplace(flags);
   boost::endian::big_to_native_inplace(parent_off);
   boost::endian::big_to_native_inplace(next_sibling_off);
   boost::endian::big_to_native_inplace(prev_sibling_off);
@@ -298,6 +298,7 @@ void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
 
   const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
 
+  const auto t = tree();
   auto buf_storage = std::vector<std::uint8_t>(header::SIZE + cfg->items_per_leaf_page * bytes_per_val);
   monsoon::io::read_at(tx, off, buf_storage.data(), buf_storage.size());
   boost::asio::const_buffer buf = boost::asio::buffer(buf_storage);
@@ -306,6 +307,15 @@ void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
   h.decode(buf);
   buf += header::SIZE;
 
+  if ((h.flags & header::flag_has_key) == 0) {
+    page_key_.reset();
+  } else {
+    page_key_ = t->allocate_branch_key_(allocator);
+    assert(buf.size() >= cfg->key_bytes);
+    page_key_->decode(boost::asio::buffer(buf.data(), cfg->key_bytes));
+  }
+  buf += cfg->key_bytes;
+
   off_ = off;
   parent_off_ = h.parent_off;
   next_sibling_off_ = h.next_sibling_off;
@@ -313,7 +323,7 @@ void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
   std::generate_n(
       std::back_inserter(elems_),
       cfg->items_per_leaf_page,
-      [&buf, bytes_per_val, this, t = tree()]() -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+      [&buf, bytes_per_val, this, &t]() -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
         assert(buf.size() >= bytes_per_val);
 
         auto e = t->allocate_elem_(this->shared_from_this(this), allocator);
@@ -348,17 +358,24 @@ void tree_page_leaf::encode(txfile::transaction& tx) const {
 
   const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
 
-  auto buf_storage = std::vector<std::uint8_t>(header::SIZE + cfg->items_per_leaf_page * bytes_per_val);
+  auto buf_storage = std::vector<std::uint8_t>(header::SIZE + cfg->key_bytes + cfg->items_per_leaf_page * bytes_per_val);
   boost::asio::mutable_buffer buf = boost::asio::buffer(buf_storage);
 
   header h;
   h.magic = magic;
-  h.reserved = 0;
+  h.flags = 0;
+  if (page_key_ != nullptr) h.flags |= header::flag_has_key;
   h.parent_off = parent_off_;
   h.next_sibling_off = next_sibling_off_;
   h.prev_sibling_off = prev_sibling_off_;
   h.encode(buf);
   buf += header::SIZE;
+
+  if (page_key_ != nullptr)
+    page_key_->encode(buf);
+  else
+    std::memset(buf.data(), 0, (buf.size() < cfg->key_bytes ? buf.size() : cfg->key_bytes));
+  buf += cfg->key_bytes;
 
   std::for_each(
       elems_.begin(), elems_.end(),
@@ -430,6 +447,7 @@ auto tree_page_leaf::local_split_(
   sibling->prev_sibling_off_ = off_;
   sibling->next_sibling_off_ = next_sibling_off_;
   sibling->parent_off_ = parent_off_;
+  sibling->page_key_ = (*sibling_begin)->branch_key_(sibling_allocator);
   std::copy(
       sibling_begin, elems_.end(),
       sibling->elems_.begin());
@@ -550,7 +568,8 @@ auto tree_page_leaf::offset_for_idx_(elems_vector::size_type idx) const noexcept
   assert(idx <= cfg->items_per_leaf_page); // We allow the "end" index.
 
   const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
-  return header::SIZE + idx * bytes_per_val;
+  const auto rel_off = header::SIZE + cfg->key_bytes + idx * bytes_per_val;
+  return off_ + rel_off;
 }
 
 auto tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const noexcept -> std::uint64_t {
@@ -583,9 +602,8 @@ auto tree_page_leaf::get_layout_domain() const noexcept -> const layout_domain& 
       return *boost::polymorphic_downcast<const tree_page_leaf*>(&lobj);
     }
 
-    static auto first_elem_(const tree_page_leaf& page) noexcept -> const abstract_tree_elem* {
-      auto iter = std::find_if(page.elems_.begin(), page.elems_.end(), [](const auto& ptr) -> bool { return ptr != nullptr; });
-      return (iter == page.elems_.end() ? nullptr : iter->get());
+    static auto first_elem_(const tree_page_leaf& page) noexcept -> const abstract_tree_page_branch_key* {
+      return page.page_key_.get();
     }
 
     static auto less_compare_(const tree_page_leaf& x, const tree_page_leaf& y) -> bool {
@@ -595,8 +613,8 @@ auto tree_page_leaf::get_layout_domain() const noexcept -> const layout_domain& 
       return less_compare_(*x_tree, first_elem_(x), first_elem_(y));
     }
 
-    static auto less_compare_(const abstract_tree& tree, const abstract_tree_elem* x, const abstract_tree_elem* y) -> bool {
-      if (x == nullptr || y == nullptr) return x < y;
+    static auto less_compare_(const abstract_tree& tree, const abstract_tree_page_branch_key* x, const abstract_tree_page_branch_key* y) -> bool {
+      if (x == nullptr || y == nullptr) return x < y; // nullptr indicates the very first page.
       return tree.less_cb(*x, *y);
     }
   };
