@@ -17,6 +17,8 @@ class monsoon_tx_export_ db_cache
 : public cycle_ptr::cycle_base
 {
   public:
+  static constexpr std::uintptr_t default_max_memory = 1024 * 1024 * 1024;
+
   class domain;
   class cache_obj;
 
@@ -85,8 +87,6 @@ class monsoon_tx_export_ db_cache
   using impl_type = monsoon::cache::extended_cache<key, cache_obj, key_hash, std::equal_to<key>, allocator_type, create, cycle_ptr::cycle_gptr<cache_obj>>;
 
   public:
-  static constexpr std::uintptr_t default_max_memory = 256 * 1024 * 1024;
-
   explicit db_cache(std::string name, std::uintptr_t max_memory = default_max_memory, shared_resource_allocator<std::byte> allocator = shared_resource_allocator<std::byte>());
   ~db_cache() noexcept;
 
