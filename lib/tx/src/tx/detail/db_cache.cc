@@ -7,7 +7,6 @@ namespace monsoon::tx::detail {
 
 db_cache::db_cache(std::string name, std::uintptr_t max_memory, shared_resource_allocator<std::byte> allocator)
 : impl_(impl_type::builder()
-    .access_expire(std::chrono::minutes(15))
     .enable_async()
     .max_memory(max_memory)
     .stats(std::move(name))
