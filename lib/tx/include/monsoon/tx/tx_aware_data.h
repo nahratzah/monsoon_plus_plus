@@ -3,6 +3,7 @@
 
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/detail/commit_manager.h>
+#include <monsoon/tx/detail/layout_domain.h>
 #include <monsoon/tx/db.h>
 #include <array>
 #include <cstddef>
@@ -11,6 +12,7 @@
 #include <optional>
 #include <shared_mutex>
 #include <boost/asio/buffer.hpp>
+#include <cycle_ptr/cycle_ptr.h>
 
 namespace monsoon::tx {
 
@@ -56,6 +58,15 @@ class monsoon_tx_export_ tx_aware_data {
   ///\brief Find the offset of this datum.
   ///\note May only be called with the relevant layout lock held.
   virtual auto offset() const -> std::uint64_t = 0;
+  /**
+   * \brief Get the layout container for this.
+   * \details
+   * The layout container can be shared-locked to prevent layout changes,
+   * which is required to make the transaction work properly.
+   * (Because the transaction does the write and the in-memory change in
+   * two phases.)
+   */
+  virtual auto get_container_for_layout() const -> cycle_ptr::cycle_gptr<const detail::layout_obj> = 0;
 
   void set_created(detail::commit_manager::type id);
   void set_created_always();

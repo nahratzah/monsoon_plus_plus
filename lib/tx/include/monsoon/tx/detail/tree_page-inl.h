@@ -41,7 +41,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
     child_page = get(root_off_);
     // Descend down branches.
     while (auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
-      std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
+      std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_()));
 
       const auto key_range = std::equal_range(branch_page->keys_.begin(), branch_page->keys_.end(), &key,
           [this](const auto& x, const auto& y) -> bool {
@@ -57,7 +57,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
           std::shared_lock<std::shared_mutex> m_parent_lock;
           child_page = get(branch_page->elems_[key_range.first - branch_page->keys_.begin()]->off);
           while (auto m_branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
-            std::tie(m_parent_page, m_parent_lock) = std::forward_as_tuple(m_branch_page, std::shared_lock<std::shared_mutex>(m_branch_page->mtx_));
+            std::tie(m_parent_page, m_parent_lock) = std::forward_as_tuple(m_branch_page, std::shared_lock<std::shared_mutex>(m_branch_page->mtx_()));
             const auto i = std::lower_bound(m_branch_page->keys_.begin(), m_branch_page->keys_.end(), &key,
                 [this](const auto& x, const auto& y) -> bool {
                   return less_cb(*x, *y);
@@ -68,12 +68,12 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
           // Lock and remember the first leaf page.
           leaf_locks.emplace_back(
               boost::polymorphic_pointer_downcast<tree_page_leaf>(child_page),
-              child_page->mtx_);
+              child_page->mtx_());
         }
 
         child_page = get(branch_page->elems_[key_range.first - branch_page->keys_.begin()]->off);
         while ((branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) != nullptr) {
-          std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
+          std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_()));
 
           const auto i = std::upper_bound(branch_page->keys_.begin(), branch_page->keys_.end(), &key,
               [this](const auto& x, const auto& y) -> bool {
@@ -87,7 +87,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
         for (cycle_ptr::cycle_gptr<tree_page_leaf> successor = leaf_locks.back().first->next();
             successor != child_page;
             successor = successor->next())
-          leaf_locks.emplace_back(successor, successor->mtx_);
+          leaf_locks.emplace_back(successor, successor->mtx_());
         break; // Break out of the loop as we've completed the decent.
       }
     }
@@ -98,7 +98,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
     // - parent_page and parent_lock prevent any modifications
     // - leaf_locks holds all pages up to, but excluding child_page
     assert(child_page != nullptr);
-    leaf_locks.emplace_back(boost::polymorphic_pointer_cast<tree_page_leaf>(child_page), child_page->mtx_);
+    leaf_locks.emplace_back(boost::polymorphic_pointer_cast<tree_page_leaf>(child_page), child_page->mtx_());
   }
 
   // We made it all the way to a single leaf page.
@@ -133,7 +133,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
     // We know it is going to be an empty range.
     // We'll just have to find the next element to use as both lower and upper bounds.
     while (auto next_leaf = leaf_locks.back().first->next()) {
-      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_); // Invalidates page_iter.
+      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_()); // Invalidates page_iter.
       for (const auto& elem_ptr : next_leaf->elems_) {
         if (elem_ptr != nullptr) {
           cb(
@@ -168,7 +168,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
     // No upper bound found in the entire range.
     // We'll just have to find the next element to use as upper bound.
     while (auto next_leaf = leaf_locks.back().first->next()) {
-      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_); // Invalidates page_iter.
+      leaf_locks.emplace_back(next_leaf, next_leaf->mtx_()); // Invalidates page_iter.
       for (const auto& elem_ptr : next_leaf->elems_) {
         if (elem_ptr != nullptr) {
           cb(
@@ -205,10 +205,10 @@ inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gpt
     child_page = get(root_off_);
     // Descend down branches.
     while (auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
-      std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_));
+      std::tie(parent_page, parent_lock) = std::forward_as_tuple(branch_page, std::shared_lock<std::shared_mutex>(branch_page->mtx_()));
       child_page = get(branch_page->elems_[0]->off);
     }
-    leaf_lock = LockType(child_page->mtx_);
+    leaf_lock = LockType(child_page->mtx_());
     leaf_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(child_page);
   }
 
@@ -221,7 +221,7 @@ inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gpt
 
     // Advance to the next page.
     auto next_leaf_page = leaf_page->next();
-    std::tie(leaf_page, leaf_lock) = std::forward_as_tuple(next_leaf_page, LockType(next_leaf_page->mtx_));
+    std::tie(leaf_page, leaf_lock) = std::forward_as_tuple(next_leaf_page, LockType(next_leaf_page->mtx_()));
   } while (leaf_page != nullptr);
 }
 

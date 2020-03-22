@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <iterator>
 #include <boost/endian/conversion.hpp>
+#include <boost/polymorphic_cast.hpp>
 
 namespace monsoon::tx::detail {
 
@@ -100,14 +101,14 @@ struct monsoon_tx_local_ abstract_tree::page_with_lock {
   : page(std::move(page))
   {
     if (this->page != nullptr)
-      lck = std::shared_lock<std::shared_mutex>(this->page->mtx_);
+      lck = std::shared_lock<std::shared_mutex>(this->page->mtx_());
   }
 
   page_with_lock(cycle_ptr::cycle_gptr<abstract_tree_page> page, std::try_to_lock_t t)
   : page(std::move(page))
   {
     if (this->page != nullptr)
-      lck = std::shared_lock<std::shared_mutex>(this->page->mtx_, t);
+      lck = std::shared_lock<std::shared_mutex>(this->page->mtx_(), t);
   }
 
   auto operator=(cycle_ptr::cycle_gptr<abstract_tree_page> page) -> page_with_lock& {
@@ -258,7 +259,7 @@ auto abstract_tree_page::decode(
 }
 
 void abstract_tree_page::reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept {
-  std::lock_guard<std::shared_mutex> lck{ mtx_ };
+  std::lock_guard<std::shared_mutex> lck{ mtx_() };
   assert(parent_off_ == old_parent_off || parent_off_ == new_parent_off); // We may have been loaded before or after the reparenting process started.
   parent_off_ = new_parent_off;
 }
@@ -378,24 +379,24 @@ void tree_page_leaf::encode(txfile::transaction& tx) const {
 }
 
 auto tree_page_leaf::next() const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
-  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  std::shared_lock<std::shared_mutex> lck{ mtx_() };
   return next(lck);
 }
 
 auto tree_page_leaf::prev() const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
-  std::shared_lock<std::shared_mutex> lck{ mtx_ };
+  std::shared_lock<std::shared_mutex> lck{ mtx_() };
   return prev(lck);
 }
 
 auto tree_page_leaf::next(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
-  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
 
   if (next_sibling_off_ == 0) return nullptr;
   return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(next_sibling_off_));
 }
 
 auto tree_page_leaf::prev(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
-  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
 
   if (prev_sibling_off_ == 0) return nullptr;
   return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(prev_sibling_off_));
@@ -421,7 +422,7 @@ auto tree_page_leaf::local_split_(
   const elems_vector::iterator sibling_begin = split_select_(lck);
   txfile::transaction tx = f.begin(false);
   cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_(sibling_allocator);
-  std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
+  std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_() };
   std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(parent->allocator);
 
   // Initialize sibling.
@@ -470,7 +471,7 @@ auto tree_page_leaf::local_split_(
     // Update predecessor offset if (old) successor is loaded in memory.
     const auto old_successor = boost::polymorphic_pointer_downcast<tree_page_leaf>(t->get_if_present(next_sibling_off_));
     if (old_successor != nullptr) {
-      std::lock_guard<std::shared_mutex> old_successor_lck{ old_successor->mtx_ };
+      std::lock_guard<std::shared_mutex> old_successor_lck{ old_successor->mtx_() };
       assert(old_successor->next_sibling_off_ == off_ || old_successor->next_sibling_off_ == new_page_off);
       old_successor->next_sibling_off_ = new_page_off;
     }
@@ -515,7 +516,7 @@ auto tree_page_leaf::local_split_atp_(
 }
 
 auto tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
-  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
 
   struct pred_non_null_elem {
     auto operator()(elems_vector::const_reference elem_ptr) const noexcept -> bool {
@@ -560,6 +561,48 @@ auto tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const noexcept 
       });
   assert(pos != elems_.end());
   return offset_for_idx_(pos - elems_.begin());
+}
+
+auto tree_page_leaf::mtx_() const noexcept -> std::shared_mutex& {
+  return layout_mtx;
+}
+
+auto tree_page_leaf::get_layout_domain() const noexcept -> const layout_domain& {
+  class layout_domain_impl final
+  : public layout_domain
+  {
+    public:
+    ~layout_domain_impl() noexcept override = default;
+
+    auto less_compare(const layout_obj& x, const layout_obj& y) const -> bool override {
+      return less_compare_(as_leaf_(x), as_leaf_(y));
+    }
+
+    private:
+    static auto as_leaf_(const layout_obj& lobj) noexcept -> const tree_page_leaf& {
+      return *boost::polymorphic_downcast<const tree_page_leaf*>(&lobj);
+    }
+
+    static auto first_elem_(const tree_page_leaf& page) noexcept -> const abstract_tree_elem* {
+      auto iter = std::find_if(page.elems_.begin(), page.elems_.end(), [](const auto& ptr) -> bool { return ptr != nullptr; });
+      return (iter == page.elems_.end() ? nullptr : iter->get());
+    }
+
+    static auto less_compare_(const tree_page_leaf& x, const tree_page_leaf& y) -> bool {
+      const cycle_ptr::cycle_gptr<const abstract_tree> x_tree = x.tree();
+      const cycle_ptr::cycle_gptr<const abstract_tree> y_tree = y.tree();
+      if (x_tree != y_tree) return x_tree < y_tree;
+      return less_compare_(*x_tree, first_elem_(x), first_elem_(y));
+    }
+
+    static auto less_compare_(const abstract_tree& tree, const abstract_tree_elem* x, const abstract_tree_elem* y) -> bool {
+      if (x == nullptr || y == nullptr) return x < y;
+      return tree.less_cb(*x, *y);
+    }
+  };
+
+  static const layout_domain_impl impl;
+  return impl;
 }
 
 
@@ -775,7 +818,7 @@ auto tree_page_branch::local_split_(
   const elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
   txfile::transaction tx = f.begin(false);
   cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_(sibling_allocator);
-  std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
+  std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_() };
   const keys_vector::iterator split_key = keys_.begin() + (sibling_begin - elems_.begin() - 1u);
   assert(split_key - keys_.begin() + 1u == sibling_begin - elems_.begin());
 
@@ -858,6 +901,10 @@ auto tree_page_branch::local_split_atp_(
   return local_split_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator));
 }
 
+auto tree_page_branch::mtx_() const noexcept -> std::shared_mutex& {
+  return mtx_impl_;
+}
+
 
 void tree_page_branch::insert_sibling_tx::commit() noexcept {
   assert(self != nullptr);
@@ -892,7 +939,7 @@ auto abstract_tree_elem::lock_parent_for_read(std::shared_lock<std::shared_mutex
     assert(self_lck.owns_lock());
 
     cycle_ptr::cycle_gptr<tree_page_leaf> p = parent_;
-    std::shared_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
+    std::shared_lock<std::shared_mutex> p_lck(p->mtx_(), std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
 
     self_lck.unlock();
@@ -916,7 +963,7 @@ auto abstract_tree_elem::lock_parent_for_write(std::shared_lock<std::shared_mute
     assert(self_lck.owns_lock());
 
     cycle_ptr::cycle_gptr<tree_page_leaf> p = parent_;
-    std::unique_lock<std::shared_mutex> p_lck(p->mtx_, std::try_to_lock);
+    std::unique_lock<std::shared_mutex> p_lck(p->mtx_(), std::try_to_lock);
     if (p_lck.owns_lock()) return std::make_tuple(std::move(p), std::move(p_lck));
 
     self_lck.unlock();
@@ -942,7 +989,7 @@ auto abstract_tree_elem::next() const -> cycle_ptr::cycle_gptr<abstract_tree_ele
   for (;;) {
     auto succ_page = std::get<0>(locked_page)->next(std::get<1>(locked_page));
     if (succ_page == nullptr) return nullptr;
-    std::shared_lock<std::shared_mutex> succ_page_lck{ succ_page->mtx_ };
+    std::shared_lock<std::shared_mutex> succ_page_lck{ succ_page->mtx_() };
     locked_page = std::forward_as_tuple(std::move(succ_page), std::move(succ_page_lck));
 
     const auto& elems = std::get<0>(locked_page)->elems_;
@@ -968,7 +1015,7 @@ auto abstract_tree_elem::prev() const -> cycle_ptr::cycle_gptr<abstract_tree_ele
     for (;;) {
       auto pred_page = std::get<0>(locked_page)->prev(std::get<1>(locked_page));
       if (pred_page == nullptr) break;
-      std::shared_lock<std::shared_mutex> pred_page_lck{ pred_page->mtx_, std::try_to_lock };
+      std::shared_lock<std::shared_mutex> pred_page_lck{ pred_page->mtx_(), std::try_to_lock };
       if (!pred_page_lck.owns_lock()) {
         std::get<1>(locked_page).unlock();
         pred_page_lck.lock();
@@ -1017,6 +1064,10 @@ auto abstract_tx_aware_tree_elem::mtx_ref_() const noexcept -> std::shared_mutex
 auto abstract_tx_aware_tree_elem::offset() const -> std::uint64_t {
   // Parent should be locked, so this is safe.
   return parent_->offset_for_(*this);
+}
+
+auto abstract_tx_aware_tree_elem::get_container_for_layout() const -> cycle_ptr::cycle_gptr<const detail::layout_obj> {
+  return parent_;
 }
 
 

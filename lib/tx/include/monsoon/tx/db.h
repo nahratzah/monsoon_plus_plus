@@ -5,6 +5,7 @@
 #include <monsoon/tx/txfile.h>
 #include <monsoon/tx/detail/commit_manager.h>
 #include <monsoon/tx/detail/db_cache.h>
+#include <monsoon/tx/detail/layout_domain.h>
 #include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
@@ -171,7 +172,7 @@ class monsoon_tx_export_ db::transaction {
   private:
   ///\brief Lock all transaction_obj layouts.
   ///\details Allows us to rely on tx_aware_data offsets to be stable.
-  auto lock_all_layouts_() const -> std::vector<std::shared_lock<std::shared_mutex>>;
+  auto lock_all_layouts_() const -> std::unordered_map<cycle_ptr::cycle_gptr<const detail::layout_obj>, std::shared_lock<std::shared_mutex>>;
   ///\brief Execute phase 1 commit on all transaction_obj.
   ///\details This is the phase where writes to disk are prepared.
   void commit_phase1_(detail::commit_manager::write_id& tx);
@@ -215,8 +216,6 @@ class monsoon_tx_export_ db::db_obj {
   db_obj(std::shared_ptr<class db> db);
   virtual ~db_obj() noexcept = 0;
 
-  ///\brief Lock held during layout modifications.
-  std::shared_mutex layout_mtx;
   ///\brief The object cache of the database.
   const cycle_ptr::cycle_gptr<detail::db_cache> obj_cache;
   ///\brief Acquire the database pointer.

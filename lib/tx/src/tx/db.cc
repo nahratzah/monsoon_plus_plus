@@ -14,6 +14,7 @@
 #include <cassert>
 #include <iterator>
 #include <limits>
+#include <set>
 
 namespace monsoon::tx {
 namespace {
@@ -216,36 +217,72 @@ void db::transaction::rollback() noexcept {
   active_ = false;
 }
 
-auto db::transaction::lock_all_layouts_() const -> std::vector<std::shared_lock<std::shared_mutex>> {
-  // Build up the layout locks.
-  // There are multiple layouts, and we must avoid deadlock.
-  std::vector<std::shared_lock<std::shared_mutex>> layout_locks;
-  layout_locks.reserve(callbacks_.size());
+auto db::transaction::lock_all_layouts_() const -> std::unordered_map<cycle_ptr::cycle_gptr<const detail::layout_obj>, std::shared_lock<std::shared_mutex>> {
+  using layout_map_element = std::pair<const detail::layout_domain*, cycle_ptr::cycle_gptr<const detail::layout_obj>>;
+  struct layout_map_compare {
+    auto operator()(const layout_map_element& x, const layout_map_element& y) const -> bool {
+      if (x.first == y.first) return x.first->less_compare(*x.second, *y.second);
+      return x.first < y.first;
+    }
+  };
+  using layout_map = std::set<layout_map_element, layout_map_compare>;
+  using layout_locks_map = std::unordered_map<cycle_ptr::cycle_gptr<const detail::layout_obj>, std::shared_lock<std::shared_mutex>>;
 
-  // Create unlocked list in arbitrary order.
-  std::transform(
-      callbacks_.begin(), callbacks_.end(),
-      std::back_inserter(layout_locks),
-      [](const auto& pair) -> std::shared_lock<std::shared_mutex> {
-        return std::shared_lock<std::shared_mutex>(
-            pair.first->layout_mtx,
-            std::defer_lock);
-      });
+  // Gather all the layouts.
+  layout_map layouts = objpipe::of(&deleted_set_, &created_set_, &require_set_)
+      .deref()
+      .iterate()
+      .transform(
+          [](const auto& tx_aware_datum) {
+            return tx_aware_datum->get_container_for_layout();
+          })
+      .reduce(
+          layout_map(),
+          [](auto&& map, auto&& lobj) -> decltype(map) {
+            map.emplace(&lobj->get_layout_domain(), std::forward<decltype(lobj)>(lobj));
+            return std::forward<decltype(map)>(map);
+          });
 
-  // To make a deterministic lock order, we use the memory address of the mutex
-  // (which is a proxy for the memory address of the transaction_obj).
-  std::sort(
-      layout_locks.begin(), layout_locks.end(),
-      [](const std::shared_lock<std::shared_mutex>& x, const std::shared_lock<std::shared_mutex>& y) noexcept {
-        return x.mutex() < y.mutex();
-      });
+  // Lock all the layouts.
+  bool everything_is_locked;
+  layout_locks_map layout_locks;
+  do {
+    everything_is_locked = true;
+    layout_locks = objpipe::of(std::cref(layouts))
+        .iterate()
+        .select<1>()
+        .reduce(
+            layout_locks_map(),
+            [](auto&& map, const cycle_ptr::cycle_gptr<const detail::layout_obj>& lobj) -> decltype(map) {
+              assert(map.count(lobj) == 0);
+              map.emplace(lobj, std::shared_lock<std::shared_mutex>(lobj->layout_mtx));
+              return std::forward<decltype(map)>(map);
+            });
 
-  // Now that we have all locks prepared and ordered deterministically, we can acquire the lock.
-  std::for_each(
-      layout_locks.begin(), layout_locks.end(),
-      [](std::shared_lock<std::shared_mutex>& lck) {
-        lck.lock();
-      });
+    // Recheck the layouts: until we have the locked, they can shift about
+    // and thus change their layout association.
+    // In which case we may not have the proper layout locked.
+    objpipe::of(&deleted_set_, &created_set_, &require_set_)
+        .deref()
+        .iterate()
+        .transform(
+            [](const auto& tx_aware_datum) {
+              return tx_aware_datum->get_container_for_layout();
+            })
+        .for_each(
+            [&layout_locks, &layouts, &everything_is_locked](cycle_ptr::cycle_gptr<const detail::layout_obj> lobj) {
+              if (layout_locks.count(lobj) == 0) {
+                // Update the layouts.
+                layouts.emplace(&lobj->get_layout_domain(), std::forward<decltype(lobj)>(lobj));
+                // Try to lock the layout. (We use try-lock because we are not respecting lock ordering.)
+                std::shared_lock<std::shared_mutex> lck{ lobj->layout_mtx, std::try_to_lock };
+                if (lck.owns_lock())
+                  layout_locks.emplace(lobj, std::move(lck));
+                else // If the lock attempt failed, we'll need to restart the locking process.
+                  everything_is_locked = false;
+              }
+            });
+  } while (!everything_is_locked);
 
   return layout_locks;
 }

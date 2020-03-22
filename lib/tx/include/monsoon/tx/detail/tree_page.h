@@ -239,7 +239,7 @@ class monsoon_tx_export_ abstract_tree_page
   ///\brief Retrieve the offset of this page.
   auto offset() const noexcept -> std::uint64_t { return off_; }
   ///\brief Test if the given mutex belongs to this page.
-  auto is_my_mutex(const std::shared_mutex* m) const noexcept -> bool { return m == &mtx_; }
+  auto is_my_mutex(const std::shared_mutex* m) const noexcept -> bool { return m == &mtx_(); }
   ///\brief Update parent offset, after reparenting.
   ///\note On-disk representation should already be updated.
   void reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept;
@@ -279,8 +279,10 @@ class monsoon_tx_export_ abstract_tree_page
       std::unique_lock<std::shared_mutex>> = 0;
 
   protected:
+  ///\brief Reference to the shared-mutex of this page.
+  virtual auto mtx_() const noexcept -> std::shared_mutex& = 0;
+
   std::uint64_t off_ = 0, parent_off_ = 0;
-  mutable std::shared_mutex mtx_;
 
   private:
   const cycle_ptr::cycle_weak_ptr<abstract_tree> tree_;
@@ -293,7 +295,8 @@ class monsoon_tx_export_ abstract_tree_page
 
 ///\brief Leaf page of a B+ tree.
 class monsoon_tx_export_ tree_page_leaf final
-: public abstract_tree_page
+: public abstract_tree_page,
+  public layout_obj
 {
   friend abstract_tree;
   friend abstract_tree_elem;
@@ -385,6 +388,12 @@ class monsoon_tx_export_ tree_page_leaf final
   auto offset_for_idx_(elems_vector::size_type idx) const noexcept -> std::uint64_t;
   ///\brief Compute offset of given abstract_tree_elem.
   auto offset_for_(const abstract_tree_elem& elem) const noexcept -> std::uint64_t;
+
+  protected:
+  auto mtx_() const noexcept -> std::shared_mutex& override;
+
+  private:
+  auto get_layout_domain() const noexcept -> const layout_domain& override;
 
   std::uint64_t next_sibling_off_ = 0, prev_sibling_off_ = 0;
   elems_vector elems_;
@@ -478,8 +487,13 @@ class monsoon_tx_export_ tree_page_branch final
       cycle_ptr::cycle_gptr<abstract_tree_page>,
       std::unique_lock<std::shared_mutex>> override final;
 
+  protected:
+  auto mtx_() const noexcept -> std::shared_mutex& override;
+
+  private:
   elems_vector elems_;
   keys_vector keys_;
+  mutable std::shared_mutex mtx_impl_;
 };
 
 
@@ -582,6 +596,7 @@ class monsoon_tx_export_ abstract_tx_aware_tree_elem
   private:
   auto mtx_ref_() const noexcept -> std::shared_mutex& override final;
   auto offset() const -> std::uint64_t override final;
+  auto get_container_for_layout() const -> cycle_ptr::cycle_gptr<const detail::layout_obj> override final;
 };
 
 
