@@ -4,6 +4,7 @@
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/detail/tree_page.h>
 #include <monsoon/tx/db.h>
+#include <monsoon/tx/detail/db_cache.h>
 #include <cstdint>
 #include <functional>
 #include <shared_mutex>
@@ -87,20 +88,20 @@ class monsoon_tx_export_ txfile_allocator final
 
   public:
   txfile_allocator() = delete;
-  txfile_allocator(const txfile& f, std::uint64_t off, allocator_type alloc = allocator_type());
+  txfile_allocator(std::shared_ptr<monsoon::tx::db> db, std::uint64_t off);
   ~txfile_allocator() noexcept override;
 
   private:
-  auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
-  auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
+  auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
+  auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
 
   auto get_if_present(std::uint64_t off) const noexcept -> cycle_ptr::cycle_gptr<abstract_tree_page> override;
   auto get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> override;
   void invalidate(std::uint64_t off) const noexcept override;
 
-  auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override;
-  auto allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
-  auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> override;
+  auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent, allocator_type allocator) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override;
+  auto allocate_branch_elem_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
+  auto allocate_branch_key_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_key> override;
 
   auto less_cb(const abstract_tree_page_branch_key&  x, const abstract_tree_page_branch_key&  y) const -> bool override;
   auto less_cb(const abstract_tree_elem&             x, const abstract_tree_elem&             y) const -> bool override;
@@ -109,20 +110,6 @@ class monsoon_tx_export_ txfile_allocator final
 
   ///\brief Implementation of the merge logic.
   static auto augment_merge_(const std::tuple<max_free_space_augment>& x, const std::tuple<max_free_space_augment>& y) -> std::tuple<max_free_space_augment>;
-
-  // XXX this will need to be replaced with a cache at some point, provided by the database.
-  using page_map = std::unordered_map<
-      std::uint64_t,
-      cycle_ptr::cycle_member_ptr<abstract_tree_page>,
-      std::hash<std::uint64_t>,
-      std::equal_to<std::uint64_t>,
-      cycle_ptr::cycle_allocator<
-          traits_type::rebind_alloc<std::pair<const std::uint64_t, cycle_ptr::cycle_member_ptr<abstract_tree_page>>>
-      >
-  >;
-  mutable page_map pages_{ page_map::allocator_type(*this, allocator) }; // XXX replace with database cache
-  mutable std::shared_mutex pages_mtx_; // XXX remove
-  txfile f_; // XXX replace with database
 };
 
 

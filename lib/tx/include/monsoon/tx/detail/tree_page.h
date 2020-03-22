@@ -5,6 +5,7 @@
 #include <monsoon/tx/tx_aware_data.h>
 #include <monsoon/tx/detail/tree_cfg.h>
 #include <monsoon/tx/detail/export_.h>
+#include <monsoon/tx/detail/db_cache.h>
 #include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
@@ -40,7 +41,8 @@ class tree_elem;
 
 ///\brief Interface and shared logic for a B+ tree.
 class monsoon_tx_export_ abstract_tree
-: public cycle_ptr::cycle_base
+: public cycle_ptr::cycle_base,
+  public db_cache::domain
 {
   friend abstract_tree_page;
   friend tree_page_leaf;
@@ -50,7 +52,7 @@ class monsoon_tx_export_ abstract_tree
 
   public:
   ///\brief Allocator used by commit_manager.
-  using allocator_type = shared_resource_allocator<std::byte>;
+  using allocator_type = db_cache::allocator_type;
   ///\brief Allocator traits.
   using traits_type = std::allocator_traits<allocator_type>;
 
@@ -58,18 +60,18 @@ class monsoon_tx_export_ abstract_tree
   struct page_with_lock;
 
   public:
-  explicit abstract_tree(allocator_type alloc = allocator_type());
+  abstract_tree() = default;
   virtual ~abstract_tree() noexcept = 0;
 
   private:
   ///\brief Compute augmentation of a sequence of elements.
   ///\param off The offset to populate the augment with.
   ///\param elems The elements from which to compute an augmentation.
-  virtual auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
+  virtual auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
   ///\brief Compute augmentation using reduction of augmentations.
   ///\param off The offset to populate the augment with.
   ///\param elems The augmentations from which to compute an augmentation.
-  virtual auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
+  virtual auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
 
   ///\brief Retrieve the page only if it is already loaded in memory.
   ///\param off Offset of the page.
@@ -85,16 +87,16 @@ class monsoon_tx_export_ abstract_tree
   virtual void invalidate(std::uint64_t off) const noexcept = 0;
 
   ///\brief Default-allocate an tree_page_leaf.
-  auto allocate_leaf_() -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  auto allocate_leaf_(allocator_type allocator) -> cycle_ptr::cycle_gptr<tree_page_leaf>;
   ///\brief Default-allocate an tree_page_branch.
-  auto allocate_branch_() -> cycle_ptr::cycle_gptr<tree_page_branch>;
+  auto allocate_branch_(allocator_type allocator) -> cycle_ptr::cycle_gptr<tree_page_branch>;
   ///\brief Allocate an element.
-  virtual auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> = 0;
+  virtual auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent, allocator_type allocator) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> = 0;
 
   ///\brief Allocate a branch element.
-  virtual auto allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
+  virtual auto allocate_branch_elem_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
   ///\brief Allocate a branch key.
-  virtual auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
+  virtual auto allocate_branch_key_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_key> = 0;
 
   ///\brief Get the first element in the tree.
   auto first_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>;
@@ -194,7 +196,6 @@ class monsoon_tx_export_ abstract_tree
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
-  allocator_type allocator;
 
   protected:
   std::uint64_t root_off_ = 0;
@@ -204,12 +205,13 @@ class monsoon_tx_export_ abstract_tree
 
 ///\brief Shared base for B+ tree pages.
 class monsoon_tx_export_ abstract_tree_page
-: protected cycle_ptr::cycle_base
+: protected cycle_ptr::cycle_base,
+  public db_cache::cache_obj
 {
   friend abstract_tree;
 
   public:
-  explicit abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree);
+  explicit abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator);
   virtual ~abstract_tree_page() noexcept = 0;
 
   ///\brief Get the tree owning this page.
@@ -225,7 +227,8 @@ class monsoon_tx_export_ abstract_tree_page
   ///\return A newly allocated page, that was read from bytes in \p tx at offset \p off and is of the appropriate type.
   static auto decode(
       abstract_tree& tree,
-      const txfile::transaction& tx, std::uint64_t off)
+      const txfile::transaction& tx, std::uint64_t off,
+      abstract_tree::allocator_type allocator)
   -> cycle_ptr::cycle_gptr<abstract_tree_page>;
 
   ///\brief Decode this page from a file.
@@ -282,6 +285,7 @@ class monsoon_tx_export_ abstract_tree_page
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
+  abstract_tree::allocator_type allocator;
 };
 
 
@@ -323,7 +327,7 @@ class monsoon_tx_export_ tree_page_leaf final
   >;
 
   public:
-  explicit tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree);
+  explicit tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator);
   ~tree_page_leaf() noexcept override;
 
   void init_empty(std::uint64_t off);
@@ -425,7 +429,7 @@ class monsoon_tx_export_ tree_page_branch final
   >;
 
   public:
-  explicit tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree);
+  explicit tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator);
   ~tree_page_branch() noexcept override;
 
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
@@ -654,8 +658,8 @@ class monsoon_tx_export_ tree_impl
   ~tree_impl() noexcept override = 0;
 
   private:
-  auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
-  auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
+  auto compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
+  auto compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
 
   ///\brief Augment reducer implementation.
   static auto augment_combine_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y) -> std::tuple<Augments...>;
@@ -663,9 +667,9 @@ class monsoon_tx_export_ tree_impl
   template<std::size_t... Idxs>
   static auto augment_combine_seq_(const std::tuple<Augments...>& x, const std::tuple<Augments...>& y, [[maybe_unused]] std::index_sequence<Idxs...> seq) -> std::tuple<Augments...>;
 
-  auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override final;
-  auto allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
-  auto allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> override final;
+  auto allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent, allocator_type allocator) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> override final;
+  auto allocate_branch_elem_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override final;
+  auto allocate_branch_key_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_key> override final;
 };
 
 

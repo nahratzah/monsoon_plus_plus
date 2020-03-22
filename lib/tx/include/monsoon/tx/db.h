@@ -4,6 +4,8 @@
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/txfile.h>
 #include <monsoon/tx/detail/commit_manager.h>
+#include <monsoon/tx/detail/db_cache.h>
+#include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -24,6 +26,12 @@ class monsoon_tx_export_ db_invalid_error : public std::runtime_error {
   public:
   using std::runtime_error::runtime_error;
   ~db_invalid_error() noexcept override;
+};
+
+
+struct db_options {
+  std::uintptr_t max_memory = detail::db_cache::default_max_memory;
+  shared_resource_allocator<std::byte> allocator;
 };
 
 
@@ -67,7 +75,7 @@ class monsoon_tx_export_ db
    * \param[in] fd The file descriptor of the file.
    * \param[in] off The offset at which the DB is found.
    */
-  db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0);
+  db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0, const db_options& options = db_options());
 
   /**
    * \brief Initialize a database.
@@ -77,10 +85,10 @@ class monsoon_tx_export_ db
    * \param[in] off The offset at which the DB is found.
    * \param[in] wal_len The length in bytes of the WAL.
    */
-  static auto create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0, monsoon::io::fd::size_type len = DEFAULT_WAL_BYTES) -> std::shared_ptr<db>;
+  static auto create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off = 0, monsoon::io::fd::size_type len = DEFAULT_WAL_BYTES, const db_options& options = db_options()) -> std::shared_ptr<db>;
 
   ///\brief Constructor used during create call.
-  monsoon_tx_local_ db(std::string name, txfile&& f);
+  monsoon_tx_local_ db(std::string name, txfile&& f, const db_options& options);
 
   private:
   ///\brief Validate the header in front of the WAL and uses it to load the WAL.
@@ -93,6 +101,7 @@ class monsoon_tx_export_ db
   private:
   txfile f_; // Underlying file.
   std::shared_ptr<detail::commit_manager> cm_; // Allocate transaction IDs.
+  cycle_ptr::cycle_gptr<detail::db_cache> obj_cache_;
 };
 
 
@@ -197,15 +206,26 @@ class monsoon_tx_export_ db::db_obj {
   friend db::transaction;
 
   protected:
-  db_obj() = default;
+  db_obj() = delete;
   db_obj(const db_obj&) = delete;
   db_obj& operator=(const db_obj&) = delete;
   db_obj(db_obj&&) = delete;
   db_obj& operator=(db_obj&&) = delete;
+
+  db_obj(std::shared_ptr<class db> db);
   virtual ~db_obj() noexcept = 0;
 
   ///\brief Lock held during layout modifications.
   std::shared_mutex layout_mtx;
+  ///\brief The object cache of the database.
+  const cycle_ptr::cycle_gptr<detail::db_cache> obj_cache;
+  ///\brief Acquire the database pointer.
+  auto db() const -> std::shared_ptr<class db>;
+  ///\brief Begin a txfile transaction.
+  auto txfile_begin() const -> txfile::transaction;
+
+  private:
+  std::weak_ptr<class db> db_;
 };
 
 

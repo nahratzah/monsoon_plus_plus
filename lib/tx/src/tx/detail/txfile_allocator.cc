@@ -74,13 +74,14 @@ void txfile_allocator::max_free_space_augment::encode(boost::asio::mutable_buffe
 }
 
 
-txfile_allocator::txfile_allocator(const txfile& f, std::uint64_t off, allocator_type alloc)
-: abstract_tree(alloc)
+txfile_allocator::txfile_allocator(std::shared_ptr<monsoon::tx::db> db, std::uint64_t off)
+: abstract_tree(),
+  db_obj(db)
 {}
 
 txfile_allocator::~txfile_allocator() noexcept = default;
 
-auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   auto augments = objpipe::of(std::cref(elems))
       .iterate()
       .filter([](const auto& ptr) noexcept -> bool { return ptr != nullptr; })
@@ -100,7 +101,7 @@ auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<cyc
   return std::allocate_shared<branch_elem>(allocator, off, std::move(augments));
 }
 
-auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   auto augments = objpipe::of(std::cref(elems))
       .iterate()
       .filter([](const auto& ptr) noexcept -> bool { return ptr != nullptr; })
@@ -119,47 +120,36 @@ auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<std
 }
 
 auto txfile_allocator::get_if_present(std::uint64_t off) const noexcept -> cycle_ptr::cycle_gptr<abstract_tree_page> {
-  std::shared_lock<std::shared_mutex> lck{ pages_mtx_ };
-  auto pos = pages_.find(off);
-  if (pos != pages_.end()) return pos->second;
-  return nullptr;
+  return boost::polymorphic_pointer_downcast<abstract_tree_page>(
+      obj_cache->get_if_present(off, this->shared_from_this(this)));
 }
 
 auto txfile_allocator::get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> {
-  {
-    // Try to find the page using a read-only lock.
-    std::shared_lock<std::shared_mutex> lck{ pages_mtx_ };
-    auto pos = pages_.find(off);
-    if (pos != pages_.end()) return pos->second;
-  }
-
-  // Read or decode the page under a write lock.
-  std::lock_guard<std::shared_mutex> lck{ pages_mtx_ };
-  // We need to re-check because someone else might have decoded it between the read and write lock.
-  auto pos = pages_.find(off);
-  if (pos != pages_.end()) return pos->second;
-
-  // Decode page.
-  auto pg = abstract_tree_page::decode(const_cast<txfile_allocator&>(*this), f_.begin(), off);
-  // Install it in the tree.
-  pages_.emplace(off, pg);
-  return pg;
+  return boost::polymorphic_pointer_downcast<abstract_tree_page>(
+      obj_cache->get(
+          off, this->shared_from_this(this),
+          [this](auto&& alloc, auto&& off) {
+            return abstract_tree_page::decode(
+                const_cast<txfile_allocator&>(*this),
+                this->txfile_begin(),
+                std::forward<decltype(off)>(off),
+                std::forward<decltype(alloc)>(alloc));
+          }));
 }
 
 void txfile_allocator::invalidate(std::uint64_t off) const noexcept {
-  std::lock_guard<std::shared_mutex> lck{ pages_mtx_ };
-  pages_.erase(off);
+  obj_cache->invalidate(off, this->shared_from_this(this));
 }
 
-auto txfile_allocator::allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+auto txfile_allocator::allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent, allocator_type allocator) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
   return cycle_ptr::allocate_cycle<element>(allocator, parent);
 }
 
-auto txfile_allocator::allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+auto txfile_allocator::allocate_branch_elem_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   return std::allocate_shared<branch_elem>(allocator);
 }
 
-auto txfile_allocator::allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> {
+auto txfile_allocator::allocate_branch_key_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_key> {
   return std::allocate_shared<tree_page_branch_key<class key>>(allocator);
 }
 

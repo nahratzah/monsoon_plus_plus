@@ -82,12 +82,12 @@ void tree_page_branch::header::decode(boost::asio::const_buffer buf) {
 
 abstract_tree::~abstract_tree() noexcept = default;
 
-auto abstract_tree::allocate_leaf_() -> cycle_ptr::cycle_gptr<tree_page_leaf> {
-  return cycle_ptr::allocate_cycle<tree_page_leaf>(allocator, this->shared_from_this(this));
+auto abstract_tree::allocate_leaf_(allocator_type allocator) -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  return cycle_ptr::allocate_cycle<tree_page_leaf>(allocator, this->shared_from_this(this), allocator);
 }
 
-auto abstract_tree::allocate_branch_() -> cycle_ptr::cycle_gptr<tree_page_branch> {
-  return cycle_ptr::allocate_cycle<tree_page_branch>(allocator, this->shared_from_this(this));
+auto abstract_tree::allocate_branch_(allocator_type allocator) -> cycle_ptr::cycle_gptr<tree_page_branch> {
+  return cycle_ptr::allocate_cycle<tree_page_branch>(allocator, this->shared_from_this(this), allocator);
 }
 
 struct monsoon_tx_local_ abstract_tree::page_with_lock {
@@ -199,15 +199,15 @@ auto abstract_tree::last_element_() -> cycle_ptr::cycle_gptr<abstract_tree_elem>
 }
 
 auto abstract_tree::less_cb(const abstract_tree_elem& x, const abstract_tree_elem& y) const -> bool {
-  return less_cb(*x.branch_key_(allocator), *y.branch_key_(allocator));
+  return less_cb(*x.branch_key_(allocator_type()), *y.branch_key_(allocator_type()));
 }
 
 auto abstract_tree::less_cb(const abstract_tree_page_branch_key& x, const abstract_tree_elem& y) const -> bool {
-  return less_cb(x, *y.branch_key_(allocator));
+  return less_cb(x, *y.branch_key_(allocator_type()));
 }
 
 auto abstract_tree::less_cb(const abstract_tree_elem& x, const abstract_tree_page_branch_key& y) const -> bool {
-  return less_cb(*x.branch_key_(allocator), y);
+  return less_cb(*x.branch_key_(allocator_type()), y);
 }
 
 void abstract_tree::with_equal_range_for_read(cheap_fn_ref<void(abstract_tree_iterator, abstract_tree_iterator)> cb, const abstract_tree_page_branch_key& key) {
@@ -235,7 +235,8 @@ auto abstract_tree_page::tree() const -> cycle_ptr::cycle_gptr<abstract_tree> {
 
 auto abstract_tree_page::decode(
     abstract_tree& tree,
-    const txfile::transaction& tx, std::uint64_t off)
+    const txfile::transaction& tx, std::uint64_t off,
+    abstract_tree::allocator_type allocator)
 -> cycle_ptr::cycle_gptr<abstract_tree_page> {
   std::uint32_t magic;
   monsoon::io::read_at(tx, off, &magic, sizeof(magic));
@@ -246,10 +247,10 @@ auto abstract_tree_page::decode(
     default:
       throw tree_error("bad tree page magic");
     case tree_page_leaf::magic:
-      page = tree.allocate_leaf_();
+      page = tree.allocate_leaf_(std::move(allocator));
       break;
     case tree_page_branch::magic:
-      page = tree.allocate_branch_();
+      page = tree.allocate_branch_(std::move(allocator));
       break;
   }
   page->decode(tx, off);
@@ -274,9 +275,9 @@ auto abstract_tree_page::local_split_(
 }
 
 
-tree_page_leaf::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree)
-: abstract_tree_page(std::move(tree)),
-  elems_(elems_vector::allocator_type(*this, this->tree()->allocator))
+tree_page_leaf::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator)
+: abstract_tree_page(std::move(tree), std::move(allocator)),
+  elems_(elems_vector::allocator_type(*this, this->allocator))
 {
   elems_.reserve(cfg->items_per_leaf_page);
 }
@@ -313,7 +314,7 @@ void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
       [&buf, bytes_per_val, this, t = tree()]() -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
         assert(buf.size() >= bytes_per_val);
 
-        auto e = t->allocate_elem_(this->shared_from_this(this));
+        auto e = t->allocate_elem_(this->shared_from_this(this), allocator);
         e->decode(boost::asio::buffer(buf.data(), bytes_per_val));
         buf += bytes_per_val;
         if (e->is_never_visible()) e.reset();
@@ -417,9 +418,9 @@ auto tree_page_leaf::local_split_(
   // Allocate all objects and figure out parameters.
   const elems_vector::iterator sibling_begin = split_select_(lck);
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_();
+  cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_(allocator);
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
-  std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(tree()->allocator);
+  std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(allocator);
 
   // Initialize sibling.
   sibling->init_empty(new_page_off);
@@ -447,8 +448,8 @@ auto tree_page_leaf::local_split_(
   monsoon::io::write_at(tx, zero_begin, tmp.data(), tmp.size());
 
   // Compute augments for this and sibling page.
-  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin });
-  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() });
+  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, allocator);
 
   // Update parent page to have the sibling present.
   auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment));
@@ -559,10 +560,10 @@ auto tree_page_leaf::offset_for_(const abstract_tree_elem& elem) const noexcept 
 }
 
 
-tree_page_branch::tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree)
-: abstract_tree_page(tree),
-  elems_(tree->allocator),
-  keys_(tree->allocator)
+tree_page_branch::tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator)
+: abstract_tree_page(std::move(tree), std::move(allocator)),
+  elems_(this->allocator),
+  keys_(this->allocator)
 {
   elems_.reserve(cfg->items_per_node_page);
   keys_.reserve(cfg->items_per_node_page - 1u);
@@ -595,7 +596,7 @@ void tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) 
   const auto t = tree();
 
   // Decode elems_[0].
-  std::shared_ptr<abstract_tree_page_branch_elem> e = t->allocate_branch_elem_();
+  std::shared_ptr<abstract_tree_page_branch_elem> e = t->allocate_branch_elem_(allocator);
   assert(buf.size() >= bytes_per_elem);
   e->decode(boost::asio::buffer(buf.data(), bytes_per_elem));
   buf += bytes_per_elem;
@@ -604,14 +605,14 @@ void tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) 
   std::shared_ptr<abstract_tree_page_branch_key> k;
   for (std::uint32_t i = 1; i < h.size; ++i) {
     // Decode key separating elems_[i-1] and elems_[i].
-    k = t->allocate_branch_key_();
+    k = t->allocate_branch_key_(allocator);
     assert(buf.size() >= bytes_per_key);
     k->decode(boost::asio::buffer(buf.data(), bytes_per_key));
     buf += bytes_per_key;
     keys_.emplace_back(std::move(k));
 
     // Decode elems_[i].
-    e = t->allocate_branch_elem_();
+    e = t->allocate_branch_elem_(allocator);
     assert(buf.size() >= bytes_per_elem);
     e->decode(boost::asio::buffer(buf.data(), bytes_per_elem));
     buf += bytes_per_elem;
@@ -769,7 +770,7 @@ auto tree_page_branch::local_split_(
   if (elems_.size() <= 2u) throw std::logic_error("not enough entries to split branch page");
   const elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_();
+  cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_(allocator);
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
   const keys_vector::iterator split_key = keys_.begin() + (sibling_begin - elems_.begin() - 1u);
   assert(split_key - keys_.begin() + 1u == sibling_begin - elems_.begin());
@@ -794,8 +795,8 @@ auto tree_page_branch::local_split_(
   }
 
   // Compute augments for this and sibling page.
-  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin });
-  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() });
+  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, allocator);
 
   // Update parent page to have the sibling present.
   auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, *split_key, std::move(sibling_augment));

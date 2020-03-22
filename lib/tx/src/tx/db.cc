@@ -81,12 +81,13 @@ void front_header::write(monsoon::xdr::xdr_ostream& o) {
 db_invalid_error::~db_invalid_error() noexcept = default;
 
 
-db::db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off)
-: db(name, validate_header_and_load_wal_(name, std::move(fd), off))
+db::db(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, const db_options& options)
+: db(name, validate_header_and_load_wal_(name, std::move(fd), off), options)
 {}
 
-db::db(std::string name, txfile&& f)
-: f_(std::move(f))
+db::db(std::string name, txfile&& f, const db_options& options)
+: f_(std::move(f)),
+  obj_cache_(cycle_ptr::allocate_cycle<detail::db_cache>(options.allocator, name, options.max_memory, options.allocator))
 {
   std::uint32_t version;
 
@@ -120,7 +121,7 @@ auto db::validate_header_and_load_wal_(const std::string& name, monsoon::io::fd&
   return txfile(name, std::move(fd), off + front_header::SIZE, fh.wal_bytes);
 }
 
-auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type wal_len) -> std::shared_ptr<db> {
+auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_type off, monsoon::io::fd::size_type wal_len, const db_options& options) -> std::shared_ptr<db> {
   if (wal_len > 0xffff'ffff'ffff'ffffULL)
     throw std::invalid_argument("wal size must be a 64-bit integer");
 
@@ -139,7 +140,7 @@ auto db::create(std::string name, monsoon::io::fd&& fd, monsoon::io::fd::offset_
   // Commit all written data.
   init_tx.commit();
 
-  return std::make_shared<db>(std::move(name), std::move(f));
+  return std::make_shared<db>(std::move(name), std::move(f), options);
 }
 
 auto db::begin(bool read_only) -> transaction {
@@ -338,6 +339,14 @@ void db::transaction::rollback_() noexcept {
 
 
 db::db_obj::~db_obj() noexcept = default;
+
+auto db::db_obj::db() const -> std::shared_ptr<class db> {
+  return std::shared_ptr<class db>(db_);
+}
+
+auto db::db_obj::txfile_begin() const -> txfile::transaction {
+  return db()->f_.begin();
+}
 
 
 } /* namespace monsoon::tx */

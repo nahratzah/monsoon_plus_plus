@@ -2,17 +2,18 @@
 #define MONSOON_TX_DETAIL_DB_CACHE_H
 
 #include <monsoon/tx/detail/export_.h>
-#include <monsoon/tx/db.h>
 #include <monsoon/tx/txfile.h>
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/allocator.h>
+#include <monsoon/shared_resource_allocator.h>
+#include <monsoon/cheap_fn_ref.h>
 #include <cycle_ptr/cycle_ptr.h>
 #include <functional>
 
 namespace monsoon::tx::detail {
 
 
-class monsoon_tx_export_ db_cache_impl
+class monsoon_tx_export_ db_cache
 : public cycle_ptr::cycle_base
 {
   public:
@@ -84,8 +85,10 @@ class monsoon_tx_export_ db_cache_impl
   using impl_type = monsoon::cache::extended_cache<key, cache_obj, key_hash, std::equal_to<key>, allocator_type, create, cycle_ptr::cycle_gptr<cache_obj>>;
 
   public:
-  explicit db_cache_impl(std::string name, std::uintptr_t max_memory = 256 * 1024 * 1024);
-  ~db_cache_impl() noexcept;
+  static constexpr std::uintptr_t default_max_memory = 256 * 1024 * 1024;
+
+  explicit db_cache(std::string name, std::uintptr_t max_memory = default_max_memory, shared_resource_allocator<std::byte> allocator = shared_resource_allocator<std::byte>());
+  ~db_cache() noexcept;
 
   auto get_if_present(
       txfile::transaction::offset_type off,
@@ -104,12 +107,12 @@ class monsoon_tx_export_ db_cache_impl
   impl_type impl_;
 };
 
-class monsoon_tx_export_ db_cache_impl::domain {
+class monsoon_tx_export_ db_cache::domain {
   public:
   virtual ~domain() noexcept = 0;
 };
 
-class monsoon_tx_export_ db_cache_impl::cache_obj {
+class monsoon_tx_export_ db_cache::cache_obj {
   public:
   virtual ~cache_obj() noexcept = 0;
 };

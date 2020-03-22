@@ -59,6 +59,12 @@ inline auto db::transaction::after(const transaction& other) const noexcept -> b
 }
 
 
+inline db::db_obj::db_obj(std::shared_ptr<class db> db)
+: obj_cache(db->obj_cache_),
+  db_(db)
+{}
+
+
 } /* namespace monsoon::tx */
 
 #endif /* MONSOON_TX_DB_INL_H */

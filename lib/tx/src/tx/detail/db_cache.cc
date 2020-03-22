@@ -5,7 +5,7 @@
 namespace monsoon::tx::detail {
 
 
-db_cache_impl::db_cache_impl(std::string name, std::uintptr_t max_memory)
+db_cache::db_cache(std::string name, std::uintptr_t max_memory, shared_resource_allocator<std::byte> allocator)
 : impl_(impl_type::builder()
     .access_expire(std::chrono::minutes(15))
     .enable_async()
@@ -18,19 +18,20 @@ db_cache_impl::db_cache_impl(std::string name, std::uintptr_t max_memory)
         [](const cycle_ptr::cycle_member_ptr<cache_obj>& ptr) -> cycle_ptr::cycle_gptr<cache_obj> {
           return ptr;
         })
+    .allocator(allocator_type(allocator))
     .build(create()))
 {}
 
-db_cache_impl::~db_cache_impl() noexcept = default;
+db_cache::~db_cache() noexcept = default;
 
-auto db_cache_impl::get_if_present(
+auto db_cache::get_if_present(
     txfile::transaction::offset_type off,
     cycle_ptr::cycle_gptr<const domain> dom) noexcept
 -> cycle_ptr::cycle_gptr<cache_obj> {
   return impl_.get_if_present(key(off, std::move(dom)));
 }
 
-auto db_cache_impl::get(
+auto db_cache::get(
     txfile::transaction::offset_type off,
     cycle_ptr::cycle_gptr<const domain> dom,
     cheap_fn_ref<cycle_ptr::cycle_gptr<cache_obj>(allocator_type, txfile::transaction::offset_type)> load)
@@ -38,17 +39,17 @@ auto db_cache_impl::get(
   return impl_.get(search{ key(off, std::move(dom)), std::move(load) });
 }
 
-void db_cache_impl::invalidate(
+void db_cache::invalidate(
     txfile::transaction::offset_type off,
     cycle_ptr::cycle_gptr<const domain> dom) noexcept {
   impl_.expire(key(off, std::move(dom)));
 }
 
 
-db_cache_impl::domain::~domain() noexcept = default;
+db_cache::domain::~domain() noexcept = default;
 
 
-db_cache_impl::cache_obj::~cache_obj() noexcept = default;
+db_cache::cache_obj::~cache_obj() noexcept = default;
 
 
 } /* namespace monsoon::tx::detail */

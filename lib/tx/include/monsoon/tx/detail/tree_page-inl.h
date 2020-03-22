@@ -14,10 +14,6 @@
 namespace monsoon::tx::detail {
 
 
-inline abstract_tree::abstract_tree(allocator_type alloc)
-: allocator(std::move(alloc))
-{}
-
 inline auto abstract_tree::begin() -> abstract_tree_iterator {
   return abstract_tree_iterator(shared_from_this(this), first_element_());
 }
@@ -230,9 +226,10 @@ inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gpt
 }
 
 
-inline abstract_tree_page::abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree)
+inline abstract_tree_page::abstract_tree_page(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator)
 : tree_(tree),
-  cfg(tree->cfg)
+  cfg(tree->cfg),
+  allocator(std::move(allocator))
 {}
 
 
@@ -306,7 +303,7 @@ template<typename Key, typename Val, typename... Augments>
 inline tree_impl<Key, Val, Augments...>::~tree_impl() noexcept = default;
 
 template<typename Key, typename Val, typename... Augments>
-inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off, const std::vector<cycle_ptr::cycle_gptr<const abstract_tree_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   std::tuple<Augments...> augments = objpipe::of(std::cref(elems))
       .iterate()
       .filter([](const auto& elem_ptr) -> bool { return elem_ptr != nullptr; })
@@ -321,11 +318,11 @@ inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off
       .reduce(&tree_impl::augment_combine_)
       .value_or(std::tuple<Augments...>());
 
-  return std::allocate_shared<abstract_tree_page_branch_elem>(off, std::move(augments));
+  return std::allocate_shared<abstract_tree_page_branch_elem>(allocator, off, std::move(augments));
 }
 
 template<typename Key, typename Val, typename... Augments>
-inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off, const std::vector<std::shared_ptr<const abstract_tree_page_branch_elem>>& elems, allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   std::tuple<Augments...> augments = objpipe::of(std::cref(elems))
       .iterate()
       .filter([](const auto& elem_ptr) -> bool { return elem_ptr != nullptr; })
@@ -340,7 +337,7 @@ inline auto tree_impl<Key, Val, Augments...>::compute_augment_(std::uint64_t off
       .reduce(&tree_impl::augment_combine_)
       .value_or(std::tuple<Augments...>());
 
-  return std::allocate_shared<abstract_tree_page_branch_elem>(off, std::move(augments));
+  return std::allocate_shared<abstract_tree_page_branch_elem>(allocator, off, std::move(augments));
 }
 
 template<typename Key, typename Val, typename... Augments>
@@ -355,17 +352,17 @@ inline auto tree_impl<Key, Val, Augments...>::augment_combine_seq_(const std::tu
 }
 
 template<typename Key, typename Val, typename... Augments>
-auto tree_impl<Key, Val, Augments...>::allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+auto tree_impl<Key, Val, Augments...>::allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent, allocator_type allocator) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
   return cycle_ptr::allocate_cycle<tree_elem<Key, Val, Augments...>>(allocator, std::move(parent));
 }
 
 template<typename Key, typename Val, typename... Augments>
-auto tree_impl<Key, Val, Augments...>::allocate_branch_elem_() const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+auto tree_impl<Key, Val, Augments...>::allocate_branch_elem_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   return std::allocate_shared<tree_page_branch_elem<Augments...>>(allocator);
 }
 
 template<typename Key, typename Val, typename... Augments>
-auto tree_impl<Key, Val, Augments...>::allocate_branch_key_() const -> std::shared_ptr<abstract_tree_page_branch_key> {
+auto tree_impl<Key, Val, Augments...>::allocate_branch_key_(allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_key> {
   return std::allocate_shared<tree_page_branch_key<Key>>(allocator);
 }
 
