@@ -419,6 +419,11 @@ auto tree_page_leaf::prev(const std::shared_lock<std::shared_mutex>& lck) const 
   return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(prev_sibling_off_));
 }
 
+auto tree_page_leaf::compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
+  return tree()->compute_augment_(off_, { elems_.begin(), elems_.end() }, std::move(allocator));
+}
+
 auto tree_page_leaf::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
@@ -808,6 +813,11 @@ auto tree_page_branch::insert_sibling(
   r.elem1 = std::move(sibling_augment);
   r.key = std::move(sibling_key);
   return r;
+}
+
+auto tree_page_branch::compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
+  return tree()->compute_augment_(off_, { elems_.begin(), elems_.end() }, std::move(allocator));
 }
 
 auto tree_page_branch::local_split_(

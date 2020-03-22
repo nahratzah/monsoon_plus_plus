@@ -243,6 +243,8 @@ class monsoon_tx_export_ abstract_tree_page
   ///\brief Update parent offset, after reparenting.
   ///\note On-disk representation should already be updated.
   void reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept;
+  ///\brief Compute the augment of this page.
+  virtual auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
 
   private:
   /**
@@ -351,6 +353,8 @@ class monsoon_tx_export_ tree_page_leaf final
   ///\param lck A lock on this page.
   auto prev(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
 
+  auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
+
   private:
   /**
    * \brief Split this page in two halves.
@@ -456,6 +460,8 @@ class monsoon_tx_export_ tree_page_branch final
       const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
       [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
   -> insert_sibling_tx;
+
+  auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
 
   private:
   /**
