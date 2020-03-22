@@ -261,7 +261,8 @@ class monsoon_tx_export_ abstract_tree_page
    */
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+      abstract_tree::allocator_type sibling_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -270,7 +271,8 @@ class monsoon_tx_export_ abstract_tree_page
   ///\note This is a virtual function so that we can "fake" covariant return using the local_split_ functions.
   virtual auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+      abstract_tree::allocator_type sibling_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -362,14 +364,16 @@ class monsoon_tx_export_ tree_page_leaf final
    */
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+      abstract_tree::allocator_type sibling_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<tree_page_leaf>,
       std::unique_lock<std::shared_mutex>>;
   auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+      abstract_tree::allocator_type sibling_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -459,14 +463,16 @@ class monsoon_tx_export_ tree_page_branch final
    */
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+      abstract_tree::allocator_type sibling_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<tree_page_branch>,
       std::unique_lock<std::shared_mutex>>;
   auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
-      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+      cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+      abstract_tree::allocator_type sibling_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,

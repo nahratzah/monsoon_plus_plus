@@ -265,13 +265,14 @@ void abstract_tree_page::reparent_([[maybe_unused]] std::uint64_t old_parent_off
 
 auto abstract_tree_page::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+    abstract_tree::allocator_type sibling_allocator)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
     std::unique_lock<std::shared_mutex>
 > {
-  return local_split_atp_(lck, f, new_page_off, parent, parent_lck);
+  return local_split_atp_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator));
 }
 
 
@@ -402,7 +403,8 @@ auto tree_page_leaf::prev(const std::shared_lock<std::shared_mutex>& lck) const 
 
 auto tree_page_leaf::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+    abstract_tree::allocator_type sibling_allocator)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<tree_page_leaf>,
@@ -418,9 +420,9 @@ auto tree_page_leaf::local_split_(
   // Allocate all objects and figure out parameters.
   const elems_vector::iterator sibling_begin = split_select_(lck);
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_(allocator);
+  cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_(sibling_allocator);
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
-  std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(allocator);
+  std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(parent->allocator);
 
   // Initialize sibling.
   sibling->init_empty(new_page_off);
@@ -448,8 +450,8 @@ auto tree_page_leaf::local_split_(
   monsoon::io::write_at(tx, zero_begin, tmp.data(), tmp.size());
 
   // Compute augments for this and sibling page.
-  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, allocator);
-  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, parent->allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, parent->allocator);
 
   // Update parent page to have the sibling present.
   auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment));
@@ -502,13 +504,14 @@ auto tree_page_leaf::local_split_(
 
 auto tree_page_leaf::local_split_atp_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+    abstract_tree::allocator_type sibling_allocator)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
     std::unique_lock<std::shared_mutex>
 > {
-  return local_split_(lck, f, new_page_off, parent, parent_lck);
+  return local_split_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator));
 }
 
 auto tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
@@ -748,7 +751,8 @@ auto tree_page_branch::insert_sibling(
 
 auto tree_page_branch::local_split_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+    abstract_tree::allocator_type sibling_allocator)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<tree_page_branch>,
@@ -770,7 +774,7 @@ auto tree_page_branch::local_split_(
   if (elems_.size() <= 2u) throw std::logic_error("not enough entries to split branch page");
   const elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
   txfile::transaction tx = f.begin(false);
-  cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_(allocator);
+  cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_(sibling_allocator);
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_ };
   const keys_vector::iterator split_key = keys_.begin() + (sibling_begin - elems_.begin() - 1u);
   assert(split_key - keys_.begin() + 1u == sibling_begin - elems_.begin());
@@ -795,8 +799,8 @@ auto tree_page_branch::local_split_(
   }
 
   // Compute augments for this and sibling page.
-  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, allocator);
-  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, parent->allocator);
+  std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, parent->allocator);
 
   // Update parent page to have the sibling present.
   auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, *split_key, std::move(sibling_augment));
@@ -844,13 +848,14 @@ auto tree_page_branch::local_split_(
 
 auto tree_page_branch::local_split_atp_(
     const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
-    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck)
+    cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
+    abstract_tree::allocator_type sibling_allocator)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
     std::unique_lock<std::shared_mutex>
 > {
-  return local_split_(lck, f, new_page_off, parent, parent_lck);
+  return local_split_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator));
 }
 
 
