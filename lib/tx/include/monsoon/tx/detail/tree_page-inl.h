@@ -230,40 +230,8 @@ template<typename LockType>
 inline void abstract_tree::with_for_each_augment_(
     cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
     cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
-  class layer {
-    public:
-    layer() = default;
-
-    layer(cycle_ptr::cycle_gptr<const tree_page_branch> page, cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter)
-    : page_(std::move(page)),
-      lck_(page_->mtx_()),
-      iter_(std::find_if(
-              page_->elems_.begin(), page_->elems_.end(),
-              [&filter](const auto& elem_ptr) -> bool {
-                return elem_ptr != nullptr && filter(*elem_ptr);
-              }))
-    {}
-
-    auto next_page(cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter) -> cycle_ptr::cycle_gptr<abstract_tree_page> {
-      if (iter_ == page_->elems_.end()) return nullptr;
-      cycle_ptr::cycle_gptr<abstract_tree_page> result = page_->tree()->get((*iter_)->off);
-      // Move iterator to the next element.
-      iter_ = std::find_if(
-          std::next(iter_), page_->elems_.end(),
-          [&filter](const auto& elem_ptr) -> bool {
-            return elem_ptr != nullptr && filter(*elem_ptr);
-          });
-      return result;
-    }
-
-    private:
-    cycle_ptr::cycle_gptr<const tree_page_branch> page_;
-    std::shared_lock<std::shared_mutex> lck_;
-    tree_page_branch::elems_vector::const_iterator iter_;
-  };
-
   cycle_ptr::cycle_gptr<abstract_tree_page> child_page;
-  std::stack<layer> layers;
+  std::stack<for_each_augment_layer_> layers;
   if (root_off_ == 0) return; // Empty tree.
 
   child_page = get(root_off_);

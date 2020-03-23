@@ -1117,6 +1117,29 @@ abstract_tree_page_branch_elem::~abstract_tree_page_branch_elem() noexcept = def
 abstract_tree_page_branch_key::~abstract_tree_page_branch_key() noexcept = default;
 
 
+abstract_tree::for_each_augment_layer_::for_each_augment_layer_(cycle_ptr::cycle_gptr<const tree_page_branch> page, cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter)
+: page_(std::move(page)),
+  lck_(page_->mtx_()),
+  iter_(std::find_if(
+          page_->elems_.begin(), page_->elems_.end(),
+          [&filter](const auto& elem_ptr) -> bool {
+            return elem_ptr != nullptr && filter(*elem_ptr);
+          }))
+{}
+
+auto abstract_tree::for_each_augment_layer_::next_page(cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter) -> cycle_ptr::cycle_gptr<abstract_tree_page> {
+  if (iter_ == page_->elems_.end()) return nullptr;
+  cycle_ptr::cycle_gptr<abstract_tree_page> result = page_->tree()->get((*iter_)->off);
+  // Move iterator to the next element.
+  iter_ = std::find_if(
+      std::next(iter_), page_->elems_.end(),
+      [&filter](const auto& elem_ptr) -> bool {
+        return elem_ptr != nullptr && filter(*elem_ptr);
+      });
+  return result;
+}
+
+
 template class tree_page_branch_elem<>;
 
 

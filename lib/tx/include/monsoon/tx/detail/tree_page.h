@@ -234,6 +234,8 @@ class monsoon_tx_export_ abstract_tree
   void with_for_each_augment_(
       cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
       cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  ///\brief Helper class used in for-each-augment search.
+  class for_each_augment_layer_;
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
@@ -818,6 +820,20 @@ class tree_page_branch_key final
   void encode(boost::asio::mutable_buffer buf) const override final;
 
   Key key;
+};
+
+
+class monsoon_tx_local_ abstract_tree::for_each_augment_layer_ {
+  public:
+  for_each_augment_layer_() = default;
+  for_each_augment_layer_(cycle_ptr::cycle_gptr<const tree_page_branch> page, cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter);
+
+  auto next_page(cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter) -> cycle_ptr::cycle_gptr<abstract_tree_page>;
+
+  private:
+  cycle_ptr::cycle_gptr<const tree_page_branch> page_;
+  std::shared_lock<std::shared_mutex> lck_;
+  tree_page_branch::elems_vector::const_iterator iter_;
 };
 
 
