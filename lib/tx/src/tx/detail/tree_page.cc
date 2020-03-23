@@ -227,6 +227,18 @@ void abstract_tree::with_for_each_for_write(cheap_fn_ref<void(cycle_ptr::cycle_g
   return with_for_each_<std::unique_lock<std::shared_mutex>>(std::move(cb));
 }
 
+void abstract_tree::with_for_each_augment_for_read(
+    cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
+    cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+  return with_for_each_augment_<std::shared_lock<std::shared_mutex>>(std::move(filter), std::move(cb));
+}
+
+void abstract_tree::with_for_each_augment_for_write(
+    cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
+    cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+  return with_for_each_augment_<std::unique_lock<std::shared_mutex>>(std::move(filter), std::move(cb));
+}
+
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
 

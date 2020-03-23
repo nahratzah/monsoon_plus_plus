@@ -150,7 +150,7 @@ class monsoon_tx_export_ abstract_tree
    * Invokes the given callback for each element.
    * Elements are read locked during invocation of \p cb on the element.
    *
-   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   * \param cb Callback to invoke.
    */
   void with_for_each_for_read(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
   /**
@@ -159,9 +159,35 @@ class monsoon_tx_export_ abstract_tree
    * Invokes the given callback for each element.
    * Elements are write locked during invocation of \p cb on the element.
    *
-   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   * \param cb Callback to invoke.
    */
   void with_for_each_for_write(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  /**
+   * \brief Iterate over the tree using a specific augmentation.
+   * \details
+   * Uses the augmentation filter to select elements.
+   * Invokes the given callback for each element.
+   *
+   * \note The filter is not applied to elements, only to branch-pages.
+   * \param filter Predicate on augmentations that match.
+   * \param cb Callback to invoke.
+   */
+  void with_for_each_augment_for_read(
+      cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
+      cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  /**
+   * \brief Iterate over the tree using a specific augmentation.
+   * \details
+   * Uses the augmentation filter to select elements.
+   * Invokes the given callback for each element.
+   *
+   * \note The filter is not applied to elements, only to branch-pages.
+   * \param filter Predicate on augmentations that match.
+   * \param cb Callback to invoke.
+   */
+  void with_for_each_augment_for_write(
+      cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
+      cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
 
   private:
   /**
@@ -189,10 +215,25 @@ class monsoon_tx_export_ abstract_tree
    * Elements are locked during invocation of \p cb on the element.
    *
    * \tparam LockType A std::shared_lock<std::shared_mutex> or std::unique_lock<std::mutex>, used to maintain the lock.
-   * \param cb Callback to invoke. This takes the lower-bound and upper-bound iterators as arguments.
+   * \param cb Callback to invoke.
    */
   template<typename LockType>
   void with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  /**
+   * \brief Iterate over the tree using a specific augmentation.
+   * \details
+   * Uses the augmentation filter to select elements.
+   * Invokes the given callback for each element.
+   *
+   * \tparam LockType A std::shared_lock<std::shared_mutex> or std::unique_lock<std::mutex>, used to maintain the lock.
+   * \note The filter is not applied to elements, only to branch-pages.
+   * \param filter Predicate on augmentations that match.
+   * \param cb Callback to invoke.
+   */
+  template<typename LockType>
+  void with_for_each_augment_(
+      cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
+      cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
