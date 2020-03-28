@@ -83,6 +83,28 @@ void tree_page_branch::header::decode(boost::asio::const_buffer buf) {
 
 abstract_tree::~abstract_tree() noexcept = default;
 
+auto abstract_tree::get_if_present(std::uint64_t off) const noexcept -> cycle_ptr::cycle_gptr<abstract_tree_page> {
+  return boost::polymorphic_pointer_downcast<abstract_tree_page>(
+      db_cache_->get_if_present(off, this->shared_from_this(this)));
+}
+
+auto abstract_tree::get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> {
+  return boost::polymorphic_pointer_downcast<abstract_tree_page>(
+      db_cache_->get(
+          off, this->shared_from_this(this),
+          [this](auto&& alloc, auto&& off) {
+            return abstract_tree_page::decode(
+                const_cast<abstract_tree&>(*this),
+                f_->begin(),
+                std::forward<decltype(off)>(off),
+                std::forward<decltype(alloc)>(alloc));
+          }));
+}
+
+void abstract_tree::invalidate(std::uint64_t off) const noexcept {
+  db_cache_->invalidate(off, this->shared_from_this(this));
+}
+
 auto abstract_tree::allocate_leaf_(allocator_type allocator) -> cycle_ptr::cycle_gptr<tree_page_leaf> {
   return cycle_ptr::allocate_cycle<tree_page_leaf>(allocator, this->shared_from_this(this), allocator);
 }

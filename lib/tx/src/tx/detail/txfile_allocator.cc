@@ -119,28 +119,6 @@ auto txfile_allocator::compute_augment_(std::uint64_t off, const std::vector<std
   return std::allocate_shared<branch_elem>(allocator, off, std::move(augments));
 }
 
-auto txfile_allocator::get_if_present(std::uint64_t off) const noexcept -> cycle_ptr::cycle_gptr<abstract_tree_page> {
-  return boost::polymorphic_pointer_downcast<abstract_tree_page>(
-      obj_cache->get_if_present(off, this->shared_from_this(this)));
-}
-
-auto txfile_allocator::get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> {
-  return boost::polymorphic_pointer_downcast<abstract_tree_page>(
-      obj_cache->get(
-          off, this->shared_from_this(this),
-          [this](auto&& alloc, auto&& off) {
-            return abstract_tree_page::decode(
-                const_cast<txfile_allocator&>(*this),
-                this->txfile_begin(),
-                std::forward<decltype(off)>(off),
-                std::forward<decltype(alloc)>(alloc));
-          }));
-}
-
-void txfile_allocator::invalidate(std::uint64_t off) const noexcept {
-  obj_cache->invalidate(off, this->shared_from_this(this));
-}
-
 auto txfile_allocator::allocate_elem_(cycle_ptr::cycle_gptr<tree_page_leaf> parent, allocator_type allocator) const -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
   return cycle_ptr::allocate_cycle<element>(allocator, parent);
 }

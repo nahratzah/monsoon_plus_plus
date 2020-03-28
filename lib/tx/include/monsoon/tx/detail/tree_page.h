@@ -77,15 +77,15 @@ class monsoon_tx_export_ abstract_tree
   ///\brief Retrieve the page only if it is already loaded in memory.
   ///\param off Offset of the page.
   ///\returns Decoded page.
-  virtual auto get_if_present(std::uint64_t off) const noexcept -> cycle_ptr::cycle_gptr<abstract_tree_page> = 0;
+  auto get_if_present(std::uint64_t off) const noexcept -> cycle_ptr::cycle_gptr<abstract_tree_page>;
   ///\brief Retrieve the page.
   ///\param off Offset of the page.
   ///\returns Decoded page.
-  virtual auto get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page> = 0;
+  auto get(std::uint64_t off) const -> cycle_ptr::cycle_gptr<abstract_tree_page>;
   ///\brief Invalidate the page.
   ///\details Future invocations of get and get_if_present won't return the page anymore.
   ///\param off Offset of the page to invalidate.
-  virtual void invalidate(std::uint64_t off) const noexcept = 0;
+  void invalidate(std::uint64_t off) const noexcept;
 
   ///\brief Default-allocate an tree_page_leaf.
   auto allocate_leaf_(allocator_type allocator) -> cycle_ptr::cycle_gptr<tree_page_leaf>;
@@ -258,6 +258,10 @@ class monsoon_tx_export_ abstract_tree
   protected:
   std::uint64_t root_off_ = 0;
   mutable std::shared_mutex mtx_;
+
+  private:
+  cycle_ptr::cycle_member_ptr<db_cache> db_cache_;
+  txfile* f_; // XXX do something
 };
 
 
