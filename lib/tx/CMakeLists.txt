@@ -22,6 +22,7 @@ add_library (monsoon_tx
   src/tx/detail/txfile_allocator.cc
   src/tx/detail/db_cache.cc
   src/tx/detail/layout_domain.cc
+  src/tx/detail/tx_op.cc
 )
 target_include_directories (monsoon_tx PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -70,6 +71,8 @@ install (FILES
   include/monsoon/tx/detail/txfile_allocator-inl.h
   include/monsoon/tx/detail/db_cache.h
   include/monsoon/tx/detail/layout_domain.h
+  include/monsoon/tx/detail/tx_op.h
+  include/monsoon/tx/detail/tx_op-inl.h
   DESTINATION include/monsoon/tx/detail)
 
 add_subdirectory (tests)
