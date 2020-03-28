@@ -43,6 +43,44 @@ inline void tx_op::impl_<CommitFn, RollbackFn>::rollback_() noexcept {
 }
 
 
+template<typename CommitFn>
+inline tx_op::impl_<CommitFn, std::nullptr_t>::impl_(CommitFn commit_fn, [[maybe_unused]] std::nullptr_t rollback_fn)
+: commit_fn_(std::move(commit_fn))
+{}
+
+template<typename CommitFn>
+inline tx_op::impl_<CommitFn, std::nullptr_t>::~impl_() noexcept {
+  before_destroy_();
+}
+
+template<typename CommitFn>
+inline void tx_op::impl_<CommitFn, std::nullptr_t>::commit_() noexcept {
+  std::invoke(std::move(commit_fn_));
+}
+
+template<typename CommitFn>
+inline void tx_op::impl_<CommitFn, std::nullptr_t>::rollback_() noexcept {}
+
+
+template<typename RollbackFn>
+inline tx_op::impl_<std::nullptr_t, RollbackFn>::impl_([[maybe_unused]] std::nullptr_t commit_fn, RollbackFn rollback_fn)
+: rollback_fn_(std::move(rollback_fn))
+{}
+
+template<typename RollbackFn>
+inline tx_op::impl_<std::nullptr_t, RollbackFn>::~impl_() noexcept {
+  before_destroy_();
+}
+
+template<typename RollbackFn>
+inline void tx_op::impl_<std::nullptr_t, RollbackFn>::commit_() noexcept {}
+
+template<typename RollbackFn>
+inline void tx_op::impl_<std::nullptr_t, RollbackFn>::rollback_() noexcept {
+  std::invoke(std::move(rollback_fn_));
+}
+
+
 inline tx_op_collection::tx_op_collection(allocator_type alloc)
 : ops_(std::move(alloc))
 {}

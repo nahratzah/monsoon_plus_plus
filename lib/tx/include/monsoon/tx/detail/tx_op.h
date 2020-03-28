@@ -2,6 +2,7 @@
 #define MONSOON_TX_DETAIL_TX_OP_H
 
 #include <monsoon/tx/detail/export_.h>
+#include <cstddef>
 #include <memory>
 #include <type_traits>
 #include <vector>
@@ -24,7 +25,9 @@ class monsoon_tx_export_ tx_op {
   ///\brief Create a new tx_op using the given allocator.
   ///\param alloc Allocator used to allocate memory.
   ///\param commit_fn Functor object invoked during commit.
+  ///If nullptr, then the tx_op shall have a noop commit function.
   ///\param rollback_fn Functor object invoked during rollback.
+  ///If nullptr, then the tx_op shall have a noop rollback function.
   ///\return A tx_op that will invoke the commit or rollback function appropriately.
   template<typename Alloc, typename CommitFn, typename RollbackFn>
   friend auto allocate_tx_op(Alloc&& alloc, CommitFn&& commit_fn, RollbackFn&& rollback_fn) -> std::shared_ptr<tx_op>;
@@ -112,6 +115,52 @@ class tx_op::impl_
 
   CommitFn commit_fn_;
   RollbackFn rollback_fn_;
+};
+
+
+template<typename CommitFn>
+class tx_op::impl_<CommitFn, std::nullptr_t>
+: public tx_op
+{
+  public:
+  impl_(CommitFn commit_fn, [[maybe_unused]] std::nullptr_t rollback_fn);
+  ~impl_() noexcept override;
+
+  private:
+  void commit_() noexcept override;
+  void rollback_() noexcept override;
+
+  CommitFn commit_fn_;
+};
+
+
+template<typename RollbackFn>
+class tx_op::impl_<std::nullptr_t, RollbackFn>
+: public tx_op
+{
+  public:
+  impl_([[maybe_unused]] std::nullptr_t commit_fn, RollbackFn rollback_fn);
+  ~impl_() noexcept override;
+
+  private:
+  void commit_() noexcept override;
+  void rollback_() noexcept override;
+
+  RollbackFn rollback_fn_;
+};
+
+
+template<>
+class tx_op::impl_<std::nullptr_t, std::nullptr_t>
+: public tx_op
+{
+  public:
+  impl_([[maybe_unused]] std::nullptr_t commit_fn, [[maybe_unused]] std::nullptr_t rollback_fn) noexcept {}
+  ~impl_() noexcept override;
+
+  private:
+  void commit_() noexcept override;
+  void rollback_() noexcept override;
 };
 
 

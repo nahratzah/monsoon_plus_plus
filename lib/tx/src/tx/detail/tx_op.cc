@@ -57,4 +57,11 @@ void tx_op_collection::rollback() noexcept {
 }
 
 
+tx_op::impl_<std::nullptr_t, std::nullptr_t>::~impl_() noexcept = default;
+
+void tx_op::impl_<std::nullptr_t, std::nullptr_t>::commit_() noexcept {}
+
+void tx_op::impl_<std::nullptr_t, std::nullptr_t>::rollback_() noexcept {}
+
+
 } /* namespace monsoon::tx::detail */
