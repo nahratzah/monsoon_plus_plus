@@ -527,7 +527,7 @@ auto tree_page_leaf::local_split_(
         nullptr);
 
     // Complete insert operation of the parent.
-    parent_insert_op.commit();
+    parent_insert_op->commit();
 
     return std::forward_as_tuple(
         std::move(sibling_key),
@@ -749,19 +749,17 @@ auto tree_page_branch::insert_sibling(
     const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
     const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
     [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
--> insert_sibling_tx {
+-> std::shared_ptr<tx_op> {
   const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
   const std::size_t bytes_per_key = cfg->key_bytes;
 
-  insert_sibling_tx r;
-
-  r.elems_pos = std::find_if(
+  const elems_vector::iterator elems_pos = std::find_if(
       elems_.begin(), elems_.end(),
       [&precede_page](const auto& ptr) -> bool { return ptr->off == precede_page.offset(); });
-  if (r.elems_pos == elems_.end())
+  if (elems_pos == elems_.end())
     throw std::logic_error("can't insert sibling: preceding page not found");
-  const elems_vector::size_type idx = r.elems_pos - elems_.begin();
-  r.keys_insert_pos = keys_.begin() + idx;
+  const elems_vector::size_type idx = elems_pos - elems_.begin();
+  const keys_vector::iterator keys_insert_pos = keys_.begin() + idx;
 
   // Verify we are not going to exceed size constraints.
   if (elems_.size() >= cfg->items_per_node_page)
@@ -819,12 +817,29 @@ auto tree_page_branch::insert_sibling(
   assert(buf.size() == 0); // Completely filled the buffer with data.
   monsoon::io::write_at(tx, write_offset, buf_storage.data(), buf_storage.size());
 
-  // Complete initialization of r.
-  r.self = this;
-  r.elem0 = std::move(precede_augment);
-  r.elem1 = std::move(sibling_augment);
-  r.key = std::move(sibling_key);
-  return r;
+  return make_tx_op(
+      [ self=this->shared_from_this(this),
+        elems_pos,
+        keys_insert_pos,
+        elem0=std::move(precede_augment),
+        elem1=std::move(sibling_augment),
+        key=std::move(sibling_key)
+      ]() mutable {
+        assert(self != nullptr);
+        assert(elem0 != nullptr);
+        assert(elem1 != nullptr);
+        assert(key != nullptr);
+        assert(self->elems_.capacity() > self->elems_.size());
+        assert(self->keys_.capacity() > self->keys_.size());
+        assert(elems_pos - self->elems_.begin() == keys_insert_pos - self->keys_.begin());
+
+        *elems_pos = std::move(elem0);
+        self->elems_.insert(std::next(elems_pos), std::move(elem1));
+        self->keys_.insert(keys_insert_pos, std::move(key));
+
+        self.reset();
+      },
+      nullptr);
 }
 
 auto tree_page_branch::compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
@@ -918,7 +933,7 @@ auto tree_page_branch::local_split_(
         nullptr);
 
     // Complete insert operation of the parent.
-    parent_insert_op.commit();
+    parent_insert_op->commit();
 
     return std::forward_as_tuple(
         std::exchange(*split_key, nullptr),
@@ -943,23 +958,6 @@ auto tree_page_branch::local_split_atp_(
 
 auto tree_page_branch::mtx_() const noexcept -> std::shared_mutex& {
   return mtx_impl_;
-}
-
-
-void tree_page_branch::insert_sibling_tx::commit() noexcept {
-  assert(self != nullptr);
-  assert(elem0 != nullptr);
-  assert(elem1 != nullptr);
-  assert(key != nullptr);
-  assert(self->elems_.capacity() > self->elems_.size());
-  assert(self->keys_.capacity() > self->keys_.size());
-  assert(elems_pos - self->elems_.begin() == keys_insert_pos - self->keys_.begin());
-
-  *elems_pos = std::move(elem0);
-  self->elems_.insert(std::next(elems_pos), std::move(elem1));
-  self->keys_.insert(keys_insert_pos, std::move(key));
-
-  self = nullptr;
 }
 
 

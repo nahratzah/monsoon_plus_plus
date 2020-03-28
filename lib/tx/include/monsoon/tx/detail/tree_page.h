@@ -6,6 +6,7 @@
 #include <monsoon/tx/detail/tree_cfg.h>
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/detail/db_cache.h>
+#include <monsoon/tx/detail/tx_op.h>
 #include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
@@ -472,9 +473,6 @@ class monsoon_tx_export_ tree_page_branch final
   };
   static_assert(sizeof(header) == header::SIZE);
 
-  ///\brief Transactional operation for inserting a sibling.
-  class insert_sibling_tx;
-
   private:
   using elems_vector = std::vector<
       std::shared_ptr<abstract_tree_page_branch_elem>,
@@ -502,7 +500,7 @@ class monsoon_tx_export_ tree_page_branch final
       const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
       const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
       [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
-  -> insert_sibling_tx;
+  -> std::shared_ptr<tx_op>;
 
   auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
 
@@ -545,30 +543,6 @@ class monsoon_tx_export_ tree_page_branch final
   elems_vector elems_;
   keys_vector keys_;
   mutable std::shared_mutex mtx_impl_;
-};
-
-
-///\brief Internal type used to perform two-phase commit on sibling insertion.
-class monsoon_tx_local_ tree_page_branch::insert_sibling_tx {
-  friend tree_page_branch;
-
-  public:
-  insert_sibling_tx(const insert_sibling_tx&) = delete;
-  insert_sibling_tx& operator=(const insert_sibling_tx&) = delete;
-
-  insert_sibling_tx() = default;
-  insert_sibling_tx(insert_sibling_tx&&) noexcept = default;
-  insert_sibling_tx& operator=(insert_sibling_tx&&) = default;
-
-  void commit() noexcept;
-
-  private:
-  tree_page_branch* self = nullptr;
-  elems_vector::iterator elems_pos; ///<\brief Points at the precede_page.
-  keys_vector::iterator keys_insert_pos; ///<\brief Points at the insert position for the key.
-  std::shared_ptr<abstract_tree_page_branch_elem> elem0;
-  std::shared_ptr<abstract_tree_page_branch_elem> elem1;
-  std::shared_ptr<abstract_tree_page_branch_key> key;
 };
 
 
