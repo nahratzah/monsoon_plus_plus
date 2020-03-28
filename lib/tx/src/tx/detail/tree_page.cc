@@ -239,6 +239,36 @@ void abstract_tree::with_for_each_augment_for_write(
   return with_for_each_augment_<std::unique_lock<std::shared_mutex>>(std::move(filter), std::move(cb));
 }
 
+auto abstract_tree::ensure_root_page_(txfile& f, allocator_type tx_allocator) -> std::shared_lock<std::shared_mutex> {
+  {
+    std::shared_lock<std::shared_mutex> lck{ mtx_ };
+    if (root_off_ != 0) return lck;
+  }
+
+  std::unique_lock<std::shared_mutex> lck{ mtx_ };
+  if (root_off_ != 0) {
+    lck.unlock();
+    return std::shared_lock<std::shared_mutex>(mtx_);
+  }
+
+  auto tx = f.begin(false);
+  std::uint64_t off;
+  tx_op_collection ops(tx_allocator);
+  std::tie(off, ops) = allocate_txfile_bytes(tx, tree_page_leaf::encoded_size(*cfg), tx_allocator);
+
+  auto page = cycle_ptr::allocate_cycle<tree_page_leaf>(tx_allocator, shared_from_this(this), tx_allocator);
+  page->init_empty(off);
+  decorate_root_page_(page, tx_allocator);
+  page->encode(tx);
+
+  tx.commit();
+  ops.commit();
+  lck.unlock();
+  return std::shared_lock<std::shared_mutex>(mtx_);
+}
+
+void abstract_tree::decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const {}
+
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
 
@@ -290,6 +320,14 @@ auto abstract_tree_page::local_split_(
 }
 
 
+auto tree_page_leaf::encoded_size(const tree_cfg& cfg) -> std::size_t {
+  // Items:
+  // - 1 header
+  // - 1 key
+  // - N values
+  return header::SIZE + cfg.key_bytes + cfg.items_per_leaf_page * cfg.val_bytes;
+}
+
 tree_page_leaf::tree_page_leaf(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator)
 : abstract_tree_page(std::move(tree), std::move(allocator)),
   elems_(elems_vector::allocator_type(*this, this->allocator))
@@ -309,10 +347,10 @@ void tree_page_leaf::init_empty(std::uint64_t off) {
 void tree_page_leaf::decode(const txfile::transaction& tx, std::uint64_t off) {
   assert(elems_.empty());
 
-  const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
+  const std::size_t bytes_per_val = cfg->val_bytes;
 
   const auto t = tree();
-  auto buf_storage = std::vector<std::uint8_t>(header::SIZE + cfg->items_per_leaf_page * bytes_per_val);
+  auto buf_storage = std::vector<std::uint8_t>(encoded_size(*cfg));
   monsoon::io::read_at(tx, off, buf_storage.data(), buf_storage.size());
   boost::asio::const_buffer buf = boost::asio::buffer(buf_storage);
 
@@ -369,9 +407,9 @@ void tree_page_leaf::encode(txfile::transaction& tx) const {
   assert(!elems_.empty());
   assert(elems_.size() == cfg->items_per_leaf_page);
 
-  const std::size_t bytes_per_val = tx_aware_data::TX_AWARE_SIZE + cfg->key_bytes + cfg->val_bytes;
+  const std::size_t bytes_per_val = cfg->val_bytes;
 
-  auto buf_storage = std::vector<std::uint8_t>(header::SIZE + cfg->key_bytes + cfg->items_per_leaf_page * bytes_per_val);
+  auto buf_storage = std::vector<std::uint8_t>(encoded_size(*cfg));
   boost::asio::mutable_buffer buf = boost::asio::buffer(buf_storage);
 
   header h;
@@ -644,6 +682,18 @@ auto tree_page_leaf::get_layout_domain() const noexcept -> const layout_domain& 
 }
 
 
+auto tree_page_branch::encoded_size(const tree_cfg& cfg) -> std::size_t {
+  const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg.augment_bytes;
+
+  // Items:
+  // - 1 header
+  // - N-1 keys
+  // - N elems (augments + offset)
+  return header::SIZE
+      + (cfg.items_per_node_page - 1u) * cfg.key_bytes
+      + cfg.items_per_node_page * bytes_per_elem;
+}
+
 tree_page_branch::tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator)
 : abstract_tree_page(std::move(tree), std::move(allocator)),
   elems_(this->allocator),
@@ -660,11 +710,8 @@ void tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) 
 
   const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
   const std::size_t bytes_per_key = cfg->key_bytes;
-  const std::size_t page_bytes = header::SIZE
-      + (cfg->items_per_node_page - 1u) * bytes_per_key
-      + cfg->items_per_node_page * bytes_per_elem;
 
-  auto buf_storage = std::vector<std::uint8_t>(page_bytes);
+  auto buf_storage = std::vector<std::uint8_t>(encoded_size(*cfg));
   monsoon::io::read_at(tx, off, buf_storage.data(), buf_storage.size());
   boost::asio::const_buffer buf = boost::asio::buffer(buf_storage);
 
@@ -712,11 +759,8 @@ void tree_page_branch::encode(txfile::transaction& tx) const {
 
   const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
   const std::size_t bytes_per_key = cfg->key_bytes;
-  const std::size_t page_bytes = header::SIZE
-      + (cfg->items_per_node_page - 1u) * bytes_per_key
-      + cfg->items_per_node_page * bytes_per_elem;
 
-  auto buf_storage = std::vector<std::uint8_t>(page_bytes);
+  auto buf_storage = std::vector<std::uint8_t>(encoded_size(*cfg));
   boost::asio::mutable_buffer buf = boost::asio::buffer(buf_storage);
 
   header h;
@@ -868,11 +912,6 @@ auto tree_page_branch::local_split_(
   assert(parent_lck.owns_lock() && parent->is_my_mutex(parent_lck.mutex()));
 
   const auto t = tree();
-  const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
-  const std::size_t bytes_per_key = cfg->key_bytes;
-  const std::size_t page_bytes = header::SIZE
-      + (cfg->items_per_node_page - 1u) * bytes_per_key
-      + cfg->items_per_node_page * bytes_per_elem;
 
   // Allocate all objects and figure out parameters.
   if (elems_.size() <= 2u) throw std::logic_error("not enough entries to split branch page");

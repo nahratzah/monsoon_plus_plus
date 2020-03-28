@@ -182,5 +182,12 @@ auto txfile_allocator::augment_merge_(const std::tuple<max_free_space_augment>& 
       max_free_space_augment::merge(std::get<0>(x), std::get<0>(y)));
 }
 
+void txfile_allocator::decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const {
+  auto elem = cycle_ptr::allocate_cycle<element>(tx_allocator, root_page);
+  elem->key.addr = root_page->offset();
+  elem->used = tree_page_leaf::encoded_size(*cfg);
+  root_page->elems_.push_back(std::move(elem));
+}
+
 
 } /* namespace monsoon::tx::detail */

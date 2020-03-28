@@ -238,6 +238,20 @@ class monsoon_tx_export_ abstract_tree
   ///\brief Helper class used in for-each-augment search.
   class for_each_augment_layer_;
 
+  /**
+   * \brief Ensure the tree has a root page.
+   * \details
+   * If the tree doesn't have a root page, this will create one.
+   *
+   * \returns Shared lock on this tree.
+   */
+  auto ensure_root_page_(txfile& f, allocator_type tx_allocator) -> std::shared_lock<std::shared_mutex>;
+  ///\brief Populate the root page with extra information.
+  ///\note Specialized in the allocator, so it can record its own allocated page.
+  virtual void decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const;
+
+  virtual auto allocate_txfile_bytes(txfile::transaction& tx, std::uint64_t bytes, allocator_type tx_allocator) const -> std::tuple<std::uint64_t, tx_op_collection> = 0;
+
   public:
   const std::shared_ptr<const tree_cfg> cfg;
 
@@ -349,6 +363,7 @@ class monsoon_tx_export_ tree_page_leaf final
   friend abstract_tree;
   friend abstract_tree_elem;
   friend abstract_tx_aware_tree_elem;
+  friend class txfile_allocator;
 
   public:
   static constexpr std::uint32_t magic = 0x2901'c28fU;
@@ -369,6 +384,8 @@ class monsoon_tx_export_ tree_page_leaf final
     monsoon_tx_local_ void decode(boost::asio::const_buffer buf);
   };
   static_assert(sizeof(header) == header::SIZE);
+
+  static auto encoded_size(const tree_cfg& cfg) -> std::size_t;
 
   private:
   using elems_vector = std::vector<
@@ -476,6 +493,8 @@ class monsoon_tx_export_ tree_page_branch final
     monsoon_tx_local_ void decode(boost::asio::const_buffer buf);
   };
   static_assert(sizeof(header) == header::SIZE);
+
+  static auto encoded_size(const tree_cfg& cfg) -> std::size_t;
 
   private:
   using elems_vector = std::vector<

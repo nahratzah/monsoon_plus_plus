@@ -110,6 +110,8 @@ class monsoon_tx_export_ txfile_allocator final
 
   ///\brief Implementation of the merge logic.
   static auto augment_merge_(const std::tuple<max_free_space_augment>& x, const std::tuple<max_free_space_augment>& y) -> std::tuple<max_free_space_augment>;
+  ///\brief The root page, when initialized, needs an entry for itself.
+  void decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const override;
 };
 
 
