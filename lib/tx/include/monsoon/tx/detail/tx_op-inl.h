@@ -10,14 +10,28 @@ template<typename Alloc, typename CommitFn, typename RollbackFn>
 auto allocate_tx_op(Alloc&& alloc, CommitFn&& commit_fn, RollbackFn&& rollback_fn) -> std::shared_ptr<tx_op> {
   using tx_op_impl = tx_op::impl_<std::decay_t<CommitFn>, std::decay_t<RollbackFn>>;
 
-  return std::allocate_shared<tx_op_impl>(std::forward<Alloc>(alloc), std::forward<CommitFn>(commit_fn), std::forward<RollbackFn>(rollback_fn));
+  try {
+    return std::allocate_shared<tx_op_impl>(std::forward<Alloc>(alloc), std::forward<CommitFn>(commit_fn), rollback_fn);
+  } catch (...) {
+    // When we fail, ensure we still invoke the rollback function.
+    if constexpr(!std::is_same_v<std::nullptr_t, std::decay_t<RollbackFn>>)
+      std::invoke(rollback_fn);
+    throw;
+  }
 }
 
 template<typename CommitFn, typename RollbackFn>
 auto make_tx_op(CommitFn&& commit_fn, RollbackFn&& rollback_fn) -> std::shared_ptr<tx_op> {
   using tx_op_impl = tx_op::impl_<std::decay_t<CommitFn>, std::decay_t<RollbackFn>>;
 
-  return std::make_shared<tx_op_impl>(std::forward<CommitFn>(commit_fn), std::forward<RollbackFn>(rollback_fn));
+  try {
+    return std::make_shared<tx_op_impl>(std::forward<CommitFn>(commit_fn), rollback_fn);
+  } catch (...) {
+    // When we fail, ensure we still invoke the rollback function.
+    if constexpr(!std::is_same_v<std::nullptr_t, std::decay_t<RollbackFn>>)
+      std::invoke(rollback_fn);
+    throw;
+  }
 }
 
 
