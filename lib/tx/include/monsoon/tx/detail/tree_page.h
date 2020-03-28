@@ -308,7 +308,8 @@ class monsoon_tx_export_ abstract_tree_page
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
-      abstract_tree::allocator_type sibling_allocator)
+      abstract_tree::allocator_type sibling_allocator,
+      abstract_tree::allocator_type tx_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -318,7 +319,8 @@ class monsoon_tx_export_ abstract_tree_page
   virtual auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
-      abstract_tree::allocator_type sibling_allocator)
+      abstract_tree::allocator_type sibling_allocator,
+      abstract_tree::allocator_type tx_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -417,7 +419,8 @@ class monsoon_tx_export_ tree_page_leaf final
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
-      abstract_tree::allocator_type sibling_allocator)
+      abstract_tree::allocator_type sibling_allocator,
+      abstract_tree::allocator_type tx_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<tree_page_leaf>,
@@ -425,7 +428,8 @@ class monsoon_tx_export_ tree_page_leaf final
   auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
-      abstract_tree::allocator_type sibling_allocator)
+      abstract_tree::allocator_type sibling_allocator,
+      abstract_tree::allocator_type tx_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -499,7 +503,8 @@ class monsoon_tx_export_ tree_page_branch final
   auto insert_sibling(
       const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
       const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
-      [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment)
+      [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment,
+      abstract_tree::allocator_type tx_allocator)
   -> std::shared_ptr<tx_op>;
 
   auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
@@ -522,7 +527,8 @@ class monsoon_tx_export_ tree_page_branch final
   auto local_split_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
-      abstract_tree::allocator_type sibling_allocator)
+      abstract_tree::allocator_type sibling_allocator,
+      abstract_tree::allocator_type tx_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<tree_page_branch>,
@@ -530,7 +536,8 @@ class monsoon_tx_export_ tree_page_branch final
   auto local_split_atp_(
       const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
-      abstract_tree::allocator_type sibling_allocator)
+      abstract_tree::allocator_type sibling_allocator,
+      abstract_tree::allocator_type tx_allocator)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
