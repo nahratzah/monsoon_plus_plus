@@ -108,6 +108,10 @@ class monsoon_tx_export_ db_cache
       cycle_ptr::cycle_gptr<const domain> dom,
       shared_resource_allocator<std::byte> alloc = shared_resource_allocator<std::byte>())
     -> std::shared_ptr<tx_op>;
+  void invalidate_on_rollback(
+      txfile::transaction::offset_type off,
+      cycle_ptr::cycle_gptr<const domain> dom,
+      tx_op_collection& ops);
 
   private:
   impl_type impl_;

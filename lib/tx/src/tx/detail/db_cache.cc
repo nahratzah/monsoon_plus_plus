@@ -57,6 +57,13 @@ auto db_cache::invalidate_on_rollback(
       });
 }
 
+void db_cache::invalidate_on_rollback(
+    txfile::transaction::offset_type off,
+    cycle_ptr::cycle_gptr<const domain> dom,
+    tx_op_collection& ops) {
+  ops.push_back(invalidate_on_rollback(std::move(off), std::move(dom), ops.get_allocator()));
+}
+
 
 db_cache::domain::~domain() noexcept = default;
 
