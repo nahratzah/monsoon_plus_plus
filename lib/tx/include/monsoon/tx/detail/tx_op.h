@@ -96,6 +96,18 @@ class monsoon_tx_export_ tx_op_collection {
   void commit() noexcept;
   void rollback() noexcept;
 
+  auto get_allocator() const -> allocator_type;
+
+  ///\brief Add a commit hook.
+  template<typename CommitFn>
+  auto on_commit(CommitFn&& commit_fn) -> tx_op_collection&;
+  ///\brief Add a rollback hook.
+  template<typename RollbackFn>
+  auto on_rollback(RollbackFn&& rollback_fn) -> tx_op_collection&;
+  ///\brief Add a commit and rollback hook.
+  template<typename CommitFn, typename RollbackFn>
+  auto on_complete(CommitFn&& commit_fn, RollbackFn&& rollback_fn) -> tx_op_collection&;
+
   private:
   collection_type ops_;
 };
