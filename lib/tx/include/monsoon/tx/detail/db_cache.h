@@ -75,7 +75,7 @@ class monsoon_tx_export_ db_cache
     }
   };
 
-  struct create {
+  struct create_cb {
     auto operator()(allocator_type alloc, const key& k) const -> cycle_ptr::cycle_gptr<cache_obj> {
       throw std::logic_error("this key is not directly constructible");
     }
@@ -85,7 +85,7 @@ class monsoon_tx_export_ db_cache
     }
   };
 
-  using impl_type = monsoon::cache::extended_cache<key, cache_obj, key_hash, std::equal_to<key>, allocator_type, create, cycle_ptr::cycle_gptr<cache_obj>>;
+  using impl_type = monsoon::cache::extended_cache<key, cache_obj, key_hash, std::equal_to<key>, allocator_type, create_cb, cycle_ptr::cycle_gptr<cache_obj>>;
 
   public:
   explicit db_cache(std::string name, std::uintptr_t max_memory = default_max_memory, shared_resource_allocator<std::byte> allocator = shared_resource_allocator<std::byte>());
@@ -99,6 +99,12 @@ class monsoon_tx_export_ db_cache
       txfile::transaction::offset_type off,
       cycle_ptr::cycle_gptr<const domain> dom,
       cheap_fn_ref<cycle_ptr::cycle_gptr<cache_obj>(allocator_type, txfile::transaction::offset_type)> load)
+    -> cycle_ptr::cycle_gptr<cache_obj>;
+  auto create(
+      txfile::transaction::offset_type off,
+      cycle_ptr::cycle_gptr<const domain> dom,
+      cheap_fn_ref<cycle_ptr::cycle_gptr<cache_obj>(allocator_type, txfile::transaction::offset_type)> load,
+      tx_op_collection& ops)
     -> cycle_ptr::cycle_gptr<cache_obj>;
   void invalidate(
       txfile::transaction::offset_type off,

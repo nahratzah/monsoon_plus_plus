@@ -18,7 +18,7 @@ db_cache::db_cache(std::string name, std::uintptr_t max_memory, shared_resource_
           return ptr;
         })
     .allocator(allocator_type(allocator))
-    .build(create()))
+    .build(create_cb()))
 {}
 
 db_cache::~db_cache() noexcept = default;
@@ -36,6 +36,27 @@ auto db_cache::get(
     cheap_fn_ref<cycle_ptr::cycle_gptr<cache_obj>(allocator_type, txfile::transaction::offset_type)> load)
 -> cycle_ptr::cycle_gptr<cache_obj> {
   return impl_.get(search{ key(off, std::move(dom)), std::move(load) });
+}
+
+auto db_cache::create(
+    txfile::transaction::offset_type off,
+    cycle_ptr::cycle_gptr<const domain> dom,
+    cheap_fn_ref<cycle_ptr::cycle_gptr<cache_obj>(allocator_type, txfile::transaction::offset_type)> load,
+    tx_op_collection& ops)
+-> cycle_ptr::cycle_gptr<cache_obj> {
+  bool was_called_ = false;
+
+  auto r = impl_.get(
+      search{
+        key(off, dom),
+        [&was_called_, &load](allocator_type alloc, txfile::transaction::offset_type off) {
+          was_called_ = true;
+          return load(std::move(alloc), std::move(off));
+        }
+      });
+  if (!was_called_) throw std::runtime_error("cache corruption: creation at given offset failed because an eleemnt is present");
+  invalidate_on_rollback(std::move(off), std::move(dom), ops);
+  return r;
 }
 
 void db_cache::invalidate(
