@@ -44,6 +44,19 @@ void db_cache::invalidate(
   impl_.expire(key(off, std::move(dom)));
 }
 
+auto db_cache::invalidate_on_rollback(
+    txfile::transaction::offset_type off,
+    cycle_ptr::cycle_gptr<const domain> dom,
+    shared_resource_allocator<std::byte> alloc)
+-> std::shared_ptr<tx_op> {
+  return allocate_tx_op(
+      alloc,
+      nullptr,
+      [self=shared_from_this(this), off, dom]() {
+        self->invalidate(off, dom);
+      });
+}
+
 
 db_cache::domain::~domain() noexcept = default;
 

@@ -2,6 +2,7 @@
 #define MONSOON_TX_DETAIL_DB_CACHE_H
 
 #include <monsoon/tx/detail/export_.h>
+#include <monsoon/tx/detail/tx_op.h>
 #include <monsoon/tx/txfile.h>
 #include <monsoon/cache/cache.h>
 #include <monsoon/cache/allocator.h>
@@ -102,6 +103,11 @@ class monsoon_tx_export_ db_cache
   void invalidate(
       txfile::transaction::offset_type off,
       cycle_ptr::cycle_gptr<const domain> dom) noexcept;
+  auto invalidate_on_rollback(
+      txfile::transaction::offset_type off,
+      cycle_ptr::cycle_gptr<const domain> dom,
+      shared_resource_allocator<std::byte> alloc = shared_resource_allocator<std::byte>())
+    -> std::shared_ptr<tx_op>;
 
   private:
   impl_type impl_;
