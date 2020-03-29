@@ -1,4 +1,5 @@
 #include <monsoon/tx/detail/tx_op.h>
+#include <algorithm>
 #include <cassert>
 #include <iterator>
 
@@ -49,11 +50,13 @@ auto tx_op_collection::operator+=(tx_op_collection&& y) -> tx_op_collection& {
 }
 
 void tx_op_collection::commit() noexcept {
-  for (const std::shared_ptr<tx_op>& op : ops_) op->commit();
+  std::for_each(ops_.cbegin(), ops_.cend(), [](const auto& op) { op->commit(); });
+  ops_.clear();
 }
 
 void tx_op_collection::rollback() noexcept {
-  for (const std::shared_ptr<tx_op>& op : ops_) op->rollback();
+  std::for_each(ops_.crbegin(), ops_.crend(), [](const auto& op) { op->rollback(); });
+  ops_.clear();
 }
 
 
