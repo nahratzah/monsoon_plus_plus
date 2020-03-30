@@ -192,7 +192,7 @@ inline void abstract_tree::with_equal_range_(cheap_fn_ref<void(abstract_tree_ite
 }
 
 template<typename LockType>
-inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+inline void abstract_tree::with_for_each_(cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
   cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page;
   LockType leaf_lock;
 
@@ -213,12 +213,14 @@ inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gpt
     leaf_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(child_page);
   }
 
+  stop_continue sc = stop_continue::sc_continue;
   do {
-    std::for_each(
-        leaf_page->elems_.begin(), leaf_page->elems_.end(),
-        [&cb](const auto& ptr) {
-          if (ptr != nullptr) cb(ptr);
-        });
+    for (const auto& ptr : leaf_page->elems_) {
+      if (ptr != nullptr) {
+        const stop_continue sc = cb(ptr);
+        if (sc == stop_continue::sc_stop) return;
+      }
+    }
 
     // Advance to the next page.
     auto next_leaf_page = leaf_page->next();
@@ -229,7 +231,7 @@ inline void abstract_tree::with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gpt
 template<typename LockType>
 inline void abstract_tree::with_for_each_augment_(
     cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
-    cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+    cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>, cycle_ptr::cycle_gptr<tree_page_leaf>, LockType&)> cb) {
   cycle_ptr::cycle_gptr<abstract_tree_page> child_page;
   std::stack<for_each_augment_layer_> layers;
   if (root_off_ == 0) return; // Empty tree.
@@ -239,9 +241,9 @@ inline void abstract_tree::with_for_each_augment_(
     LockType lck{ leaf->mtx_() };
     std::for_each(
         leaf->elems_.begin(), leaf->elems_.end(),
-        [&cb, &filter](const auto& elem_ptr) {
+        [&cb, &lck, &leaf](const auto& elem_ptr) {
           if (elem_ptr != nullptr)
-            cb(elem_ptr);
+            cb(elem_ptr, leaf, lck);
         });
     return;
   }
@@ -256,12 +258,10 @@ inline void abstract_tree::with_for_each_augment_(
 
     if (auto leaf = std::dynamic_pointer_cast<tree_page_leaf>(child_page)) {
       LockType lck{ leaf->mtx_() };
-      std::for_each(
-          leaf->elems_.begin(), leaf->elems_.end(),
-          [&cb, &filter](const auto& elem_ptr) {
-            if (elem_ptr != nullptr)
-              cb(elem_ptr);
-          });
+      for (const auto& elem_ptr : leaf->elems_) {
+        const stop_continue sc = cb(elem_ptr, leaf, lck);
+        if (sc == stop_continue::sc_stop) return;
+      }
     } else {
       layers.emplace(boost::polymorphic_pointer_downcast<tree_page_branch>(child_page), filter);
     }

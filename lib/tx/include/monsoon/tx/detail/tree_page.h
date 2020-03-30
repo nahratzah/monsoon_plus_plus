@@ -7,6 +7,7 @@
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/detail/db_cache.h>
 #include <monsoon/tx/detail/tx_op.h>
+#include <monsoon/tx/detail/stop_continue.h>
 #include <monsoon/shared_resource_allocator.h>
 #include <cstddef>
 #include <cstdint>
@@ -50,6 +51,7 @@ class monsoon_tx_export_ abstract_tree
   friend tree_page_branch;
   friend abstract_tree_elem;
   friend abstract_tree_iterator;
+  friend class txfile_allocator;
 
   public:
   ///\brief Allocator used by commit_manager.
@@ -153,7 +155,7 @@ class monsoon_tx_export_ abstract_tree
    *
    * \param cb Callback to invoke.
    */
-  void with_for_each_for_read(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  void with_for_each_for_read(cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
   /**
    * \brief Iterate over the entire tree.
    * \details
@@ -162,7 +164,7 @@ class monsoon_tx_export_ abstract_tree
    *
    * \param cb Callback to invoke.
    */
-  void with_for_each_for_write(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  void with_for_each_for_write(cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
   /**
    * \brief Iterate over the tree using a specific augmentation.
    * \details
@@ -175,7 +177,7 @@ class monsoon_tx_export_ abstract_tree
    */
   void with_for_each_augment_for_read(
       cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
-      cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+      cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>, cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>&)> cb);
   /**
    * \brief Iterate over the tree using a specific augmentation.
    * \details
@@ -188,7 +190,7 @@ class monsoon_tx_export_ abstract_tree
    */
   void with_for_each_augment_for_write(
       cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
-      cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+      cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>, cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>&)> cb);
 
   private:
   /**
@@ -219,7 +221,7 @@ class monsoon_tx_export_ abstract_tree
    * \param cb Callback to invoke.
    */
   template<typename LockType>
-  void with_for_each_(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+  void with_for_each_(cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
   /**
    * \brief Iterate over the tree using a specific augmentation.
    * \details
@@ -234,7 +236,7 @@ class monsoon_tx_export_ abstract_tree
   template<typename LockType>
   void with_for_each_augment_(
       cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
-      cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb);
+      cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>, cycle_ptr::cycle_gptr<tree_page_leaf>, LockType&)> cb);
   ///\brief Helper class used in for-each-augment search.
   class for_each_augment_layer_;
 
@@ -246,11 +248,59 @@ class monsoon_tx_export_ abstract_tree
    * \returns Shared lock on this tree.
    */
   auto ensure_root_page_(txfile& f, allocator_type tx_allocator) -> std::shared_lock<std::shared_mutex>;
-  ///\brief Populate the root page with extra information.
-  ///\note Specialized in the allocator, so it can record its own allocated page.
-  virtual void decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const;
 
-  virtual auto allocate_txfile_bytes(txfile::transaction& tx, std::uint64_t bytes, allocator_type tx_allocator) const -> std::tuple<std::uint64_t, tx_op_collection> = 0;
+  /**
+   * \brief Insert an element.
+   * \details
+   * Rearranges the tree to make space for the given element and attempts to insert it.
+   *
+   * \param key The key of the to-be-inserted element.
+   * \param elem_constructor A callback to construct the to-be-inserted element.
+   * \param tx_allocator Transaction allocator, used to control memory for this operation.
+   * \param hint Optional element that is near the to-be-inserted element.
+   * The algorithm uses the hint to skip looking up the correct page.
+   * (If the hint is incorrect, the insert function will ignore it.)
+   * \return If the insertion succeeds, a tuple pointing at the inserted element, and the value `true`.
+   * Otherwise, a tuple with the element under the same key, and the value `false`.
+   */
+  auto insert_(
+      const abstract_tree_page_branch_key& key,
+      cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_elem>(allocator_type allocator, cycle_ptr::cycle_gptr<tree_page_leaf>)> elem_constructor,
+      allocator_type tx_allocator,
+      cycle_ptr::cycle_gptr<abstract_tree_elem> hint = nullptr)
+  -> std::pair<cycle_ptr::cycle_gptr<abstract_tree_elem>, bool>;
+  ///\brief Find the page at which the given key is to be inserted.
+  ///\param lck A lock on this tree. The lock will be released.
+  ///\param key The key for the to-be-inserted element.
+  ///\return The page in which the element is to be inserted, with the unique lock held.
+  monsoon_tx_local_ auto insert_find_page_(std::shared_lock<std::shared_mutex>&& lck, const abstract_tree_page_branch_key& key)
+  -> std::pair<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
+  ///\brief If this page is full, split it into separate pages.
+  ///\param leaf_lck The lock on \p leaf_page.
+  ///\param leaf_page Pointer to the leaf page.
+  ///\param key The key for the insert operation. This is used to select the correct leaf page after the split.
+  ///\param tx_allocator Allocator for transactions.
+  ///\return The leaf page with unique lock.
+  monsoon_tx_local_ auto insert_maybe_split_page_(
+      cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page,
+      std::unique_lock<std::shared_mutex> leaf_lck,
+      const abstract_tree_page_branch_key& key,
+      allocator_type tx_allocator)
+  -> std::pair<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>>;
+  ///\brief Helper for insert_maybe_split_page_ that splits branch pages.
+  ///\param leaf_page The leaf page.
+  ///\param parent_page The parent page which needs to be split.
+  ///\param parent_lck Lock on \p parent_page.
+  ///\param tx_allocator Allocator for transactions.
+  ///\return New parent for the page.
+  monsoon_tx_local_ auto insert_maybe_split_page_parents_(
+      cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page,
+      cycle_ptr::cycle_gptr<tree_page_branch> parent_page,
+      std::unique_lock<std::shared_mutex> parent_lck,
+      allocator_type tx_allocator)
+  -> cycle_ptr::cycle_gptr<tree_page_branch>;
+
+  virtual auto allocate_txfile_bytes(txfile::transaction& tx, std::uint64_t bytes, allocator_type tx_allocator, tx_op_collection& ops) -> std::uint64_t = 0;
 
   public:
   const std::shared_ptr<const tree_cfg> cfg;
@@ -307,6 +357,8 @@ class monsoon_tx_export_ abstract_tree_page
   void reparent_([[maybe_unused]] std::uint64_t old_parent_off, std::uint64_t new_parent_off) noexcept;
   ///\brief Compute the augment of this page.
   virtual auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
+  ///\brief Compute the augment of this page.
+  virtual auto compute_augment(const std::unique_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> = 0;
 
   private:
   /**
@@ -324,10 +376,11 @@ class monsoon_tx_export_ abstract_tree_page
    * - the lock on the second page
    */
   auto local_split_(
-      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
       abstract_tree::allocator_type sibling_allocator,
-      abstract_tree::allocator_type tx_allocator)
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -335,10 +388,11 @@ class monsoon_tx_export_ abstract_tree_page
   ///\brief local_split_ virtual function.
   ///\note This is a virtual function so that we can "fake" covariant return using the local_split_ functions.
   virtual auto local_split_atp_(
-      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
       abstract_tree::allocator_type sibling_allocator,
-      abstract_tree::allocator_type tx_allocator)
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -419,8 +473,15 @@ class monsoon_tx_export_ tree_page_leaf final
   ///\brief Retrieve the previous leaf page.
   ///\param lck A lock on this page.
   auto prev(const std::shared_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  ///\brief Retrieve the next leaf page.
+  ///\param lck A lock on this page.
+  auto next(const std::unique_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
+  ///\brief Retrieve the previous leaf page.
+  ///\param lck A lock on this page.
+  auto prev(const std::unique_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf>;
 
   auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
+  auto compute_augment(const std::unique_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
 
   private:
   /**
@@ -438,19 +499,21 @@ class monsoon_tx_export_ tree_page_leaf final
    * - the lock on the second page
    */
   auto local_split_(
-      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
       abstract_tree::allocator_type sibling_allocator,
-      abstract_tree::allocator_type tx_allocator)
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<tree_page_leaf>,
       std::unique_lock<std::shared_mutex>>;
   auto local_split_atp_(
-      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
       abstract_tree::allocator_type sibling_allocator,
-      abstract_tree::allocator_type tx_allocator)
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -480,6 +543,7 @@ class monsoon_tx_export_ tree_page_branch final
 : public abstract_tree_page
 {
   friend abstract_tree;
+  friend class txfile_allocator;
 
   public:
   static constexpr std::uint32_t magic = 0x5825'b1f0U;
@@ -519,18 +583,20 @@ class monsoon_tx_export_ tree_page_branch final
   explicit tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree, abstract_tree::allocator_type allocator);
   ~tree_page_branch() noexcept override;
 
+  void init(std::uint64_t off, cycle_ptr::cycle_gptr<abstract_tree_page> elem0, const std::unique_lock<std::shared_mutex>& elem0_lck);
   void decode(const txfile::transaction& tx, std::uint64_t off) override final;
   void encode(txfile::transaction& tx) const override final;
 
   ///\brief Insert a sibling page.
-  auto insert_sibling(
+  void insert_sibling(
       const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
       const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
       [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment,
-      abstract_tree::allocator_type tx_allocator)
-  -> std::shared_ptr<tx_op>;
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops);
 
   auto compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
+  auto compute_augment(const std::unique_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> override;
 
   private:
   /**
@@ -548,19 +614,21 @@ class monsoon_tx_export_ tree_page_branch final
    * - the lock on the second page
    */
   auto local_split_(
-      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
       abstract_tree::allocator_type sibling_allocator,
-      abstract_tree::allocator_type tx_allocator)
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<tree_page_branch>,
       std::unique_lock<std::shared_mutex>>;
   auto local_split_atp_(
-      const std::unique_lock<std::shared_mutex>& lck, txfile& tx, std::uint64_t new_page_off,
+      const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
       cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
       abstract_tree::allocator_type sibling_allocator,
-      abstract_tree::allocator_type tx_allocator)
+      abstract_tree::allocator_type tx_allocator,
+      tx_op_collection& ops)
   -> std::tuple<
       std::shared_ptr<abstract_tree_page_branch_key>,
       cycle_ptr::cycle_gptr<abstract_tree_page>,
@@ -582,6 +650,7 @@ class monsoon_tx_export_ abstract_tree_elem
 {
   friend abstract_tree;
   friend tree_page_leaf;
+  friend class txfile_allocator;
 
   public:
   explicit abstract_tree_elem(cycle_ptr::cycle_gptr<tree_page_leaf> parent);

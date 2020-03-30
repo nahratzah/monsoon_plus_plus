@@ -3,10 +3,12 @@
 
 #include <monsoon/tx/detail/export_.h>
 #include <monsoon/tx/detail/tree_page.h>
+#include <monsoon/tx/detail/txfile_allocator_log.h>
 #include <monsoon/tx/db.h>
 #include <monsoon/tx/detail/db_cache.h>
 #include <cstdint>
 #include <functional>
+#include <optional>
 #include <shared_mutex>
 #include <tuple>
 #include <unordered_map>
@@ -46,6 +48,8 @@ class monsoon_tx_export_ txfile_allocator final
   class monsoon_tx_local_ element final
   : public abstract_tree_elem
   {
+    friend txfile_allocator;
+
     public:
     static constexpr std::size_t SIZE = key::SIZE + 16;
 
@@ -106,8 +110,39 @@ class monsoon_tx_export_ txfile_allocator final
 
   ///\brief Implementation of the merge logic.
   static auto augment_merge_(const std::tuple<max_free_space_augment>& x, const std::tuple<max_free_space_augment>& y) -> std::tuple<max_free_space_augment>;
-  ///\brief The root page, when initialized, needs an entry for itself.
-  void decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const override;
+
+  auto allocate_txfile_bytes(txfile::transaction& tx, std::uint64_t bytes, allocator_type tx_allocator, tx_op_collection& ops) -> std::uint64_t override;
+  /**
+   * \brief Allocate bytes by taking it from an entry in the tree.
+   *
+   * \param tx Transaction in which the allocation takes place.
+   * \param bytes Number of bytes to allocate.
+   * \param tx_allocator Allocator to use during this transaction.
+   * \param ops Commit/rollback handler.
+   * \return An address if the allocation succeeds, or an empty optional if the allocation fails.
+   */
+  monsoon_tx_local_ auto maybe_allocate_txfile_bytes_from_tree_(
+      txfile::transaction& tx, std::uint64_t bytes,
+      allocator_type tx_allocator, tx_op_collection& ops) -> std::optional<std::uint64_t>;
+  /**
+   * \brief Stealing allocator.
+   * \details
+   * This allocator allocates memory by reducing the free-space of elements.
+   * Because it doesn't write down the bytes it thus acquires, the space is lost.
+   * (Hence the word "stealing": it steals the space from the tree.)
+   *
+   * \param tx Transaction in which the allocation takes place.
+   * \param bytes Number of bytes to allocate.
+   * \param tx_allocator Allocator to use during this transaction.
+   * \param ops Commit/rollback handler.
+   * \return An address if the allocation succeeds, or an empty optional if the allocation fails.
+   */
+  monsoon_tx_local_ auto steal_allocate_(
+      txfile::transaction& tx, std::uint64_t bytes,
+      allocator_type tx_allocator,
+      tx_op_collection& ops) -> std::optional<std::uint64_t>;
+
+  std::shared_ptr<txfile_allocator_log> log_;
 };
 
 

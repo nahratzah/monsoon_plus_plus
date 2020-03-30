@@ -3,6 +3,7 @@
 #include <monsoon/io/rw.h>
 #include <algorithm>
 #include <iterator>
+#include <stdexcept>
 #include <boost/endian/conversion.hpp>
 #include <boost/polymorphic_cast.hpp>
 
@@ -241,23 +242,23 @@ void abstract_tree::with_equal_range_for_write(cheap_fn_ref<void(abstract_tree_i
   return with_equal_range_<std::unique_lock<std::shared_mutex>>(std::move(cb), key);
 }
 
-void abstract_tree::with_for_each_for_read(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+void abstract_tree::with_for_each_for_read(cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
   return with_for_each_<std::shared_lock<std::shared_mutex>>(std::move(cb));
 }
 
-void abstract_tree::with_for_each_for_write(cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+void abstract_tree::with_for_each_for_write(cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
   return with_for_each_<std::unique_lock<std::shared_mutex>>(std::move(cb));
 }
 
 void abstract_tree::with_for_each_augment_for_read(
     cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
-    cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+    cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>, cycle_ptr::cycle_gptr<tree_page_leaf>, std::shared_lock<std::shared_mutex>&)> cb) {
   return with_for_each_augment_<std::shared_lock<std::shared_mutex>>(std::move(filter), std::move(cb));
 }
 
 void abstract_tree::with_for_each_augment_for_write(
     cheap_fn_ref<bool(const abstract_tree_page_branch_elem&)> filter,
-    cheap_fn_ref<void(cycle_ptr::cycle_gptr<abstract_tree_elem>)> cb) {
+    cheap_fn_ref<stop_continue(cycle_ptr::cycle_gptr<abstract_tree_elem>, cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>&)> cb) {
   return with_for_each_augment_<std::unique_lock<std::shared_mutex>>(std::move(filter), std::move(cb));
 }
 
@@ -267,20 +268,23 @@ auto abstract_tree::ensure_root_page_(txfile& f, allocator_type tx_allocator) ->
     if (root_off_ != 0) return lck;
   }
 
-  std::unique_lock<std::shared_mutex> lck{ mtx_ };
-  if (root_off_ != 0) {
-    lck.unlock();
-    return std::shared_lock<std::shared_mutex>(mtx_);
-  }
-
-  auto tx = f.begin(false);
-  std::uint64_t off;
   tx_op_collection ops(tx_allocator);
-  std::tie(off, ops) = allocate_txfile_bytes(tx, tree_page_leaf::encoded_size(*cfg), tx_allocator);
+  auto tx = f.begin(false);
+  const std::uint64_t off = allocate_txfile_bytes(tx, tree_page_leaf::encoded_size(*cfg), tx_allocator, ops);
+
+  std::unique_lock<std::shared_mutex> lck(mtx_, std::defer_lock);
+  do {
+    lck.lock();
+    if (root_off_ != 0) {
+      lck.unlock();
+      std::shared_lock<std::shared_mutex> slck{ mtx_ };
+      // We must check again, because another thread could be cleaning up empty pages and zero the pointer.
+      if (root_off_ != 0) return slck;
+    }
+  } while (!lck.owns_lock());
 
   auto page = cycle_ptr::allocate_cycle<tree_page_leaf>(tx_allocator, shared_from_this(this), tx_allocator);
   page->init_empty(off);
-  decorate_root_page_(page, tx_allocator);
   page->encode(tx);
 
   tx.commit();
@@ -289,7 +293,479 @@ auto abstract_tree::ensure_root_page_(txfile& f, allocator_type tx_allocator) ->
   return std::shared_lock<std::shared_mutex>(mtx_);
 }
 
-void abstract_tree::decorate_root_page_(const cycle_ptr::cycle_gptr<tree_page_leaf>& root_page, allocator_type tx_allocator) const {}
+auto abstract_tree::insert_(
+    const abstract_tree_page_branch_key& key,
+    cheap_fn_ref<cycle_ptr::cycle_gptr<abstract_tree_elem>(allocator_type allocator, cycle_ptr::cycle_gptr<tree_page_leaf>)> elem_constructor,
+    allocator_type tx_allocator,
+    cycle_ptr::cycle_gptr<abstract_tree_elem> hint)
+-> std::pair<cycle_ptr::cycle_gptr<abstract_tree_elem>, bool> {
+restart:
+  cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page;
+  std::unique_lock<std::shared_mutex> leaf_lock;
+
+  if (hint != nullptr) {
+    // The choice of page is validated below, so it's not an issue if the page is wrong.
+    std::tie(leaf_page, leaf_lock) = hint->lock_parent_for_write();
+    if (leaf_page->tree().get() != this)
+      throw std::logic_error("tree insertion hint must be part an element from the same tree");
+  } else {
+    // Start by locking the tree.
+    // Since we require a root page, if there isn't one, initialize a new one.
+    std::shared_lock<std::shared_mutex> parent_lck = ensure_root_page_(*f_, tx_allocator);
+
+    // Find the page that the insert is to take place in.
+    std::tie(leaf_page, leaf_lock) = insert_find_page_(std::move(parent_lck), key);
+    assert(leaf_page != nullptr);
+    assert(leaf_lock.owns_lock() && leaf_lock.mutex() == &leaf_page->mtx_());
+  }
+
+restart_split:
+  // If the page has insufficient space, split the page.
+  std::tie(leaf_page, leaf_lock) = insert_maybe_split_page_(std::move(leaf_page), std::move(leaf_lock), key, tx_allocator);
+  if (leaf_page == nullptr) goto restart; // Restart the loop if we lost track completely.
+  assert(leaf_lock.owns_lock() && leaf_lock.mutex() == &leaf_page->mtx_());
+
+  // If the page gets unlocked in any of the steps above,
+  // it might have changed the range which it is responsible for.
+  // In that case, we might by now be using the wrong page.
+  // Therefore we should verify this and restart if we are indeed wrong.
+  {
+    bool need_restart = false;
+    if (less_cb(key, *leaf_page->page_key_)) {
+      need_restart = true;
+    } else {
+      const auto successor_page = leaf_page->next(leaf_lock);
+      if (successor_page != nullptr) {
+        std::shared_lock<std::shared_mutex> successor_lck{ successor_page->mtx_() };
+        if (!less_cb(key, *successor_page->page_key_)) need_restart = true;
+      }
+    }
+
+    if (need_restart) {
+      // If the hint points at this page, it is no longer good.
+      if (hint != nullptr) {
+        std::shared_lock<std::shared_mutex> hint_lck{ hint->mtx_ref_() };
+        if (hint->parent_ == leaf_page) {
+          hint_lck.unlock(); // Unlock before potentially deallocating hint.
+          hint.reset();
+        }
+      }
+      goto restart;
+    }
+  }
+
+  // Find the successor of the insert position.
+  auto successor_elem = std::find_if(
+      leaf_page->elems_.begin(), leaf_page->elems_.end(),
+      [this, &key](const auto& elem_ptr) -> bool {
+        if (elem_ptr == nullptr) return false;
+        return !less_cb(key, *elem_ptr);
+      });
+  // If the element with this key already exists, fail the insertion.
+  if (successor_elem != leaf_page->elems_.end()
+      && !less_cb(**successor_elem, key)) {
+    return std::make_pair(*successor_elem, false);
+  }
+
+  {
+    // See if we can move a null forward.
+    auto null_iter = std::find(std::next(successor_elem), leaf_page->elems_.end(), nullptr);
+    if (null_iter == leaf_page->elems_.end()) goto end_move_a_null_forward;
+
+    auto shift_tx = f_->begin(false);
+    tx_op_collection shift_ops(tx_allocator);
+
+    // Shift the elements one position.
+    std::copy_backward(successor_elem, null_iter, std::next(null_iter));
+    successor_elem->reset();
+    shift_ops.on_rollback(
+        [successor_elem, null_iter]() {
+          std::copy(std::next(successor_elem), std::next(null_iter), successor_elem);
+          null_iter->reset();
+        });
+    auto ins_pos = successor_elem;
+    ++successor_elem;
+
+    // Insert the element.
+    *ins_pos = elem_constructor(leaf_page->allocator, leaf_page);
+    if (*ins_pos == nullptr) throw std::logic_error("tree: null insertion");
+    assert(!less_cb(key, **ins_pos) && !less_cb(**ins_pos, key) && "key compares the same as constructed element");
+
+    // Update on-disk representation.
+    leaf_page->encode(shift_tx);
+
+    shift_tx.commit();
+    shift_ops.commit(); // Never throws.
+
+    // XXX we ought to update the augmentations.
+
+    return std::make_pair(*ins_pos, true);
+  }
+end_move_a_null_forward:
+
+  // Taking a null from after the insert pos didn't work (tried and failed that above).
+  // And there are no elements in front of the successor.
+  // That can only be the case if the page is full.
+  if (successor_elem == leaf_page->elems_.begin())
+    goto restart_split;
+
+  {
+    // Move a null from before the insert position to here.
+    auto ins_pos = std::prev(successor_elem);
+    auto null_iter = ins_pos;
+    while (null_iter != leaf_page->elems_.begin() && *null_iter != nullptr)
+      --null_iter;
+    // Apparently the page has no space available...
+    if (*null_iter != nullptr) goto restart_split;
+
+    auto shift_tx = f_->begin(false);
+    tx_op_collection shift_ops(tx_allocator);
+
+    // Shift the elements back one position.
+    std::copy(std::next(null_iter), successor_elem, null_iter);
+    ins_pos->reset();
+    shift_ops.on_rollback(
+        [null_iter, ins_pos, successor_elem]() {
+          std::copy_backward(null_iter, ins_pos, successor_elem);
+          null_iter->reset();
+        });
+
+    // Insert the element.
+    *ins_pos = elem_constructor(leaf_page->allocator, leaf_page);
+    if (*ins_pos == nullptr) throw std::logic_error("tree: null insertion");
+    assert(!less_cb(key, **ins_pos) && !less_cb(**ins_pos, key) && "key compares the same as constructed element");
+
+    // Update on-disk representation.
+    leaf_page->encode(shift_tx);
+
+    shift_tx.commit();
+    shift_ops.commit(); // Never throws.
+
+    // XXX we ought to update the augmentations.
+
+    return std::make_pair(*ins_pos, true);
+  }
+}
+
+auto abstract_tree::insert_find_page_(std::shared_lock<std::shared_mutex>&& lck, const abstract_tree_page_branch_key& key)
+-> std::pair<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_);
+  assert(root_off_ != 0);
+
+  cycle_ptr::cycle_gptr<tree_page_branch> parent_page;
+  std::shared_lock<std::shared_mutex> parent_lck = std::move(lck);
+
+  cycle_ptr::cycle_gptr<abstract_tree_page> child_page = get(root_off_);
+  while (auto branch_page = std::dynamic_pointer_cast<tree_page_branch>(child_page)) {
+    parent_page = branch_page;
+    parent_lck = std::shared_lock<std::shared_mutex>{ branch_page->mtx_() };
+    const auto i = std::lower_bound(branch_page->keys_.begin(), branch_page->keys_.end(), &key,
+        [this](const auto& x, const auto& y) -> bool {
+          return less_cb(*x, *y);
+        });
+    child_page = get(branch_page->elems_[i - branch_page->keys_.begin()]->off);
+  }
+
+  cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(child_page);
+  std::unique_lock<std::shared_mutex> leaf_lock{ leaf_page->mtx_() };
+  return std::make_pair(std::move(leaf_page), std::move(leaf_lock));
+}
+
+auto abstract_tree::insert_maybe_split_page_(
+    cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page,
+    std::unique_lock<std::shared_mutex> leaf_lck,
+    const abstract_tree_page_branch_key& key,
+    allocator_type tx_allocator)
+-> std::pair<cycle_ptr::cycle_gptr<tree_page_leaf>, std::unique_lock<std::shared_mutex>> {
+  assert(leaf_lck.owns_lock() && leaf_lck.mutex() == &leaf_page->mtx_());
+
+  // If the leaf page has space, return immediately.
+  if (leaf_page->elems_.size() < leaf_page->elems_.capacity()
+      || std::find_if(leaf_page->elems_.cbegin(), leaf_page->elems_.cend(), [](const auto& ptr) { return ptr == nullptr; }) != leaf_page->elems_.end()) {
+    return std::forward_as_tuple(std::move(leaf_page), std::move(leaf_lck));
+  }
+
+  cycle_ptr::cycle_gptr<tree_page_branch> parent_page;
+  std::unique_lock<std::shared_mutex> parent_lck;
+
+  // If there is no parent page, construct one.
+  if (leaf_page->parent_off_ == 0) {
+    leaf_lck.unlock();
+
+    auto tx = f_->begin(false);
+    tx_op_collection ops(tx_allocator);
+    const std::uint64_t new_parent_off = allocate_txfile_bytes(tx, tree_page_branch::encoded_size(*cfg), tx_allocator, ops);
+
+    std::unique_lock tree_lck{ mtx_ };
+    leaf_lck.lock();
+    if (leaf_page->parent_off_ != 0) goto end_parent_off_is_zero;
+
+    assert(root_off_ == leaf_page->off_);
+    ops.on_commit(
+        [this, new_parent_off]() {
+          root_off_ = new_parent_off;
+        });
+    ops.on_commit(
+        [leaf_page, new_parent_off]() {
+          leaf_page->parent_off_ = new_parent_off;
+        });
+
+    parent_page = boost::polymorphic_pointer_downcast<tree_page_branch>(
+        db_cache_->create(
+            new_parent_off, shared_from_this(this),
+            [this, &leaf_page, &leaf_lck](auto alloc, auto offset) {
+              cycle_ptr::cycle_gptr<tree_page_branch> branch = allocate_branch_(alloc);
+              branch->init(offset, leaf_page, leaf_lck);
+              return branch;
+            },
+            ops));
+
+    parent_lck = std::unique_lock<std::shared_mutex>(parent_page->mtx_());
+
+    tx.commit(); // Write new state to disk.
+    ops.commit(); // Never throws.
+  }
+end_parent_off_is_zero:
+  assert(leaf_page->parent_off_ != 0);
+
+  if (parent_page == nullptr) { // Need to get and lock the parent.
+    do {
+      parent_page = boost::polymorphic_pointer_downcast<tree_page_branch>(get(leaf_page->parent_off_));
+      parent_lck = std::unique_lock(parent_page->mtx_(), std::try_to_lock); // Try-lock, because we go against lock ordering.
+      if (!parent_lck.owns_lock()) {
+        leaf_lck.unlock();
+        parent_lck.lock();
+        leaf_lck.lock();
+
+        if (parent_page->off_ != leaf_page->parent_off_)
+          parent_lck.unlock(); // Wrong parent.
+      }
+    } while (!parent_lck.owns_lock());
+  }
+  assert(parent_page != nullptr);
+  assert(parent_lck.owns_lock() && parent_lck.mutex() == &parent_page->mtx_());
+  assert(leaf_lck.owns_lock() && leaf_lck.mutex() == &leaf_page->mtx_());
+  assert(parent_page->off_ == leaf_page->parent_off_);
+
+  leaf_lck.unlock();
+  parent_page = insert_maybe_split_page_parents_(
+      leaf_page,
+      std::move(parent_page),
+      std::move(parent_lck),
+      tx_allocator);
+  if (parent_page == nullptr) // We lost track.
+    return std::make_pair(nullptr, std::unique_lock<std::shared_mutex>());
+
+  // While we don't have the lock, start preparation for the expected page-split.
+  auto tx = f_->begin(false);
+  // Start by allocating space.
+  tx_op_collection ops(tx_allocator);
+  const std::uint64_t new_page_off = allocate_txfile_bytes(tx, tree_page_leaf::encoded_size(*cfg), tx_allocator, ops);
+
+  // Now acquire the lock.
+  parent_lck.lock();
+  assert(parent_lck.owns_lock() && parent_lck.mutex() == &parent_page->mtx_());
+  leaf_lck.lock();
+  assert(leaf_lck.owns_lock() && leaf_lck.mutex() == &leaf_page->mtx_());
+
+  /*
+   * Perform revalidation.
+   * We bail out if:
+   * - we no longer got our parent/child relationship correct (unsuccessful bailout)
+   * - the leaf has been granted space during our unlocks (successful bailout)
+   */
+  if (parent_page->off_ != leaf_page->parent_off_) // We lost track.
+    return std::make_pair(nullptr, std::unique_lock<std::shared_mutex>());
+  // If the leaf page has acquired space during any of the unlocks, return immediately.
+  if (leaf_page->elems_.size() < leaf_page->elems_.capacity()
+      || std::find_if(leaf_page->elems_.cbegin(), leaf_page->elems_.cend(), [](const auto& ptr) { return ptr == nullptr; }) != leaf_page->elems_.end()) {
+    return std::forward_as_tuple(std::move(leaf_page), std::move(leaf_lck));
+  }
+
+  // Split the leaf page, moving approximately half its elements into the sibling.
+  std::shared_ptr<abstract_tree_page_branch_key> split_key;
+  cycle_ptr::cycle_gptr<tree_page_leaf> sibling_page;
+  cycle_ptr::cycle_gptr<void> sibling_lock_insurance; // Used to maintain a reference to the item locked by sibling_lock.
+  std::unique_lock<std::shared_mutex> sibling_lock;
+  sibling_page = boost::polymorphic_pointer_downcast<tree_page_leaf>(
+      db_cache_->create( // Do this via the cache, so the cache gets populated with the new page.
+          new_page_off, shared_from_this(this),
+          [&](auto alloc, auto off) {
+            cycle_ptr::cycle_gptr<tree_page_leaf> sp;
+            std::tie(split_key, sp, sibling_lock) = leaf_page->local_split_(
+                leaf_lck, tx, off,
+                parent_page, parent_lck,
+                alloc, tx_allocator, ops);
+            sibling_lock_insurance = sp;
+            return sp;
+          },
+          ops));
+
+  tx.commit();
+  ops.commit(); // Never throws.
+
+  if (less_cb(key, *split_key))
+    return std::make_pair(std::move(leaf_page), std::move(leaf_lck));
+  else
+    return std::make_pair(std::move(sibling_page), std::move(sibling_lock));
+}
+
+auto abstract_tree::insert_maybe_split_page_parents_(
+    cycle_ptr::cycle_gptr<tree_page_leaf> leaf_page,
+    cycle_ptr::cycle_gptr<tree_page_branch> parent_page,
+    std::unique_lock<std::shared_mutex> parent_lck,
+    allocator_type tx_allocator)
+-> cycle_ptr::cycle_gptr<tree_page_branch> {
+  using stack_t = std::stack<
+      cycle_ptr::cycle_gptr<tree_page_branch>,
+      std::deque<cycle_ptr::cycle_gptr<tree_page_branch>, traits_type::rebind_alloc<cycle_ptr::cycle_gptr<tree_page_branch>>>>;
+
+  assert(parent_page != nullptr);
+  assert(parent_lck.owns_lock() && parent_lck.mutex() == &parent_page->mtx_());
+
+  // If there is space, we have nothing to do here.
+  if (parent_page->elems_.size() < parent_page->elems_.capacity())
+    return parent_page;
+
+  cycle_ptr::cycle_gptr<tree_page_branch> page = std::move(parent_page);
+  std::unique_lock<std::shared_mutex> lck = std::move(parent_lck);
+
+  stack_t stack;
+  while (page != nullptr && page->elems_.size() == page->elems_.capacity()) {
+    std::unique_lock<std::shared_mutex> stack_elem_lck = std::move(lck);
+    stack.push(std::move(page));
+    do {
+      if (stack.top()->parent_off_ == 0) {
+        page.reset();
+        lck = std::unique_lock<std::shared_mutex>(mtx_, std::try_to_lock); // Try-lock, because we are going against the lock ordering.
+      } else {
+        page = boost::polymorphic_pointer_downcast<tree_page_branch>(get(stack.top()->parent_off_));
+        lck = std::unique_lock<std::shared_mutex>(page->mtx_(), std::try_to_lock); // Try-lock, because we are going against the lock ordering.
+      }
+
+      if (!lck.owns_lock()) {
+        // Lock the parent and the current top-of-stack, while respecting lock ordering.
+        stack_elem_lck.unlock();
+        lck.lock();
+        stack_elem_lck.lock();
+
+        if (page == nullptr) {
+          if (page->parent_off_ != 0) lck.unlock();
+        } else {
+          // Reject if the offsets don't match (which can happen if this page got shifted around).
+          if (page->off_ != stack.top()->parent_off_) lck.unlock();
+        }
+      }
+    } while (!lck.owns_lock());
+  }
+
+  if (page == nullptr) { // We need to create a new level in the tree.
+    assert(lck.owns_lock() && lck.mutex() == &mtx_);
+    std::unique_lock<std::shared_mutex> stack_elem_lck{ stack.top()->mtx_() };
+
+    // If things shift around too much, we get lost.
+    // In that case, bail out.
+    if (stack.top()->parent_off_ != 0) return nullptr;
+    assert(root_off_ == stack.top()->off_);
+
+    // Allocate a page while not under a lock.
+    stack_elem_lck.unlock();
+    lck.unlock();
+    auto tx = f_->begin(false);
+    tx_op_collection ops(tx_allocator);
+    const std::uint64_t new_parent_off = allocate_txfile_bytes(tx, tree_page_branch::encoded_size(*cfg), tx_allocator, ops);
+
+    lck.lock();
+    stack_elem_lck.lock();
+
+    // If things got changed while we were unlocked:
+    // bail out.
+    if (stack.top()->parent_off_ != 0
+        || root_off_ != stack.top()->off_)
+      return nullptr;
+
+    ops.on_commit(
+        [self=shared_from_this(this), new_parent_off]() {
+          self->root_off_ = new_parent_off;
+        });
+    ops.on_commit(
+        [stack_page=stack.top(), new_parent_off]() {
+          stack_page->parent_off_ = new_parent_off;
+        });
+
+    page = boost::polymorphic_pointer_downcast<tree_page_branch>(
+        db_cache_->create(
+            new_parent_off, shared_from_this(this),
+            [&stack, &stack_elem_lck, this](auto alloc, auto offset) {
+              cycle_ptr::cycle_gptr<tree_page_branch> branch = allocate_branch_(alloc);
+              branch->init(offset, stack.top(), stack_elem_lck);
+              return branch;
+            },
+            ops));
+
+    std::unique_lock<std::shared_mutex> new_parent_lck{ parent_page->mtx_() };
+
+    tx.commit();
+    ops.commit(); // Never throws.
+
+    lck = std::move(new_parent_lck);
+  }
+  assert(page != nullptr);
+  assert(lck.owns_lock() && lck.mutex() == &page->mtx_());
+  assert(page->elems_.size() < page->elems_.capacity());
+
+  while (!stack.empty()) {
+    // Allocate space in the file for a new branch page.
+    lck.unlock();
+    auto tx = f_->begin(false);
+    tx_op_collection ops(tx_allocator);
+    const std::uint64_t new_page_off = allocate_txfile_bytes(tx, tree_page_branch::encoded_size(*cfg), tx_allocator, ops);
+
+    auto& stack_elem = stack.top();
+    lck.lock();
+    std::unique_lock<std::shared_mutex> stack_elem_lck{ stack_elem->mtx_() };
+
+    // If things shift around too much, we get lost.
+    // In that case, bail out.
+    if (stack_elem->parent_off_ != page->off_) return nullptr;
+
+    // Split the selected branch page, moving approximately half its elements into the sibling.
+    std::shared_ptr<abstract_tree_page_branch_key> split_key;
+    cycle_ptr::cycle_gptr<tree_page_branch> sibling_page;
+    cycle_ptr::cycle_gptr<void> sibling_lock_insurance; // Used to maintain a reference to the item locked by sibling_lock.
+    std::unique_lock<std::shared_mutex> sibling_lock;
+    sibling_page = boost::polymorphic_pointer_downcast<tree_page_branch>(
+        db_cache_->create( // Do this via the cache, so the cache gets populated with the new page.
+            new_page_off, shared_from_this(this),
+            [&](auto alloc, auto off) {
+              cycle_ptr::cycle_gptr<tree_page_branch> sp;
+              std::tie(split_key, sp, sibling_lock) = stack_elem->local_split_(
+                  stack_elem_lck, tx, off,
+                  page, lck,
+                  alloc, tx_allocator, ops);
+              sibling_lock_insurance = sp;
+              return sp;
+            },
+            ops));
+
+    tx.commit();
+    ops.commit(); // Never throws.
+
+    // Use a read lock if we unlocked the leaf element, so we can read the page-key.
+    std::shared_lock<std::shared_mutex> leaf_page_backup_lck{ leaf_page->mtx_() };
+
+    if (less_cb(*leaf_page->page_key_, *split_key)) {
+      lck = std::move(stack_elem_lck);
+      page = std::move(stack_elem);
+    } else {
+      lck = std::move(sibling_lock);
+      page = std::move(sibling_page);
+    }
+    stack.pop();
+  }
+
+  return page;
+}
 
 
 abstract_tree_page::~abstract_tree_page() noexcept = default;
@@ -329,16 +805,17 @@ void abstract_tree_page::reparent_([[maybe_unused]] std::uint64_t old_parent_off
 }
 
 auto abstract_tree_page::local_split_(
-    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
     abstract_tree::allocator_type sibling_allocator,
-    abstract_tree::allocator_type tx_allocator)
+    abstract_tree::allocator_type tx_allocator,
+    tx_op_collection& ops)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
     std::unique_lock<std::shared_mutex>
 > {
-  return local_split_atp_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator), std::move(tx_allocator));
+  return local_split_atp_(lck, tx, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator), std::move(tx_allocator), ops);
 }
 
 
@@ -492,16 +969,36 @@ auto tree_page_leaf::prev(const std::shared_lock<std::shared_mutex>& lck) const 
   return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(prev_sibling_off_));
 }
 
+auto tree_page_leaf::next(const std::unique_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
+
+  if (next_sibling_off_ == 0) return nullptr;
+  return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(next_sibling_off_));
+}
+
+auto tree_page_leaf::prev(const std::unique_lock<std::shared_mutex>& lck) const -> cycle_ptr::cycle_gptr<tree_page_leaf> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
+
+  if (prev_sibling_off_ == 0) return nullptr;
+  return boost::polymorphic_pointer_downcast<tree_page_leaf>(tree()->get(prev_sibling_off_));
+}
+
 auto tree_page_leaf::compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
   assert(lck.owns_lock() && lck.mutex() == &mtx_());
   return tree()->compute_augment_(off_, { elems_.begin(), elems_.end() }, std::move(allocator));
 }
 
+auto tree_page_leaf::compute_augment(const std::unique_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
+  return tree()->compute_augment_(off_, { elems_.begin(), elems_.end() }, std::move(allocator));
+}
+
 auto tree_page_leaf::local_split_(
-    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
     abstract_tree::allocator_type sibling_allocator,
-    abstract_tree::allocator_type tx_allocator)
+    abstract_tree::allocator_type tx_allocator,
+    tx_op_collection& ops)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<tree_page_leaf>,
@@ -516,7 +1013,6 @@ auto tree_page_leaf::local_split_(
 
   // Allocate all objects and figure out parameters.
   const elems_vector::iterator sibling_begin = split_select_(lck);
-  txfile::transaction tx = f.begin(false);
   cycle_ptr::cycle_gptr<tree_page_leaf> sibling = t->allocate_leaf_(sibling_allocator);
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_() };
   std::shared_ptr<abstract_tree_page_branch_key> sibling_key = (*sibling_begin)->branch_key_(parent->allocator);
@@ -551,66 +1047,73 @@ auto tree_page_leaf::local_split_(
   std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, parent->allocator);
   std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, parent->allocator);
 
+  // On commit:
+  // Break the pred/succ link in the elements.
+  ops.on_commit(
+      [elem_after_split=cycle_ptr::cycle_gptr<abstract_tree_elem>(*sibling_begin)]() {
+        std::lock_guard<std::shared_mutex> elem_lck{ elem_after_split->mtx_ref_() };
+        elem_after_split->pred_.reset();
+      });
+  ops.on_commit(
+      [elem_before_split=cycle_ptr::cycle_gptr<abstract_tree_elem>(*std::prev(sibling_begin))]() {
+        std::lock_guard<std::shared_mutex> elem_lck{ elem_before_split->mtx_ref_() };
+        elem_before_split->succ_.reset();
+      });
+
+  // On commit:
+  // Update predecessor offset if (old) successor is loaded in memory.
+  // And update our sibling reference.
+  ops.on_commit(
+      [self=shared_from_this(this), new_page_off, t]() {
+        const auto old_successor = boost::polymorphic_pointer_downcast<tree_page_leaf>(t->get_if_present(self->next_sibling_off_));
+        if (old_successor != nullptr) {
+          std::lock_guard<std::shared_mutex> old_successor_lck{ old_successor->mtx_() };
+          assert(old_successor->prev_sibling_off_ == self->off_ || old_successor->prev_sibling_off_ == new_page_off);
+          old_successor->prev_sibling_off_ = new_page_off;
+        }
+
+        self->next_sibling_off_ = new_page_off;
+      });
+
+  // On commit:
+  // Update parent-pointer of elements given to sibling.
+  // Release elements we gave to sibling.
+  ops.on_commit(
+      [self=shared_from_this(this), sibling_begin, new_page_off, sibling]() {
+        // Update parent-pointer of elements given to sibling.
+        std::for_each(
+            sibling_begin, self->elems_.end(),
+            [new_page_off, &sibling](elems_vector::const_reference elem_ptr) {
+              std::lock_guard<std::shared_mutex> elem_lck{ elem_ptr->mtx_ref_() };
+              elem_ptr->parent_ = sibling;
+            });
+
+        // Release elements we gave to sibling.
+        std::fill(sibling_begin, self->elems_.end(), nullptr);
+      });
+
   // Update parent page to have the sibling present.
-  auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment), tx_allocator);
+  parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, sibling_key, std::move(sibling_augment), tx_allocator, ops);
 
-  auto after_commit = [&]() noexcept {
-    // Break the pred/succ link in the elements.
-    {
-      std::lock_guard<std::shared_mutex> elem_lck{ (*sibling_begin)->mtx_ref_() };
-      (*sibling_begin)->pred_.reset();
-    }
-    {
-      std::lock_guard<std::shared_mutex> elem_lck{ (*std::prev(sibling_begin))->mtx_ref_() };
-      (*std::prev(sibling_begin))->succ_.reset();
-    }
-
-    // Update predecessor offset if (old) successor is loaded in memory.
-    const auto old_successor = boost::polymorphic_pointer_downcast<tree_page_leaf>(t->get_if_present(next_sibling_off_));
-    if (old_successor != nullptr) {
-      std::lock_guard<std::shared_mutex> old_successor_lck{ old_successor->mtx_() };
-      assert(old_successor->next_sibling_off_ == off_ || old_successor->next_sibling_off_ == new_page_off);
-      old_successor->next_sibling_off_ = new_page_off;
-    }
-
-    next_sibling_off_ = new_page_off;
-
-    // Update parent-pointer of elements given to sibling.
-    std::for_each(
-        sibling_begin, elems_.end(),
-        [new_page_off, &sibling](elems_vector::const_reference elem_ptr) {
-          std::lock_guard<std::shared_mutex> elem_lck{ elem_ptr->mtx_ref_() };
-          elem_ptr->parent_ = sibling;
-        });
-
-    // Release elements we gave to sibling.
-    std::fill(
-        std::make_move_iterator(sibling_begin), std::make_move_iterator(elems_.end()),
-        nullptr);
-
-    // Complete insert operation of the parent.
-    parent_insert_op->commit();
-
-    return std::forward_as_tuple(
-        std::move(sibling_key),
-        std::move(sibling),
-        std::move(sibling_lck));
-  };
   tx.commit();
-  return after_commit();
+  return std::forward_as_tuple(
+      std::move(sibling_key),
+      std::move(sibling),
+      std::move(sibling_lck));
 }
 
 auto tree_page_leaf::local_split_atp_(
-    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
     abstract_tree::allocator_type sibling_allocator,
-    abstract_tree::allocator_type tx_allocator)
+    abstract_tree::allocator_type tx_allocator,
+    tx_op_collection& ops)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
     std::unique_lock<std::shared_mutex>
 > {
-  return local_split_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator), std::move(tx_allocator));
+  return local_split_(lck, tx, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator), std::move(tx_allocator), ops);
 }
 
 auto tree_page_leaf::split_select_(const std::unique_lock<std::shared_mutex>& lck) -> elems_vector::iterator {
@@ -727,6 +1230,11 @@ tree_page_branch::tree_page_branch(cycle_ptr::cycle_gptr<abstract_tree> tree, ab
 
 tree_page_branch::~tree_page_branch() noexcept = default;
 
+void tree_page_branch::init(std::uint64_t off, cycle_ptr::cycle_gptr<abstract_tree_page> elem0, const std::unique_lock<std::shared_mutex>& elem0_lck) {
+  elems_.push_back(elem0->compute_augment(elem0_lck, allocator));
+  off_ = off;
+}
+
 void tree_page_branch::decode(const txfile::transaction& tx, std::uint64_t off) {
   assert(elems_.empty());
 
@@ -814,12 +1322,12 @@ void tree_page_branch::encode(txfile::transaction& tx) const {
   monsoon::io::write_at(tx, off_, buf_storage.data(), buf_storage.size());
 }
 
-auto tree_page_branch::insert_sibling(
+void tree_page_branch::insert_sibling(
     const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx,
     const abstract_tree_page& precede_page, std::shared_ptr<abstract_tree_page_branch_elem> precede_augment,
     [[maybe_unused]] const abstract_tree_page& new_sibling, std::shared_ptr<abstract_tree_page_branch_key> sibling_key, std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment,
-    abstract_tree::allocator_type tx_allocator)
--> std::shared_ptr<tx_op> {
+    abstract_tree::allocator_type tx_allocator,
+    tx_op_collection& ops) {
   const std::size_t bytes_per_elem = abstract_tree_page_branch_elem::offset_size + cfg->augment_bytes;
   const std::size_t bytes_per_key = cfg->key_bytes;
 
@@ -887,8 +1395,7 @@ auto tree_page_branch::insert_sibling(
   assert(buf.size() == 0); // Completely filled the buffer with data.
   monsoon::io::write_at(tx, write_offset, buf_storage.data(), buf_storage.size());
 
-  return allocate_tx_op(
-      tx_allocator,
+  ops.on_commit(
       [ self=this->shared_from_this(this),
         elems_pos,
         keys_insert_pos,
@@ -909,8 +1416,7 @@ auto tree_page_branch::insert_sibling(
         self->keys_.insert(keys_insert_pos, std::move(key));
 
         self.reset();
-      },
-      nullptr);
+      });
 }
 
 auto tree_page_branch::compute_augment(const std::shared_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
@@ -918,11 +1424,17 @@ auto tree_page_branch::compute_augment(const std::shared_lock<std::shared_mutex>
   return tree()->compute_augment_(off_, { elems_.begin(), elems_.end() }, std::move(allocator));
 }
 
+auto tree_page_branch::compute_augment(const std::unique_lock<std::shared_mutex>& lck, abstract_tree::allocator_type allocator) const -> std::shared_ptr<abstract_tree_page_branch_elem> {
+  assert(lck.owns_lock() && lck.mutex() == &mtx_());
+  return tree()->compute_augment_(off_, { elems_.begin(), elems_.end() }, std::move(allocator));
+}
+
 auto tree_page_branch::local_split_(
-    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
     abstract_tree::allocator_type sibling_allocator,
-    abstract_tree::allocator_type tx_allocator)
+    abstract_tree::allocator_type tx_allocator,
+    tx_op_collection& ops)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<tree_page_branch>,
@@ -938,7 +1450,6 @@ auto tree_page_branch::local_split_(
   // Allocate all objects and figure out parameters.
   if (elems_.size() <= 2u) throw std::logic_error("not enough entries to split branch page");
   const elems_vector::iterator sibling_begin = elems_.begin() + elems_.size() / 2u;
-  txfile::transaction tx = f.begin(false);
   cycle_ptr::cycle_gptr<tree_page_branch> sibling = t->allocate_branch_(sibling_allocator);
   std::unique_lock<std::shared_mutex> sibling_lck{ sibling->mtx_() };
   const keys_vector::iterator split_key = keys_.begin() + (sibling_begin - elems_.begin() - 1u);
@@ -967,9 +1478,6 @@ auto tree_page_branch::local_split_(
   std::shared_ptr<abstract_tree_page_branch_elem> this_augment = t->compute_augment_(off_, { elems_.begin(), sibling_begin }, parent->allocator);
   std::shared_ptr<abstract_tree_page_branch_elem> sibling_augment = t->compute_augment_(new_page_off, { sibling_begin, elems_.end() }, parent->allocator);
 
-  // Update parent page to have the sibling present.
-  auto parent_insert_op = parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, *split_key, std::move(sibling_augment), tx_allocator);
-
   // Update parent pointer on child pages.
   {
     header h;
@@ -985,43 +1493,45 @@ auto tree_page_branch::local_split_(
     tx.write_at_many(std::move(offsets_of_children), &h.parent_off, sizeof(h.parent_off));
   }
 
-  auto after_commit = [&]() noexcept {
-    // All loaded child pages get their parent offset updated.
-    std::for_each(
-        sibling_begin, elems_.end(),
-        [new_page_off, &t, this](elems_vector::const_reference elem_ptr) {
-          const cycle_ptr::cycle_gptr<abstract_tree_page> page = t->get_if_present(elem_ptr->off);
-          if (page != nullptr) page->reparent_(this->off_, new_page_off);
-        });
+  // On commit:
+  // All loaded child pages get their parent offset updated.
+  // Release elements we gave to sibling.
+  ops.on_commit(
+      [self=shared_from_this(this), sibling_begin, new_page_off, t]() {
+        // All loaded child pages get their parent offset updated.
+        std::for_each(
+            sibling_begin, self->elems_.end(),
+            [new_page_off, &t, &self](elems_vector::const_reference elem_ptr) {
+              const cycle_ptr::cycle_gptr<abstract_tree_page> page = t->get_if_present(elem_ptr->off);
+              if (page != nullptr) page->reparent_(self->off_, new_page_off);
+            });
 
-    // Release elements we gave to sibling.
-    std::fill(
-        std::make_move_iterator(sibling_begin), std::make_move_iterator(elems_.end()),
-        nullptr);
+        // Release elements we gave to sibling.
+        std::fill(sibling_begin, self->elems_.end(), nullptr);
+      });
 
-    // Complete insert operation of the parent.
-    parent_insert_op->commit();
+  // Update parent page to have the sibling present.
+  parent->insert_sibling(parent_lck, tx, *this, std::move(this_augment), *sibling, *split_key, std::move(sibling_augment), tx_allocator, ops);
 
-    return std::forward_as_tuple(
-        std::exchange(*split_key, nullptr),
-        std::move(sibling),
-        std::move(sibling_lck));
-  };
   tx.commit();
-  return after_commit();
+  return std::forward_as_tuple(
+      std::exchange(*split_key, nullptr),
+      std::move(sibling),
+      std::move(sibling_lck));
 }
 
 auto tree_page_branch::local_split_atp_(
-    const std::unique_lock<std::shared_mutex>& lck, txfile& f, std::uint64_t new_page_off,
+    const std::unique_lock<std::shared_mutex>& lck, txfile::transaction& tx, std::uint64_t new_page_off,
     cycle_ptr::cycle_gptr<tree_page_branch> parent, const std::unique_lock<std::shared_mutex>& parent_lck,
     abstract_tree::allocator_type sibling_allocator,
-    abstract_tree::allocator_type tx_allocator)
+    abstract_tree::allocator_type tx_allocator,
+    tx_op_collection& ops)
 -> std::tuple<
     std::shared_ptr<abstract_tree_page_branch_key>,
     cycle_ptr::cycle_gptr<abstract_tree_page>,
     std::unique_lock<std::shared_mutex>
 > {
-  return local_split_(lck, f, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator), std::move(tx_allocator));
+  return local_split_(lck, tx, new_page_off, std::move(parent), parent_lck, std::move(sibling_allocator), std::move(tx_allocator), ops);
 }
 
 auto tree_page_branch::mtx_() const noexcept -> std::shared_mutex& {
