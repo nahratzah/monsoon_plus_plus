@@ -30,6 +30,7 @@ class monsoon_tx_export_ txfile_allocator final
     static constexpr std::size_t SIZE = 8;
 
     key() noexcept = default;
+    explicit key(std::uint64_t addr) : addr(addr) {}
 
     void decode(boost::asio::const_buffer buf);
     void encode(boost::asio::mutable_buffer buf) const;
@@ -54,6 +55,8 @@ class monsoon_tx_export_ txfile_allocator final
     static constexpr std::size_t SIZE = key::SIZE + 16;
 
     using abstract_tree_elem::abstract_tree_elem;
+    element(cycle_ptr::cycle_gptr<tree_page_leaf> parent,
+        const class key& key, std::uint64_t used = 0, std::uint64_t free = 0);
     ~element() noexcept override;
 
     void decode(boost::asio::const_buffer buf) override;
@@ -141,6 +144,10 @@ class monsoon_tx_export_ txfile_allocator final
       txfile::transaction& tx, std::uint64_t bytes,
       allocator_type tx_allocator,
       tx_op_collection& ops) -> std::optional<std::uint64_t>;
+
+  ///\brief Run tree maintenance.
+  ///\details Takes entries from the log and inserts them into the tree.
+  monsoon_tx_local_ void do_maintenance_(allocator_type tx_allocator);
 
   std::shared_ptr<txfile_allocator_log> log_;
 };

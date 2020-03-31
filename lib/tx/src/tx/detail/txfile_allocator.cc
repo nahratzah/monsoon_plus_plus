@@ -11,6 +11,7 @@
 #include <boost/polymorphic_cast.hpp>
 #include <boost/asio/buffer.hpp>
 #include <objpipe/of.h>
+#include <cycle_ptr/cycle_ptr.h>
 
 namespace monsoon::tx::detail {
 
@@ -282,6 +283,149 @@ auto txfile_allocator::steal_allocate_(
 
   // Return the allocated address.
   return ctx->use_elem->key.addr + ctx->use_elem->used + ctx->use_elem->free;
+}
+
+void txfile_allocator::do_maintenance_(allocator_type tx_allocator) {
+  using action = txfile_allocator_log::action;
+
+  bool made_progress = false;
+  try {
+    auto maintenance_queue = log_->maintenance(
+        *f_,
+        [this, tx_allocator](txfile::transaction& tx, std::uint64_t bytes, tx_op_collection& ops) -> std::optional<std::uint64_t> {
+          return steal_allocate_(tx, bytes, tx_allocator, ops);
+        },
+        tx_allocator);
+
+    for (auto& record : maintenance_queue) {
+      // First, insert an entry that holds no space.
+      bool ins_succeeded;
+      cycle_ptr::cycle_gptr<element> ins_pos;
+      {
+        cycle_ptr::cycle_gptr<abstract_tree_elem> abstract_ins_pos;
+        std::tie(abstract_ins_pos, ins_succeeded) = insert_(
+            tree_page_branch_key<key>(key(record->get_addr())),
+            [k=key(record->get_addr())](allocator_type allocator, cycle_ptr::cycle_gptr<tree_page_leaf> parent) -> cycle_ptr::cycle_gptr<abstract_tree_elem> {
+              return cycle_ptr::allocate_cycle<element>(allocator, parent, k);
+            },
+            tx_allocator);
+        ins_pos = boost::polymorphic_pointer_downcast<element>(abstract_ins_pos);
+      }
+
+      // Maybe this should be an assertion, as it indicates a bug in the allocator.
+      if (!ins_succeeded && (ins_pos->used !=0 || ins_pos->free != 0))
+        throw std::logic_error("tree corruption: element marked free twice!");
+
+      // Lock the layout down.
+      const auto locked_parent = ins_pos->lock_parent_for_write();
+      // Also lock the element for write.
+      std::unique_lock<std::shared_mutex> ins_pos_lck{ ins_pos->mtx_ref_() };
+
+      // Successor page (optional).
+      cycle_ptr::cycle_gptr<tree_page_leaf> next_page;
+      std::unique_lock<std::shared_mutex> next_page_lck;
+      // Successor element (optional).
+      cycle_ptr::cycle_gptr<element> succ;
+      std::unique_lock<std::shared_mutex> succ_lck;
+
+      // Start the transaction logic.
+      // Note that by placing the locks before it,
+      // we ensure the ops commit/rollback will happen with locks held.
+      auto tx = f_->begin(false);
+      tx_op_collection ops(tx_allocator);
+
+      // Update the inserted element.
+      switch (record->get_action()) {
+        default:
+          continue; // Shouldn't happen.
+        case action::free:
+          ins_pos->free = record->get_len();
+          break;
+        case action::used:
+          ins_pos->used = record->get_len();
+          break;
+      }
+      // Undo operation.
+      ops.on_rollback(
+          [ins_pos]() {
+            ins_pos->free = ins_pos->used = 0;
+          });
+
+      // See if we can merge in space from successor.
+      if (ins_pos->succ_ != nullptr) {
+        succ = boost::polymorphic_pointer_downcast<element>(ins_pos->succ_);
+        succ_lck = std::unique_lock<std::shared_mutex>(succ->mtx_ref_());
+      } else {
+        // Find successor in the next page(s).
+        assert(succ == nullptr);
+        next_page = std::get<0>(locked_parent)->next(std::get<1>(locked_parent));
+        if (next_page != nullptr)
+          next_page_lck = std::unique_lock<std::shared_mutex>(next_page->mtx_());
+        while (next_page != nullptr) {
+          const auto succ_iter = std::find_if(next_page->elems_.begin(), next_page->elems_.end(),
+              [](const auto& ptr) { return ptr != nullptr; });
+          if (succ_iter != next_page->elems_.end()) {
+            succ = boost::polymorphic_pointer_downcast<element>(*succ_iter);
+            succ_lck = std::unique_lock<std::shared_mutex>(succ->mtx_ref_());
+            break;
+          }
+
+          // Advance.
+          auto new_next_page = next_page->next(std::get<1>(locked_parent));
+          std::unique_lock<std::shared_mutex> new_next_page_lck;
+          if (new_next_page != nullptr)
+            new_next_page_lck = std::unique_lock<std::shared_mutex>(next_page->mtx_());
+          next_page_lck.unlock();
+          next_page = std::move(new_next_page);
+          next_page_lck = std::move(new_next_page_lck);
+        }
+      }
+      // Try to claim all the space from the successor. Requires zero usage.
+      if (succ == nullptr) {
+        // Skip: can't steal from successor if you don't have a successor.
+      } else if (succ->used != 0 || succ->key.addr != ins_pos->key.addr + ins_pos->used + ins_pos->free) {
+        // Also can't steal if your successor's free space doesn't connect to yours.
+        succ_lck.unlock();
+      } else {
+        // Claim the space from successor.
+        ins_pos->free += succ->free;
+        ops.on_commit(
+            [succ]() {
+              succ->free = 0;
+
+              const auto succ_iter = std::find(succ->parent_->elems_.begin(), succ->parent_->elems_.end(), succ);
+              assert(succ_iter != succ->parent_->elems_.end());
+              succ_iter->reset();
+            });
+
+        std::array<std::uint8_t, element::SIZE> buf;
+        succ->encode(boost::asio::buffer(buf));
+        monsoon::io::write_at(
+            tx, std::get<0>(locked_parent)->offset_for_(*succ),
+            buf.data(), buf.size());
+      }
+
+      std::array<std::uint8_t, element::SIZE> buf;
+      ins_pos->encode(boost::asio::buffer(buf));
+      monsoon::io::write_at(
+          tx, std::get<0>(locked_parent)->offset_for_(*ins_pos),
+          buf.data(), buf.size());
+
+      // This operation moves the record into the tree, so the record has to release its claim.
+      record->on_commit(tx, action::skip, ops);
+
+      tx.commit();
+      ops.commit(); // Never throws.
+
+      // XXX above code doesn't merge free space with predecessor. Fix that.
+      // Hint: probably easy to, if the predecessor is nulled and added to the log (similar to how allocations are done).
+
+      made_progress = true;
+      record.reset(); // Frees up the record.
+    }
+  } catch (const std::bad_alloc&) {
+    if (!made_progress) throw;
+  }
 }
 
 
