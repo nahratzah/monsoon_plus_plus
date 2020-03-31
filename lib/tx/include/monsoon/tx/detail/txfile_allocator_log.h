@@ -245,6 +245,9 @@ class monsoon_tx_export_ txfile_allocator_log
     std::uint64_t addr_, len_;
   };
 
+  ///\brief Size in bytes that the log takes up.
+  static constexpr std::size_t SIZE = header::SIZE;
+
   ///\brief Load an existing transaction log.
   ///\note Use `std::allocate_shared` because the log requires `shared_from_this`.
   txfile_allocator_log(const txfile::transaction& tx, std::uint64_t off, allocator_type allocator);
