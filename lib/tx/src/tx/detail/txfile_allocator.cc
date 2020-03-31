@@ -383,6 +383,10 @@ void txfile_allocator::do_maintenance_(allocator_type tx_allocator) {
       // Try to claim all the space from the successor. Requires zero usage.
       if (succ == nullptr) {
         // Skip: can't steal from successor if you don't have a successor.
+      } else if (succ->free == 0) {
+        // There is nothing to steal here.
+        // Also: if used==0 && free==0, then the element is likely being deallocated somewhere.
+        succ_lck.unlock();
       } else if (succ->used != 0 || succ->key.addr != ins_pos->key.addr + ins_pos->used + ins_pos->free) {
         // Also can't steal if your successor's free space doesn't connect to yours.
         succ_lck.unlock();
@@ -392,10 +396,6 @@ void txfile_allocator::do_maintenance_(allocator_type tx_allocator) {
         ops.on_commit(
             [succ]() {
               succ->free = 0;
-
-              const auto succ_iter = std::find(succ->parent_->elems_.begin(), succ->parent_->elems_.end(), succ);
-              assert(succ_iter != succ->parent_->elems_.end());
-              succ_iter->reset();
             });
 
         std::array<std::uint8_t, element::SIZE> buf;
@@ -416,6 +416,8 @@ void txfile_allocator::do_maintenance_(allocator_type tx_allocator) {
 
       tx.commit();
       ops.commit(); // Never throws.
+
+      // XXX if succ!=nullptr, must delete it from its page
 
       // XXX above code doesn't merge free space with predecessor. Fix that.
       // Hint: probably easy to, if the predecessor is nulled and added to the log (similar to how allocations are done).
